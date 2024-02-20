@@ -21,11 +21,19 @@
         #wordsList {
             margin-top: 10px;
         }
+        button {
+            margin: 0px 5px;
+        }
     </style>
 </head>
 <body>
+    <h1 id="alert" style="display: none;"></h1>
     <h2>Your Word List</h2>
-    <button id="toggleViewBtn">Show All Words</button>
+    <button id="toggleViewBtn">Show All</button>
+    <button id="exportBtn">Export</button>
+    <button id="importBtn">Import</button>
+    <input type="file" id="importFile" style="display: none;"/>
+    <hr>
     <div id="wordsList"></div>
     <script src="popup.js"></script>
 </body>
