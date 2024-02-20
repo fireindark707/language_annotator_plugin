@@ -23,11 +23,11 @@ chrome.contextMenus.onClicked.addListener(function (info, tab) {
 function promptWord(word) {
 	const meaning = prompt(`Enter meaning for: ${word}`);
 	if (meaning && meaning.trim().length > 0) {
-        // 保存单词和意思到chrome.storage.local
-        chrome.storage.local.get({ words: {} }, function (result) {
+        // 保存单词和意思到chrome.storage.sync
+        chrome.storage.sync.get({ words: {} }, function (result) {
             const words = result.words;
             words[word.toLowerCase()] = { meaning: meaning.trim(), learned: false };
-            chrome.storage.local.set({ words: words }, function () {
+            chrome.storage.sync.set({ words: words }, function () {
                 console.log(`Word: ${word}, Meaning: ${meaning.trim()} saved.`);
             });
         });

@@ -4,11 +4,11 @@
 function markLearned(word) {
 	lowerCaseWord = word.toLowerCase();
 	if (confirm(`Mark "${lowerCaseWord}" as learned?`)) {
-		chrome.storage.local.get({ words: {} }, function (result) {
+		chrome.storage.sync.get({ words: {} }, function (result) {
 			const words = result.words;
 			if (words[lowerCaseWord]) {
 				words[lowerCaseWord].learned = true;
-				chrome.storage.local.set({ words: words }, function () {
+				chrome.storage.sync.set({ words: words }, function () {
 					// 可能需要刷新页面或以其他方式更新显示
 					console.log(`Word: ${lowerCaseWord} marked as learned.`);
 					// make all highlighted words with the same word has no style
@@ -42,7 +42,7 @@ function createHighlightSpan(word, meaning) {
 }
 
 function highlightWords() {
-	chrome.storage.local.get({ words: {} }, function (result) {
+	chrome.storage.sync.get({ words: {} }, function (result) {
 		const storedWords = result.words;
 		const bodyTextNodes = findTextNodes(document.body);
 		const replacements = [];

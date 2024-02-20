@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateWordsList() {
         wordsList.innerHTML = ''; // 清空当前列表
 
-        chrome.storage.local.get({words: {}}, function(result) {
+        chrome.storage.sync.get({words: {}}, function(result) {
             const words = result.words;
             Object.keys(words).forEach(word => {
                 // 如果不是显示所有单词，且单词已学会，则跳过
@@ -63,10 +63,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // 删除单词
 function deleteWord(word) {
-    chrome.storage.local.get({words: {}}, function(result) {
+    chrome.storage.sync.get({words: {}}, function(result) {
         const words = result.words;
         delete words[word];
-        chrome.storage.local.set({words: words}, function() {
+        chrome.storage.sync.set({words: words}, function() {
             window.location.reload(); // 刷新页面以更新列表
         });
     });
@@ -74,10 +74,10 @@ function deleteWord(word) {
 
 // 标记单词为已学会
 function toggleLearned(word) {
-    chrome.storage.local.get({words: {}}, function(result) {
+    chrome.storage.sync.get({words: {}}, function(result) {
         const words = result.words;
         words[word].learned = !words[word].learned;
-        chrome.storage.local.set({words: words}, function() {
+        chrome.storage.sync.set({words: words}, function() {
             window.location.reload(); // 刷新页面以更新列表
         });
     });
