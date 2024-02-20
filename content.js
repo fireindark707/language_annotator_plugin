@@ -81,7 +81,7 @@ function highlightWords() {
             storedWordsArray = Object.keys(storedWords);
             let newNodeValue = node.nodeValue;
             storedWordsArray.forEach((word) => {
-                if (!storedWords[word].learned && newNodeValue.includes(word)) {
+                if (!storedWords[word].learned && newNodeValue.toLowerCase().includes(word)) {
                     const regex = new RegExp(`${word}`, "gi");
                     const replacementHtml = createHighlightSpan(
                         word,
