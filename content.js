@@ -44,6 +44,9 @@ function createHighlightSpan(word, meaning) {
 function highlightWords() {
 	chrome.storage.sync.get({ words: {} }, function (result) {
 		const storedWords = result.words;
+        // sort storedWords by length from long to short
+        const storedWordsArray = Object.keys(storedWords);
+        storedWordsArray.sort((a, b) => b.length - a.length);
 		const bodyTextNodes = findTextNodes(document.body);
 		const replacements = [];
 
@@ -78,7 +81,6 @@ function highlightWords() {
 
         // 收集需要替换的信息 new
         bodyTextNodes.forEach((node) => {
-            storedWordsArray = Object.keys(storedWords);
             let newNodeValue = node.nodeValue;
             storedWordsArray.forEach((word) => {
                 if (!storedWords[word].learned && newNodeValue.toLowerCase().includes(word)) {

@@ -17,7 +17,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
 		chrome.storage.sync.get({ words: {} }, function (result) {
 			const words = result.words;
-			Object.keys(words).forEach((word) => {
+            const wordsArray = Object.keys(words);
+            
+			wordsArray.forEach((word) => {
 				// 如果不是显示所有单词，且单词已学会，则跳过
 				if (!showAllWords && words[word].learned) {
 					return;
@@ -131,13 +133,6 @@ fileInput.addEventListener("change", function (event) {
 						console.error("导入时发生错误:", chrome.runtime.lastError);
 					} else {
 						console.log("单词库导入成功！");
-						// 用户反馈，prompt成功导入的单词数量
-                        const wordCount = Object.keys(items.words || {}).length;
-                        document.getElementById("alert").innerText = `成功导入${wordCount}个单词`;
-                        document.getElementById("alert").style.display = "block";
-                        setTimeout(function(){
-                            document.getElementById("alert").style.display = "none";
-                        }, 2000);
 					}
 				});
 			} catch (e) {

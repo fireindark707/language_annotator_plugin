@@ -26,7 +26,7 @@ function promptWord(word) {
         // 保存单词和意思到chrome.storage.sync
         chrome.storage.sync.get({ words: {} }, function (result) {
             const words = result.words;
-            words[word.toLowerCase()] = { meaning: meaning.trim(), learned: false };
+            words[word.toLowerCase()] = { meaning: meaning.trim(), learned: false};
             chrome.storage.sync.set({ words: words }, function () {
                 console.log(`Word: ${word}, Meaning: ${meaning.trim()} saved.`);
             });
