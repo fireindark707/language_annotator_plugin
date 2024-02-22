@@ -1,3 +1,5 @@
+# Language Annotator
+
 Highlight and annotate words in any language to learn them.
 
 Use it in your browser: [link](https://chromewebstore.google.com/detail/language-annotator/pplocadbndpadfenglgleehcfjaciobg?fbclid=IwAR1sTuo3RIw-aT-BvVPmybApSzorGuJSM9QhCpZqMQC0r870Wf80hOWkLZk)
