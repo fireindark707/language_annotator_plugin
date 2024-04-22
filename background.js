@@ -38,6 +38,7 @@ function promptWord(word) {
 chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 	if (request.action === "translate") {
 		const userLanguage = navigator.language; // 获取语言代码
+		console.log("sourceLang", request.sourceLang)
 		console.log("userLanguage", userLanguage);
 		const targetLang = userLanguage || "zh-tw"; // 如果无法获取用户语言，则默认为繁体中文
 		const sourceLang = request.sourceLang || "auto"; // 使用请求中的原始语言或默认为自动检测

@@ -37,13 +37,19 @@ document.addEventListener("DOMContentLoaded", function () {
 				audioButton.textContent = "Audio";
 				audioButton.addEventListener("click", function () {
 					const utterance = new SpeechSynthesisUtterance(word);
-					utterance.lang = chrome.storage.sync.get(
-						"sourceLang",
-						function (result) {
-							return result.sourceLang || "en";
+					source_lang = chrome.storage.sync.get(["sourceLang"]).then((result) => {
+						utterance.lang = result.sourceLang;
+						let voices = window.speechSynthesis.getVoices();
+						for (let i = 0; i < voices.length; i++) {
+							if (voices[i].lang === utterance.lang) {
+								utterance.voice = voices[i];
+								break;
+							}
 						}
-					);
-					speechSynthesis.speak(utterance);
+						console.log("utterance.lang", utterance.lang);
+						console.log("utterance.voice", utterance.voice);
+						speechSynthesis.speak(utterance);
+					});
 				});
 
 				const deleteButton = document.createElement("button");
