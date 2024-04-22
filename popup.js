@@ -6,9 +6,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	toggleViewBtn.addEventListener("click", function () {
 		showAllWords = !showAllWords; // 切换模式
-		toggleViewBtn.textContent = showAllWords
-			? "Show Unlearned"
-			: "Show All";
+		toggleViewBtn.textContent = showAllWords ? "Show Unlearned" : "Show All";
 		updateWordsList(); // 更新单词列表
 	});
 
@@ -17,8 +15,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
 		chrome.storage.sync.get({ words: {} }, function (result) {
 			const words = result.words;
-            const wordsArray = Object.keys(words);
-            
+			const wordsArray = Object.keys(words);
+
 			wordsArray.forEach((word) => {
 				// 如果不是显示所有单词，且单词已学会，则跳过
 				if (!showAllWords && words[word].learned) {
@@ -35,6 +33,19 @@ document.addEventListener("DOMContentLoaded", function () {
 					wordSpan.classList.add("learned");
 				}
 
+				const audioButton = document.createElement("button");
+				audioButton.textContent = "Audio";
+				audioButton.addEventListener("click", function () {
+					const utterance = new SpeechSynthesisUtterance(word);
+					utterance.lang = chrome.storage.sync.get(
+						"sourceLang",
+						function (result) {
+							return result.sourceLang || "en";
+						}
+					);
+					speechSynthesis.speak(utterance);
+				});
+
 				const deleteButton = document.createElement("button");
 				deleteButton.textContent = "Delete";
 				deleteButton.addEventListener("click", function () {
@@ -50,6 +61,7 @@ document.addEventListener("DOMContentLoaded", function () {
 				});
 
 				wordItem.appendChild(wordSpan);
+				wordItem.appendChild(audioButton);
 				wordItem.appendChild(deleteButton);
 				wordItem.appendChild(toggleLearnedButton);
 				wordsList.appendChild(wordItem);
