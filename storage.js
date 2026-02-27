@@ -5,12 +5,17 @@
 	const SOURCE_LANG_KEY = "sourceLang";
 	const AUTO_TRANSLATE_KEY = "autoTranslateOnSelect";
 	const UI_LANGUAGE_KEY = "uiLanguage";
+	const DICTIONARY_LOOKUP_KEY = "dictionaryLookupEnabled";
 	const EXCLUDED_DOMAINS_KEY = "excludedDomains";
 	const DEFAULT_EXCLUDED_DOMAINS = ["google.com", "chat.openai.com"];
 	const EXCLUDED_DOMAINS_MIGRATED_KEY = "excludedDomainsMigratedV1";
 	const SUPPORTED_UI_LANGS = ["zh-TW", "zh-CN", "en", "fr", "pt", "ar", "hi", "ja", "ko", "id", "ru", "es"];
 	const VERSION = 2;
 	const TARGET_SHARD_BYTES = 6000;
+
+	function isContextInvalidatedError(error) {
+		return !!(error && typeof error.message === "string" && error.message.includes("Extension context invalidated"));
+	}
 
 	function estimateBytes(value) {
 		return new TextEncoder().encode(JSON.stringify(value)).length;
@@ -76,6 +81,56 @@
 		return shards;
 	}
 
+	function normalizeSyncExampleEntry(entry, level) {
+		if (typeof entry === "string") return entry;
+		if (!entry || typeof entry !== "object") return null;
+		const text = typeof entry.text === "string" ? entry.text : "";
+		if (!text) return null;
+		if (level >= 2) {
+			return {
+				text: text,
+				pinned: !!entry.pinned,
+			};
+		}
+		const minimal = {
+			text: text,
+			pinned: !!entry.pinned,
+			createdAt: typeof entry.createdAt === "number" ? entry.createdAt : 0,
+			pinnedAt: typeof entry.pinnedAt === "number" ? entry.pinnedAt : 0,
+		};
+		if (level === 0) {
+			minimal.translation = typeof entry.translation === "string" ? entry.translation : "";
+			minimal.translatedAt = typeof entry.translatedAt === "number" ? entry.translatedAt : 0;
+			minimal.sourceUrl = typeof entry.sourceUrl === "string" ? entry.sourceUrl : "";
+			minimal.capturedAt = typeof entry.capturedAt === "number" ? entry.capturedAt : 0;
+		}
+		return minimal;
+	}
+
+	function compactWordsForSync(words, level) {
+		if (level <= 0) return words;
+		const result = {};
+		const entries = Object.entries(words || {});
+		for (let i = 0; i < entries.length; i += 1) {
+			const word = entries[i][0];
+			const data = entries[i][1] || {};
+			const next = {
+				meaning: data.meaning || "",
+				learned: !!data.learned,
+				createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
+			};
+			if (level < 3 && Array.isArray(data.examples)) {
+				const cap = level >= 2 ? 8 : data.examples.length;
+				next.examples = data.examples
+					.slice(0, cap)
+					.map((item) => normalizeSyncExampleEntry(item, level))
+					.filter((item) => !!item);
+			}
+			result[word] = next;
+		}
+		return result;
+	}
+
 	function detectBrowserUiLanguage() {
 		const rawLang =
 			(typeof navigator !== "undefined" && navigator.language
@@ -116,31 +171,46 @@
 	}
 
 	async function writeWordsToSync(words) {
-		const shards = splitWordsToShards(words);
-		const payload = {};
-		const ids = [];
-		for (let i = 0; i < shards.length; i += 1) {
-			ids.push(i);
-			payload[`${WORDS_SHARD_PREFIX}${i}`] = shards[i];
-		}
-		payload[WORDS_META_KEY] = {
-			version: VERSION,
-			shards: ids,
-			updatedAt: Date.now(),
-		};
-
 		const oldMetaResult = await getFromArea(chrome.storage.sync, {
 			[WORDS_META_KEY]: null,
 		});
 		const oldMeta = oldMetaResult[WORDS_META_KEY];
 		const oldShardIds =
 			oldMeta && Array.isArray(oldMeta.shards) ? oldMeta.shards : [];
-		const staleKeys = oldShardIds
-			.filter((id) => !ids.includes(id))
-			.map((id) => `${WORDS_SHARD_PREFIX}${id}`);
 
-		await setToArea(chrome.storage.sync, payload);
-		await removeFromArea(chrome.storage.sync, [LEGACY_WORDS_KEY].concat(staleKeys));
+		let lastError = null;
+		for (let level = 0; level <= 3; level += 1) {
+			try {
+				const compacted = compactWordsForSync(words, level);
+				const shards = splitWordsToShards(compacted);
+				const payload = {};
+				const ids = [];
+				for (let i = 0; i < shards.length; i += 1) {
+					ids.push(i);
+					payload[`${WORDS_SHARD_PREFIX}${i}`] = shards[i];
+				}
+				payload[WORDS_META_KEY] = {
+					version: VERSION,
+					shards: ids,
+					updatedAt: Date.now(),
+					sync_compact_level: level,
+				};
+
+				const staleKeys = oldShardIds
+					.filter((id) => !ids.includes(id))
+					.map((id) => `${WORDS_SHARD_PREFIX}${id}`);
+
+				await setToArea(chrome.storage.sync, payload);
+				await removeFromArea(chrome.storage.sync, [LEGACY_WORDS_KEY].concat(staleKeys));
+				if (level > 0) {
+					console.warn(`Word sync used compact level ${level} due to sync quota.`);
+				}
+				return;
+			} catch (error) {
+				lastError = error;
+			}
+		}
+		throw lastError || new Error("Failed to write words to sync.");
 	}
 
 	async function hydrateLocalFromSyncIfNeeded() {
@@ -249,16 +319,36 @@
 				[EXCLUDED_DOMAINS_MIGRATED_KEY]: true,
 			});
 		}
+
+		const localDictionaryResult = await getFromArea(chrome.storage.local, {
+			[DICTIONARY_LOOKUP_KEY]: null,
+		});
+		if (localDictionaryResult[DICTIONARY_LOOKUP_KEY] === null) {
+			const syncDictionaryResult = await getFromArea(chrome.storage.sync, {
+				[DICTIONARY_LOOKUP_KEY]: null,
+			});
+			const enabled = syncDictionaryResult[DICTIONARY_LOOKUP_KEY] !== false;
+			await setToArea(chrome.storage.local, {
+				[DICTIONARY_LOOKUP_KEY]: enabled,
+			});
+			if (syncDictionaryResult[DICTIONARY_LOOKUP_KEY] === null) {
+				await setToArea(chrome.storage.sync, {
+					[DICTIONARY_LOOKUP_KEY]: enabled,
+				});
+			}
+		}
 	}
 
-	const WordStorage = {
-		async init() {
-			try {
-				await hydrateLocalFromSyncIfNeeded();
-			} catch (error) {
-				console.error("WordStorage init failed:", error);
-			}
-		},
+		const WordStorage = {
+			async init() {
+				try {
+					await hydrateLocalFromSyncIfNeeded();
+				} catch (error) {
+					if (!isContextInvalidatedError(error)) {
+						console.error("WordStorage init failed:", error);
+					}
+				}
+			},
 
 		async getWords() {
 			await this.init();
@@ -290,12 +380,14 @@
 			const words = await this.getWords();
 			const sourceLang = await this.getSourceLang();
 			const autoTranslateOnSelect = await this.getAutoTranslateOnSelect();
+			const dictionaryLookupEnabled = await this.getDictionaryLookupEnabled();
 			const uiLanguage = await this.getUiLanguage();
 			const excludedDomains = await this.getExcludedDomains();
 			return {
 				words: words,
 				sourceLang: sourceLang,
 				autoTranslateOnSelect: autoTranslateOnSelect,
+				dictionaryLookupEnabled: dictionaryLookupEnabled,
 				uiLanguage: uiLanguage,
 				excludedDomains: excludedDomains,
 			};
@@ -308,6 +400,10 @@
 				typeof items.autoTranslateOnSelect === "boolean"
 					? items.autoTranslateOnSelect
 					: true;
+			const dictionaryLookupEnabled =
+				typeof items.dictionaryLookupEnabled === "boolean"
+					? items.dictionaryLookupEnabled
+					: true;
 			const uiLanguage = items.uiLanguage || "zh-TW";
 			const excludedDomains = Array.isArray(items.excludedDomains)
 				? items.excludedDomains
@@ -315,6 +411,7 @@
 			await this.saveWords(words);
 			await this.saveSourceLang(sourceLang);
 			await this.saveAutoTranslateOnSelect(autoTranslateOnSelect);
+			await this.saveDictionaryLookupEnabled(dictionaryLookupEnabled);
 			await this.saveUiLanguage(uiLanguage);
 			await this.saveExcludedDomains(excludedDomains);
 		},
@@ -330,6 +427,19 @@
 		async saveAutoTranslateOnSelect(enabled) {
 			await setToArea(chrome.storage.local, { [AUTO_TRANSLATE_KEY]: !!enabled });
 			await setToArea(chrome.storage.sync, { [AUTO_TRANSLATE_KEY]: !!enabled });
+		},
+
+		async getDictionaryLookupEnabled() {
+			await this.init();
+			const localResult = await getFromArea(chrome.storage.local, {
+				[DICTIONARY_LOOKUP_KEY]: true,
+			});
+			return localResult[DICTIONARY_LOOKUP_KEY] !== false;
+		},
+
+		async saveDictionaryLookupEnabled(enabled) {
+			await setToArea(chrome.storage.local, { [DICTIONARY_LOOKUP_KEY]: !!enabled });
+			await setToArea(chrome.storage.sync, { [DICTIONARY_LOOKUP_KEY]: !!enabled });
 		},
 
 		async getUiLanguage() {

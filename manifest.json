@@ -1,13 +1,22 @@
 {
-  "manifest_version": 3,
+  "manifest_version": 2,
   "name": "__MSG_appName__",
-  "version": "1.2",
+  "version": "1.3",
   "description": "__MSG_appDescription__",
   "default_locale": "en",
-  "permissions": ["activeTab", "storage", "contextMenus"],
-  "host_permissions": ["https://translate.googleapis.com/*"],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "contextMenus",
+    "https://translate.googleapis.com/*",
+    "https://kateglo.lostfocus.org/*",
+    "https://api.dictionaryapi.dev/*",
+    "https://jotoba.de/*",
+    "https://en.wiktionary.org/*"
+  ],
   "background": {
-    "service_worker": "background.js"
+    "scripts": ["storage.js", "background.js"],
+    "persistent": false
   },
   "content_scripts": [
     {
@@ -15,7 +24,7 @@
       "js": ["storage.js", "content.js"]
     }
   ],
-  "action": {
+  "browser_action": {
     "default_popup": "popup.html",
     "default_icon": {
       "16": "images/icon16.png",
@@ -28,5 +37,19 @@
     "48": "images/icon48.png",
     "128": "images/icon128.png"
   },
-  "options_page": "options.html"
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "language-annotator@phoenix000.local",
+      "strict_min_version": "140.0",
+      "strict_min_version_android": "142.0",
+      "data_collection_permissions": {
+        "required": ["none"],
+        "optional": []
+      }
+    }
+  }
 }

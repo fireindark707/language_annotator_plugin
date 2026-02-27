@@ -1,6 +1,7 @@
 let showAllWords = false;
 let uiLang = "zh-TW";
 let sortMode = "recent_desc";
+let searchKeyword = "";
 const MAX_EXAMPLES_PER_WORD = 20;
 const MAX_TRANSLATE_CONCURRENCY = 2;
 
@@ -19,6 +20,7 @@ const wordStats = document.getElementById("wordStats");
 const languageStats = document.getElementById("languageStats");
 const autoLangHint = document.getElementById("autoLangHint");
 const closeBtn = document.getElementById("closeBtn");
+const searchInput = document.getElementById("searchInput");
 
 document.addEventListener("DOMContentLoaded", function () {
 	WordStorage.getUiLanguage().then((lang) => {
@@ -41,6 +43,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	sortModeSelect.addEventListener("change", function () {
 		sortMode = sortModeSelect.value;
+		updateWordsList();
+	});
+
+	searchInput.addEventListener("input", function () {
+		searchKeyword = (searchInput.value || "").trim().toLowerCase();
 		updateWordsList();
 	});
 
@@ -454,6 +461,42 @@ function applyUiText() {
 	sortModeSelect.options[1].textContent = t("sort_alpha");
 }
 
+function normalizeDictionaryEntries(wordData) {
+	if (!wordData || typeof wordData !== "object" || !wordData.dictionary) return [];
+	const dict = wordData.dictionary;
+	if (Array.isArray(dict.entries)) {
+		return dict.entries
+			.map((item) => ({
+				pos: typeof item.pos === "string" ? item.pos : "",
+				definitionOriginal: typeof item.definitionOriginal === "string" ? item.definitionOriginal : "",
+				definitionTranslated: typeof item.definitionTranslated === "string" ? item.definitionTranslated : "",
+			}))
+			.filter((item) => item.definitionOriginal || item.definitionTranslated);
+	}
+	const fallbackOriginal = typeof dict.definitionOriginal === "string" ? dict.definitionOriginal : "";
+	const fallbackTranslated = typeof dict.definitionTranslated === "string" ? dict.definitionTranslated : "";
+	if (!fallbackOriginal && !fallbackTranslated) return [];
+	return [{
+		pos: typeof dict.pos === "string" ? dict.pos : "",
+		definitionOriginal: fallbackOriginal,
+		definitionTranslated: fallbackTranslated,
+	}];
+}
+
+function matchWordWithSearch(word, wordData, keyword) {
+	if (!keyword) return true;
+	const meaning = ((wordData && wordData.meaning) || "").toLowerCase();
+	if (word.toLowerCase().includes(keyword) || meaning.includes(keyword)) return true;
+	const dictEntries = normalizeDictionaryEntries(wordData);
+	for (let i = 0; i < dictEntries.length; i += 1) {
+		const item = dictEntries[i];
+		if ((item.pos || "").toLowerCase().includes(keyword)) return true;
+		if ((item.definitionOriginal || "").toLowerCase().includes(keyword)) return true;
+		if ((item.definitionTranslated || "").toLowerCase().includes(keyword)) return true;
+	}
+	return false;
+}
+
 function updateWordsList() {
 	wordsList.innerHTML = "";
 	WordStorage.getWords().then((words) => {
@@ -474,6 +517,7 @@ function updateWordsList() {
 
 		allWords.forEach((word) => {
 			if (!showAllWords && words[word].learned) return;
+			if (!matchWordWithSearch(word, words[word], searchKeyword)) return;
 			const wordItem = document.createElement("div");
 			wordItem.className = "word-item";
 
@@ -526,6 +570,53 @@ function updateWordsList() {
 			const examples = Array.isArray(words[word].examples) ? words[word].examples : [];
 			let examplesRendered = false;
 
+			const dictionaryEntries = normalizeDictionaryEntries(words[word]);
+			const dictButton = document.createElement("button");
+			dictButton.className = "action-dict";
+			let dictCount = dictionaryEntries.length;
+			const dictWrap = document.createElement("div");
+			dictWrap.className = "dict-wrap";
+			dictWrap.style.display = "none";
+			let dictRendered = false;
+
+			function syncDictButtonText() {
+				const expanded = dictWrap.style.display !== "none";
+				dictButton.textContent = expanded
+					? `收起詞典(${dictCount})`
+					: `詞典(${dictCount})`;
+			}
+			syncDictButtonText();
+
+			function renderDictionary() {
+				dictWrap.innerHTML = "";
+				const list = document.createElement("ol");
+				list.className = "dict-list";
+				if (dictionaryEntries.length === 0) {
+					const li = document.createElement("li");
+					li.textContent = "尚無詞典解釋";
+					list.appendChild(li);
+					dictWrap.appendChild(list);
+					return;
+				}
+				dictionaryEntries.forEach((entry) => {
+					const li = document.createElement("li");
+					const posEl = document.createElement("div");
+					posEl.className = "dict-pos";
+					posEl.textContent = entry.pos ? `[${entry.pos}]` : "";
+					const originalEl = document.createElement("div");
+					originalEl.className = "dict-original";
+					originalEl.textContent = entry.definitionOriginal || "";
+					const translatedEl = document.createElement("div");
+					translatedEl.className = "dict-translated";
+					translatedEl.textContent = entry.definitionTranslated || "";
+					li.appendChild(posEl);
+					li.appendChild(originalEl);
+					li.appendChild(translatedEl);
+					list.appendChild(li);
+				});
+				dictWrap.appendChild(list);
+			}
+
 			exampleButton.addEventListener("click", function () {
 				const expanded = exampleWrap.style.display !== "none";
 				exampleWrap.style.display = expanded ? "none" : "block";
@@ -539,13 +630,25 @@ function updateWordsList() {
 				}
 			});
 
+			dictButton.addEventListener("click", function () {
+				const expanded = dictWrap.style.display !== "none";
+				dictWrap.style.display = expanded ? "none" : "block";
+				syncDictButtonText();
+				if (!expanded && !dictRendered) {
+					renderDictionary();
+					dictRendered = true;
+				}
+			});
+
 			actionWrap.appendChild(audioButton);
 			actionWrap.appendChild(markButton);
 			actionWrap.appendChild(exampleButton);
+			actionWrap.appendChild(dictButton);
 			actionWrap.appendChild(deleteButton);
 			wordItem.appendChild(wordSpan);
 			wordItem.appendChild(actionWrap);
 			wordItem.appendChild(exampleWrap);
+			wordItem.appendChild(dictWrap);
 			wordsList.appendChild(wordItem);
 		});
 

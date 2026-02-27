@@ -7,6 +7,8 @@ document.addEventListener("DOMContentLoaded", function () {
 	const sourceLangSelect = document.getElementById("sourceLang");
 	const uiLanguageSelect = document.getElementById("uiLanguage");
 	const autoTranslateCheckbox = document.getElementById("autoTranslateOnSelect");
+	const dictionaryLookupRow = document.getElementById("dictionaryLookupRow");
+	const dictionaryLookupCheckbox = document.getElementById("dictionaryLookupEnabled");
 	const currentLang = document.getElementById("currentLang");
 	const saveBtn = document.getElementById("save");
 	const saveStatus = document.getElementById("saveStatus");
@@ -24,6 +26,23 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	function renderCurrentLabel() {
 		currentLang.textContent = getSelectedLabel(sourceLangSelect);
+	}
+
+	function supportsDictionaryBySourceLang(sourceLang) {
+		const normalized = (sourceLang || "").toLowerCase();
+		if (!normalized || normalized === "auto") return false;
+		const base = normalized.split("-")[0];
+		const supported = new Set([
+			"cs", "de", "el", "en", "es", "fr", "id", "it", "ja", "ko",
+			"ku", "ms", "nl", "pl", "pt", "ru", "simple", "th", "tr", "vi", "zh",
+			"tl", "fil",
+		]);
+		return supported.has(base);
+	}
+
+	function renderDictionaryLookupVisibility() {
+		const shouldShow = supportsDictionaryBySourceLang(sourceLangSelect.value);
+		dictionaryLookupRow.style.display = shouldShow ? "" : "none";
 	}
 
 	function normalizeDomain(raw) {
@@ -70,6 +89,8 @@ document.addEventListener("DOMContentLoaded", function () {
 		document.getElementById("uiLangLabel").textContent = t(uiLang, "ui_language");
 		document.getElementById("autoTranslateLabel").textContent = t(uiLang, "auto_translate");
 		document.getElementById("autoTranslateDesc").textContent = t(uiLang, "auto_translate_desc");
+		document.getElementById("dictionaryLookupLabel").textContent = "啟用詞典查詢";
+		document.getElementById("dictionaryLookupDesc").textContent = "可用語言時顯示詞典結果。";
 		document.getElementById("importExportLabel").textContent = t(uiLang, "import_export");
 		document.getElementById("excludedDomainsLabel").textContent = "排除網域";
 		document.getElementById("excludedDomainsDesc").textContent = "這些網域不啟用高亮與例句功能。";
@@ -82,15 +103,18 @@ document.addEventListener("DOMContentLoaded", function () {
 	Promise.all([
 		WordStorage.getSourceLang(),
 		WordStorage.getAutoTranslateOnSelect(),
+		WordStorage.getDictionaryLookupEnabled(),
 		WordStorage.getUiLanguage(),
 		WordStorage.getExcludedDomains(),
-	]).then(function ([savedLang, autoTranslate, uiLang, excluded]) {
+	]).then(function ([savedLang, autoTranslate, dictionaryLookup, uiLang, excluded]) {
 		sourceLangSelect.value = savedLang || "auto";
 		autoTranslateCheckbox.checked = autoTranslate;
+		dictionaryLookupCheckbox.checked = dictionaryLookup;
 		uiLanguageSelect.value = uiLang || "zh-TW";
 		excludedDomains = Array.isArray(excluded) ? excluded : [];
 		applyUiLanguage(uiLanguageSelect.value);
 		renderCurrentLabel();
+		renderDictionaryLookupVisibility();
 		renderExcludedDomains();
 	}).catch(function (error) {
 		console.error("Failed to load options:", error);
@@ -98,11 +122,13 @@ document.addEventListener("DOMContentLoaded", function () {
 		excludedDomains = [];
 		applyUiLanguage("zh-TW");
 		renderCurrentLabel();
+		renderDictionaryLookupVisibility();
 		renderExcludedDomains();
 	});
 
 	sourceLangSelect.addEventListener("change", function () {
 		renderCurrentLabel();
+		renderDictionaryLookupVisibility();
 		saveStatus.textContent = "";
 	});
 
@@ -126,10 +152,12 @@ document.addEventListener("DOMContentLoaded", function () {
 	saveBtn.addEventListener("click", function () {
 		const sourceLang = sourceLangSelect.value;
 		const autoTranslateOnSelect = autoTranslateCheckbox.checked;
+		const dictionaryLookupEnabled = dictionaryLookupCheckbox.checked;
 		const uiLanguage = uiLanguageSelect.value;
 		Promise.all([
 			WordStorage.saveSourceLang(sourceLang),
 			WordStorage.saveAutoTranslateOnSelect(autoTranslateOnSelect),
+			WordStorage.saveDictionaryLookupEnabled(dictionaryLookupEnabled),
 			WordStorage.saveUiLanguage(uiLanguage),
 			WordStorage.saveExcludedDomains(excludedDomains),
 		]).then(function () {

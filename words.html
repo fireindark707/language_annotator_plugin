@@ -101,6 +101,22 @@
             margin-top: 10px;
         }
 
+        .search-row {
+            margin-top: 10px;
+        }
+
+        .search-row input {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--text);
+            padding: 10px 12px;
+            font-size: 13px;
+            font-weight: 600;
+            outline: none;
+        }
+
         .sort-row select {
             width: 100%;
             border: 1px solid var(--border);
@@ -162,7 +178,7 @@
 
         .word-actions {
             display: grid;
-            grid-template-columns: repeat(4, minmax(80px, 130px));
+            grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
             gap: 8px;
         }
 
@@ -179,6 +195,45 @@
         .action-unlearn { background: #fff2e5 !important; color: #93550f !important; border-color: #f1d0ad !important; }
         .action-delete { background: #f1f3f5 !important; color: #344054 !important; border-color: #d5dae0 !important; }
         .action-example { background: #eef4ff !important; border-color: #cfdcf8 !important; color: #274b8c !important; }
+        .action-dict { background: #fff5e8 !important; border-color: #f4d4a7 !important; color: #8a4e05 !important; }
+
+        .dict-wrap {
+            margin-top: 8px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            background: #fffdf8;
+            padding: 8px;
+        }
+
+        .dict-list {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .dict-list li {
+            margin-bottom: 8px;
+        }
+
+        .dict-pos {
+            font-size: 11px;
+            color: #8b5a1a;
+            margin-bottom: 2px;
+        }
+
+        .dict-original {
+            color: var(--text);
+        }
+
+        .dict-translated {
+            margin-top: 4px;
+            font-size: 11px;
+            color: var(--muted);
+            border-left: 2px solid #ead9bf;
+            padding-left: 6px;
+        }
 
         .example-wrap {
             margin-top: 8px;
@@ -308,6 +363,9 @@
                 <option value="recent_desc">依加入順序（新到舊）</option>
                 <option value="alpha_asc">依字母順序（A-Z）</option>
             </select>
+        </div>
+        <div class="search-row">
+            <input id="searchInput" type="text" placeholder="搜尋單詞、意思、詞典解釋" />
         </div>
 
         <div class="list" id="wordsList"></div>

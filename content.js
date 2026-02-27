@@ -25,6 +25,10 @@ const SKIP_TEXT_TAGS = new Set([
 	"PRE",
 ]);
 
+function isContextInvalidatedError(error) {
+	return !!(error && typeof error.message === "string" && error.message.includes("Extension context invalidated"));
+}
+
 function getExampleText(entry) {
 	if (typeof entry === "string") return (entry || "").replace(/\s+/g, " ").trim();
 	if (entry && typeof entry === "object") return (entry.text || "").replace(/\s+/g, " ").trim();
@@ -396,6 +400,42 @@ function stripOuterPunctuation(text) {
 		.replace(/[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+$/u, "");
 }
 
+function normalizeDictionaryQuery(text) {
+	const cleaned = stripOuterPunctuation((text || "").trim());
+	if (!cleaned) return "";
+	return cleaned.split(/\s+/)[0] || "";
+}
+
+function shouldLookupDictionaryQuery(query) {
+	const q = (query || "").trim();
+	if (!q) return false;
+	if (q.length < 2 || q.length > 32) return false;
+	// At least one letter from any script; reject pure digits/symbols.
+	if (!/[\p{L}]/u.test(q)) return false;
+	return true;
+}
+
+function supportsDictionaryBySourceLang(sourceLang) {
+	const normalized = (sourceLang || "").toLowerCase();
+	if (!normalized || normalized === "auto") return false;
+	const base = normalized.split("-")[0];
+	const supported = new Set([
+		"cs", "de", "el", "en", "es", "fr", "id", "it", "ja", "ko",
+		"ku", "ms", "nl", "pl", "pt", "ru", "simple", "th", "tr", "vi", "zh",
+		"tl", "fil",
+	]);
+	return supported.has(base);
+}
+
+function getDictionarySourceLabel(source) {
+	const normalized = (source || "").toLowerCase();
+	if (normalized === "kateglo") return "Kateglo";
+	if (normalized === "dictionaryapi") return "Free Dictionary";
+	if (normalized === "jotoba") return "Jotoba";
+	if (normalized === "wiktionary") return "Wiktionary";
+	return "Dictionary";
+}
+
 function isLowInformationExample(sentence, word) {
 	const s = stripOuterPunctuation(normalizeText(sentence)).toLowerCase();
 	const w = stripOuterPunctuation(normalizeText(word)).toLowerCase();
@@ -608,7 +648,7 @@ function collectExampleCandidates(bodyTextNodes, storedWordsArray, storedWords) 
 
 		for (let w = 0; w < storedWordsArray.length; w += 1) {
 			const word = storedWordsArray[w];
-			if (!storedWords[word]) continue;
+			if (!storedWords[word] || storedWords[word].learned) continue;
 			if (!containsWord(contextText, word)) continue;
 
 			for (let s = 0; s < sentences.length; s += 1) {
@@ -645,9 +685,10 @@ function enqueueExampleCandidates(candidates) {
 			const wordsData = await WordStorage.getWords();
 			let changed = false;
 
-			Object.keys(batch).forEach((word) => {
-				if (!wordsData[word]) return;
-				const existing = normalizeExampleList(wordsData[word].examples);
+				Object.keys(batch).forEach((word) => {
+					if (!wordsData[word]) return;
+					if (wordsData[word].learned) return;
+					const existing = normalizeExampleList(wordsData[word].examples);
 				const existingSet = new Set(existing.map((item) => item.text.toLowerCase()));
 				const incoming = batch[word]
 					.map((item) => {
@@ -782,11 +823,13 @@ function highlightWords() {
 		});
 		enqueueExampleCandidates(exampleCandidates);
 		addClickEventToHighlightedWords();
-	}).catch((error) => {
-		console.error("Failed to highlight words:", error);
-	});
-	});
-}
+		}).catch((error) => {
+			if (!isContextInvalidatedError(error)) {
+				console.error("Failed to highlight words:", error);
+			}
+		});
+		});
+	}
 
 function buildHighlightedFragment(text, storedWordsArray, storedWords) {
 	const lowerText = text.toLowerCase();
@@ -904,6 +947,20 @@ function showAddWordModal(word) {
 	input.rows = 3;
 	let userEdited = false;
 
+	const dictPreview = document.createElement("div");
+	dictPreview.className = "la-addword-dict";
+	dictPreview.style.display = "none";
+
+	const dictTitle = document.createElement("div");
+	dictTitle.className = "la-addword-dict-title";
+	dictTitle.textContent = "Dictionary";
+
+	const dictList = document.createElement("div");
+	dictList.className = "la-addword-dict-list";
+
+	dictPreview.appendChild(dictTitle);
+	dictPreview.appendChild(dictList);
+
 	const footer = document.createElement("div");
 	footer.className = "la-addword-footer";
 
@@ -921,6 +978,7 @@ function showAddWordModal(word) {
 	modal.appendChild(wordLine);
 	modal.appendChild(hint);
 	modal.appendChild(input);
+	modal.appendChild(dictPreview);
 	modal.appendChild(footer);
 	overlay.appendChild(modal);
 	document.body.appendChild(overlay);
@@ -947,10 +1005,39 @@ function showAddWordModal(word) {
 		try {
 			const words = await WordStorage.getWords();
 			const existing = words[normalizedWord];
+			let dictEntries = [];
+			try {
+				dictEntries = JSON.parse(overlay.dataset.dictEntries || "[]");
+				if (!Array.isArray(dictEntries)) dictEntries = [];
+			} catch (error) {
+				dictEntries = [];
+			}
+			const selectedIndexRaw = Number(overlay.dataset.dictSelectedIndex || "0");
+			const selectedIndex =
+				Number.isInteger(selectedIndexRaw) && selectedIndexRaw >= 0
+					? selectedIndexRaw
+					: 0;
+			const dictPosValue = (overlay.dataset.dictPos || "").trim();
+			const dictDefinitionOriginal = (overlay.dataset.dictDefinitionOriginal || "").trim();
+			const dictDefinitionTranslated = (overlay.dataset.dictDefinitionTranslated || "").trim();
+			const dictSource = (overlay.dataset.dictSource || "").trim();
+			const dictionary =
+				dictPosValue || dictDefinitionOriginal || dictDefinitionTranslated || dictEntries.length > 0
+					? {
+						pos: dictPosValue,
+						definitionOriginal: dictDefinitionOriginal,
+						definitionTranslated: dictDefinitionTranslated,
+						source: dictSource || "dictionary",
+						entries: dictEntries,
+						selectedIndex: Math.min(selectedIndex, Math.max(dictEntries.length - 1, 0)),
+						updatedAt: Date.now(),
+					}
+					: (existing && existing.dictionary ? existing.dictionary : null);
 			words[normalizedWord] = {
 				meaning: meaning,
 				learned: false,
 				createdAt: existing && existing.createdAt ? existing.createdAt : Date.now(),
+				dictionary: dictionary,
 			};
 			await WordStorage.saveWords(words);
 			closeModal();
@@ -965,7 +1052,67 @@ function showAddWordModal(word) {
 		if (event.target === overlay) closeModal();
 	});
 	document.addEventListener("keydown", onKeyDown, true);
-	prefillMeaningFromTranslation(normalizedWord, input, () => userEdited, overlay);
+	prefillMeaningFromTranslation(
+		normalizedWord,
+		input,
+		() => userEdited,
+		overlay,
+		(dictPayload) => {
+			const entries = dictPayload && Array.isArray(dictPayload.entries)
+				? dictPayload.entries.filter((item) => item && item.definitionOriginal)
+				: [];
+			if (entries.length === 0) {
+				dictPreview.style.display = "none";
+				return;
+			}
+			dictPreview.style.display = "block";
+			dictTitle.textContent = getDictionarySourceLabel(dictPayload && dictPayload.source);
+			dictList.innerHTML = "";
+			entries.forEach((item, index) => {
+				const row = document.createElement("div");
+				row.className = "la-addword-dict-item";
+				if (index === 0) row.classList.add("is-selected");
+
+				const pos = document.createElement("div");
+				pos.className = "la-addword-dict-pos";
+				pos.textContent = item.pos ? `[${item.pos}]` : "";
+
+				const original = document.createElement("div");
+				original.className = "la-addword-dict-original";
+				original.textContent = item.definitionOriginal;
+
+				const translated = document.createElement("div");
+				translated.className = "la-addword-dict-translated";
+				translated.textContent = item.definitionTranslated || "";
+
+				const applyBtn = document.createElement("button");
+				applyBtn.type = "button";
+				applyBtn.className = "la-addword-dict-apply";
+				applyBtn.textContent = "帶入";
+				applyBtn.addEventListener("click", () => {
+					const composed = item.definitionTranslated || item.definitionOriginal || "";
+					const text = item.pos ? `[${item.pos}] ${composed}` : composed;
+					if (text.trim()) input.value = text.trim();
+					userEdited = true;
+					overlay.dataset.dictPos = item.pos || "";
+					overlay.dataset.dictDefinitionOriginal = item.definitionOriginal || "";
+					overlay.dataset.dictDefinitionTranslated = item.definitionTranslated || "";
+					overlay.dataset.dictSource = dictPayload.source || "kateglo";
+					overlay.dataset.dictSelectedIndex = String(index);
+					dictList.querySelectorAll(".la-addword-dict-item").forEach((node) => {
+						node.classList.remove("is-selected");
+					});
+					row.classList.add("is-selected");
+				});
+
+				row.appendChild(pos);
+				row.appendChild(original);
+				row.appendChild(translated);
+				row.appendChild(applyBtn);
+				dictList.appendChild(row);
+			});
+		}
+	);
 }
 
 function ensureAddWordModalStyle() {
@@ -1031,6 +1178,62 @@ function ensureAddWordModalStyle() {
 			display: flex;
 			justify-content: flex-end;
 			gap: 8px;
+		}
+		.la-addword-dict {
+			margin-top: 10px;
+			padding: 8px 10px;
+			border: 1px solid #f1d7da;
+			border-radius: 10px;
+			background: #fff8f8;
+		}
+		.la-addword-dict-title {
+			font-size: 11px;
+			font-weight: 700;
+			color: #8a3340;
+		}
+		.la-addword-dict-list {
+			display: grid;
+			gap: 8px;
+			margin-top: 6px;
+		}
+		.la-addword-dict-item {
+			border: 1px solid #edc9ce;
+			border-radius: 8px;
+			background: #fffdfd;
+			padding: 7px 8px;
+		}
+		.la-addword-dict-item.is-selected {
+			border-color: #d91f26;
+			box-shadow: 0 0 0 2px rgba(217, 31, 38, 0.12);
+		}
+		.la-addword-dict-pos {
+			font-size: 11px;
+			color: #9a5d66;
+		}
+		.la-addword-dict-original {
+			margin-top: 3px;
+			font-size: 12px;
+			line-height: 1.45;
+			color: #5a2a30;
+		}
+		.la-addword-dict-translated {
+			margin-top: 4px;
+			font-size: 12px;
+			line-height: 1.45;
+			color: #2f3b4b;
+			border-left: 2px solid #ebc6cb;
+			padding-left: 6px;
+		}
+		.la-addword-dict-apply {
+			margin-top: 6px;
+			border: 0;
+			border-radius: 7px;
+			padding: 4px 8px;
+			font-size: 11px;
+			font-weight: 700;
+			cursor: pointer;
+			background: #d91f26;
+			color: #ffffff;
 		}
 		.la-addword-btn {
 			border: 0;
@@ -1176,8 +1379,11 @@ function showConfirmModal(message) {
 	});
 }
 
-function prefillMeaningFromTranslation(word, inputEl, isUserEdited, modalOverlay) {
-	WordStorage.getSourceLang().then((sourceLang) => {
+function prefillMeaningFromTranslation(word, inputEl, isUserEdited, modalOverlay, onDictionaryReady) {
+	Promise.all([
+		WordStorage.getSourceLang(),
+		WordStorage.getDictionaryLookupEnabled().catch(() => true),
+	]).then(([sourceLang, dictionaryEnabled]) => {
 		chrome.runtime.sendMessage(
 			{ action: "translate", text: word, sourceLang: sourceLang || "auto" },
 			(response) => {
@@ -1193,6 +1399,62 @@ function prefillMeaningFromTranslation(word, inputEl, isUserEdited, modalOverlay
 				inputEl.placeholder = "例如：這個詞在句子中的意思...";
 			}
 		);
+
+		const dictQuery = normalizeDictionaryQuery(word);
+		if (!(dictionaryEnabled && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery))) return;
+		chrome.runtime.sendMessage(
+			{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
+			(dictResponse) => {
+				if (!modalOverlay.isConnected) return;
+				if (chrome.runtime.lastError || !dictResponse || !dictResponse.found) return;
+				const rawEntries = Array.isArray(dictResponse.entries)
+					? dictResponse.entries.filter((item) => item && item.definition).slice(0, 5)
+					: [];
+				if (rawEntries.length === 0) return;
+				const mappedEntries = new Array(rawEntries.length);
+				let pending = rawEntries.length;
+				const source = dictResponse.source || "kateglo";
+
+				rawEntries.forEach((entry, index) => {
+					chrome.runtime.sendMessage(
+						{
+							action: "translate",
+							text: entry.definition,
+							sourceLang: sourceLang || "auto",
+						},
+						(defResp) => {
+							if (!modalOverlay.isConnected) return;
+							const translated =
+								!chrome.runtime.lastError && defResp && defResp.translation
+									? defResp.translation
+									: "";
+							mappedEntries[index] = {
+								pos: entry.pos || "",
+								definitionOriginal: entry.definition || "",
+								definitionTranslated: translated,
+							};
+							pending -= 1;
+							if (pending > 0) return;
+
+							const first = mappedEntries[0];
+							if (!first) return;
+							modalOverlay.dataset.dictPos = first.pos || "";
+							modalOverlay.dataset.dictDefinitionOriginal = first.definitionOriginal || "";
+							modalOverlay.dataset.dictDefinitionTranslated = first.definitionTranslated || "";
+							modalOverlay.dataset.dictSource = source;
+							modalOverlay.dataset.dictEntries = JSON.stringify(mappedEntries.filter(Boolean));
+							modalOverlay.dataset.dictSelectedIndex = "0";
+							if (typeof onDictionaryReady === "function") {
+								onDictionaryReady({
+									source: source,
+									entries: mappedEntries.filter(Boolean),
+								});
+							}
+						}
+					);
+				});
+			}
+		);
 	}).catch(() => {
 		inputEl.placeholder = "例如：這個詞在句子中的意思...";
 	});
@@ -1205,22 +1467,39 @@ document.addEventListener("mouseup", function () {
 	WordStorage.getAutoTranslateOnSelect().then((enabled) => {
 		if (enabled) translateText(selectedText);
 	}).catch((error) => {
-		console.error("Failed to read auto-translate setting:", error);
+		if (!isContextInvalidatedError(error)) {
+			console.error("Failed to read auto-translate setting:", error);
+		}
 		translateText(selectedText);
 	});
 });
 
 function translateText(text) {
-	WordStorage.getSourceLang().then((sourceLang) => {
-		// 使用sourceLang进行翻译请求
+	Promise.all([
+		WordStorage.getSourceLang(),
+		WordStorage.getDictionaryLookupEnabled().catch(() => true),
+	]).then(([sourceLang, dictionaryEnabled]) => {
 		chrome.runtime.sendMessage(
 			{ action: "translate", text: text, sourceLang: sourceLang },
 			function (response) {
-				showTranslation(response.translation);
+				const translation = response && response.translation ? response.translation : "";
+				showTranslation(translation);
+				const isSingleWord = !/\s/.test((text || "").trim());
+				const dictQuery = normalizeDictionaryQuery(text);
+				if (!(dictionaryEnabled && isSingleWord && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery))) return;
+				chrome.runtime.sendMessage(
+					{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
+					(dictResponse) => {
+						if (chrome.runtime.lastError || !dictResponse || !dictResponse.found) return;
+						appendDictionaryToTranslationBox(dictResponse, sourceLang || "auto");
+					}
+				);
 			}
 		);
-	}).catch((error) => {
-		console.error("Failed to get source language:", error);
+		}).catch((error) => {
+		if (!isContextInvalidatedError(error)) {
+			console.error("Failed to get source language:", error);
+		}
 	});
 }
 
@@ -1284,6 +1563,16 @@ function showTranslation(translation) {
 	body.style.lineHeight = "1.5";
 	body.textContent = translation;
 
+	const dictWrap = document.createElement("div");
+	dictWrap.id = "translationDictionary";
+	dictWrap.style.marginTop = "8px";
+	dictWrap.style.paddingTop = "8px";
+	dictWrap.style.borderTop = "1px solid #f0d3d7";
+	dictWrap.style.fontSize = "12px";
+	dictWrap.style.lineHeight = "1.45";
+	dictWrap.style.color = "#4b5563";
+	dictWrap.style.display = "none";
+
 	let pointerDownInside = false;
 	let startX = 0;
 	let startY = 0;
@@ -1343,6 +1632,7 @@ function showTranslation(translation) {
 
 	translationBox.appendChild(closeBtn);
 	translationBox.appendChild(body);
+	translationBox.appendChild(dictWrap);
 
 	document.body.appendChild(translationBox);
 
@@ -1350,6 +1640,45 @@ function showTranslation(translation) {
 	setTimeout(() => {
 		closeBox();
 	}, 10000);
+}
+
+function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
+	const dictWrap = document.getElementById("translationDictionary");
+	if (!dictWrap || !dictResponse || !Array.isArray(dictResponse.entries)) return;
+	dictWrap.innerHTML = "";
+	dictWrap.style.display = "block";
+	const title = document.createElement("div");
+	title.textContent = getDictionarySourceLabel(dictResponse.source);
+	title.style.fontWeight = "700";
+	title.style.marginBottom = "4px";
+	dictWrap.appendChild(title);
+
+	const entries = dictResponse.entries.slice(0, 3);
+	entries.forEach((item) => {
+		const row = document.createElement("div");
+		row.style.marginTop = "5px";
+		const pos = document.createElement("div");
+		pos.style.fontSize = "11px";
+		pos.style.color = "#7d4a52";
+		pos.textContent = item.pos ? `[${item.pos}]` : "";
+		const def = document.createElement("div");
+		def.textContent = "…";
+		row.appendChild(pos);
+		row.appendChild(def);
+		dictWrap.appendChild(row);
+		chrome.runtime.sendMessage(
+			{
+				action: "translate",
+				text: item.definition || "",
+				sourceLang: sourceLang || "auto",
+			},
+			(transResp) => {
+				if (chrome.runtime.lastError || !transResp) return;
+				const translated = transResp.translation || "";
+				def.textContent = translated || (item.definition || "");
+			}
+		);
+	});
 }
 
 function ensureTranslationUiStyles() {
