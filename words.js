@@ -13,12 +13,12 @@ const exampleObservers = new WeakMap();
 const wordWriteLocks = new Map();
 
 const toggleViewBtn = document.getElementById("toggleViewBtn");
-const fullscreenBtn = document.getElementById("fullscreenBtn");
 const sortModeSelect = document.getElementById("sortMode");
 const wordsList = document.getElementById("wordsList");
 const wordStats = document.getElementById("wordStats");
 const languageStats = document.getElementById("languageStats");
 const autoLangHint = document.getElementById("autoLangHint");
+const closeBtn = document.getElementById("closeBtn");
 
 document.addEventListener("DOMContentLoaded", function () {
 	WordStorage.getUiLanguage().then((lang) => {
@@ -39,16 +39,25 @@ document.addEventListener("DOMContentLoaded", function () {
 		updateWordsList();
 	});
 
-	fullscreenBtn.addEventListener("click", function () {
-		chrome.tabs.create({ url: chrome.runtime.getURL("words.html") });
-	});
-
 	sortModeSelect.addEventListener("change", function () {
 		sortMode = sortModeSelect.value;
 		updateWordsList();
 	});
 
+	closeBtn.addEventListener("click", function () {
+		window.close();
+	});
 });
+
+function refreshLanguageChip() {
+	WordStorage.getSourceLang().then((lang) => {
+		languageStats.textContent = `${t("source_lang")}：${lang}`;
+		autoLangHint.style.display = lang === "auto" ? "block" : "none";
+	}).catch(() => {
+		languageStats.textContent = `${t("source_lang")}：auto`;
+		autoLangHint.style.display = "block";
+	});
+}
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
@@ -435,50 +444,36 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 }
 
 function applyUiText() {
-	document.getElementById("popupTitle").textContent = t("popup_title");
-	document.getElementById("popupSubtitle").textContent = t("popup_subtitle");
+	document.getElementById("wordsTitle").textContent = t("fullscreen");
+	document.getElementById("wordsSubtitle").textContent = t("popup_subtitle");
 	document.getElementById("settingsLink").textContent = t("settings");
+	closeBtn.textContent = t("close_tab");
 	toggleViewBtn.textContent = showAllWords ? t("show_unlearned") : t("show_all");
-	fullscreenBtn.textContent = t("fullscreen");
 	autoLangHint.textContent = t("auto_hint");
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");
 }
 
-function refreshLanguageChip() {
-	WordStorage.getSourceLang().then((sourceLang) => {
-		languageStats.textContent = `${t("source_lang")}：${sourceLang}`;
-		autoLangHint.style.display = sourceLang === "auto" ? "block" : "none";
-	}).catch((error) => {
-		console.error("Failed to load source language:", error);
-		languageStats.textContent = `${t("source_lang")}：auto`;
-		autoLangHint.style.display = "block";
-	});
-}
-
 function updateWordsList() {
 	wordsList.innerHTML = "";
-
 	WordStorage.getWords().then((words) => {
-		const wordsArray = Object.keys(words);
+		const allWords = Object.keys(words);
 		if (sortMode === "alpha_asc") {
-			wordsArray.sort((a, b) => a.localeCompare(b));
+			allWords.sort((a, b) => a.localeCompare(b));
 		} else {
-			wordsArray.sort((a, b) => {
+			allWords.sort((a, b) => {
 				const at = words[a] && words[a].createdAt ? words[a].createdAt : 0;
 				const bt = words[b] && words[b].createdAt ? words[b].createdAt : 0;
 				if (bt !== at) return bt - at;
 				return a.localeCompare(b);
 			});
 		}
-		const unlearnedCount = wordsArray.filter((word) => !words[word].learned).length;
-		wordStats.textContent = `${t("words")}：${wordsArray.length} | ${t("unlearned")}：${unlearnedCount}`;
 
-		wordsArray.forEach((word) => {
-			if (!showAllWords && words[word].learned) {
-				return;
-			}
+		const unlearnedCount = allWords.filter((w) => !words[w].learned).length;
+		wordStats.textContent = `${t("words")}：${allWords.length} | ${t("unlearned")}：${unlearnedCount}`;
 
+		allWords.forEach((word) => {
+			if (!showAllWords && words[word].learned) return;
 			const wordItem = document.createElement("div");
 			wordItem.className = "word-item";
 
@@ -490,40 +485,32 @@ function updateWordsList() {
 			actionWrap.className = "word-actions";
 
 			const audioButton = document.createElement("button");
-			audioButton.textContent = `🔊 ${t("pronounce")}`;
 			audioButton.className = "action-audio";
+			audioButton.textContent = `🔊 ${t("pronounce")}`;
 			audioButton.addEventListener("click", function () {
 				const utterance = new SpeechSynthesisUtterance(word);
 				WordStorage.getSourceLang().then((sourceLang) => {
 					utterance.lang = sourceLang;
-					const voices = window.speechSynthesis.getVoices();
-					for (let i = 0; i < voices.length; i += 1) {
-						if (voices[i].lang === utterance.lang) {
-							utterance.voice = voices[i];
-							break;
-						}
-					}
 					speechSynthesis.speak(utterance);
 				});
 			});
 
+			const markButton = document.createElement("button");
+			markButton.className = words[word].learned ? "action-unlearn" : "action-learn";
+			markButton.textContent = words[word].learned ? t("unmark") : t("mark");
+			markButton.addEventListener("click", function () {
+				toggleLearned(word);
+			});
+
 			const deleteButton = document.createElement("button");
-			deleteButton.textContent = t("delete");
 			deleteButton.className = "action-delete";
+			deleteButton.textContent = t("delete");
 			deleteButton.addEventListener("click", function () {
 				deleteWord(word);
 			});
 
-			const toggleLearnedButton = document.createElement("button");
-			toggleLearnedButton.textContent = words[word].learned ? t("unmark") : t("mark");
-			toggleLearnedButton.className = words[word].learned
-				? "action-unlearn"
-				: "action-learn";
-			toggleLearnedButton.addEventListener("click", function () {
-				toggleLearned(word);
-			});
-
 			const exampleButton = document.createElement("button");
+			exampleButton.className = "action-example";
 			let exampleCount = Array.isArray(words[word].examples) ? words[word].examples.length : 0;
 			function syncExampleButtonText() {
 				const expanded = exampleWrap.style.display !== "none";
@@ -532,7 +519,6 @@ function updateWordsList() {
 					: `例句(${exampleCount})`;
 			}
 			exampleButton.textContent = `例句(${exampleCount})`;
-			exampleButton.className = "action-example";
 
 			const exampleWrap = document.createElement("div");
 			exampleWrap.className = "example-wrap";
@@ -554,7 +540,7 @@ function updateWordsList() {
 			});
 
 			actionWrap.appendChild(audioButton);
-			actionWrap.appendChild(toggleLearnedButton);
+			actionWrap.appendChild(markButton);
 			actionWrap.appendChild(exampleButton);
 			actionWrap.appendChild(deleteButton);
 			wordItem.appendChild(wordSpan);
@@ -564,14 +550,11 @@ function updateWordsList() {
 		});
 
 		if (!wordsList.hasChildNodes()) {
-			const emptyMessage = document.createElement("p");
-			emptyMessage.className = "empty";
-			emptyMessage.textContent = t("empty_words");
-			wordsList.appendChild(emptyMessage);
+			const empty = document.createElement("div");
+			empty.className = "empty";
+			empty.textContent = t("empty_words");
+			wordsList.appendChild(empty);
 		}
-	}).catch((error) => {
-		console.error("Failed to load words:", error);
-		wordStats.textContent = `${t("words")}：-`;
 	});
 }
 
@@ -582,8 +565,7 @@ function deleteWord(word) {
 	}).then(() => {
 		updateWordsList();
 		UiToast.show(t("deleted"), "success");
-	}).catch((error) => {
-		console.error("Failed to delete word:", error);
+	}).catch(() => {
 		UiToast.show(t("save_failed"), "error");
 	});
 }
@@ -595,8 +577,7 @@ function toggleLearned(word) {
 	}).then(() => {
 		updateWordsList();
 		UiToast.show(t("saved"), "success");
-	}).catch((error) => {
-		console.error("Failed to toggle learned state:", error);
+	}).catch(() => {
 		UiToast.show(t("save_failed"), "error");
 	});
 }

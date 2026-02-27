@@ -1,71 +1,66 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>單字清單</title>
+    <title>全屏單字瀏覽</title>
     <style>
         :root {
-            --bg: #fff5f6;
             --card: #ffffff;
             --text: #2a1014;
             --muted: #7d4a52;
             --primary: #d91f26;
             --primary-strong: #b9161d;
             --border: #f1cfd3;
-            --success: #1d7f47;
         }
 
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
-            width: 550px;
-            min-height: 700px;
-            padding: 16px;
+            padding: 24px;
+            min-height: 100vh;
             background: #fff8f8;
-            border-top: 10px solid #d9101f;
+            border-top: 12px solid #d9101f;
             color: var(--text);
             font-family: "Manrope", "Noto Sans TC", "SF Pro Text", sans-serif;
         }
 
         .panel {
+            max-width: 1100px;
+            margin: 0 auto;
             background: var(--card);
             border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 16px;
             box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
-            min-height: 665px;
+            padding: 20px;
         }
 
-        .header {
+        .top {
             display: flex;
             justify-content: space-between;
-            align-items: flex-start;
-            gap: 8px;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
         }
 
-        .title {
+        h1 {
             margin: 0;
-            font-size: 18px;
-            font-weight: 800;
-            letter-spacing: 0.2px;
+            font-size: 26px;
         }
 
-        .subtitle {
-            margin: 6px 0 0;
+        .sub {
+            margin: 4px 0 0;
             color: var(--muted);
-            font-size: 12px;
+            font-size: 13px;
         }
 
         .settings-link {
             color: var(--primary);
-            font-size: 12px;
+            font-size: 13px;
             text-decoration: none;
             font-weight: 700;
-            margin-top: 4px;
+            margin-right: 6px;
         }
 
         .stats {
@@ -76,11 +71,11 @@
         }
 
         .chip {
-            padding: 6px 9px;
+            padding: 7px 11px;
             border-radius: 999px;
             border: 1px solid var(--border);
             background: #fff;
-            font-size: 11px;
+            font-size: 12px;
             color: var(--muted);
         }
 
@@ -96,10 +91,10 @@
         }
 
         .actions {
-            margin-top: 12px;
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            margin-top: 14px;
+            display: flex;
             gap: 8px;
+            flex-wrap: wrap;
         }
 
         .sort-row {
@@ -112,8 +107,8 @@
             border-radius: 10px;
             background: #fff;
             color: var(--text);
-            padding: 8px 10px;
-            font-size: 12px;
+            padding: 10px 12px;
+            font-size: 13px;
             font-weight: 600;
             outline: none;
         }
@@ -121,19 +116,10 @@
         button {
             border: 0;
             border-radius: 10px;
-            padding: 8px 8px;
-            font-size: 12px;
+            padding: 10px 14px;
+            font-size: 13px;
             font-weight: 700;
             cursor: pointer;
-            transition: transform 0.15s ease, opacity 0.15s ease;
-        }
-
-        button:hover {
-            transform: translateY(-1px);
-        }
-
-        button:active {
-            transform: translateY(0);
         }
 
         .btn-primary {
@@ -141,105 +127,57 @@
             color: #fff;
         }
 
-        .btn-primary:hover {
-            background: var(--primary-strong);
-        }
+        .btn-primary:hover { background: var(--primary-strong); }
 
         .btn-soft {
             background: #ffe9ec;
             color: #8f1f2d;
         }
 
-        .list-wrap {
-            margin-top: 12px;
-            max-height: 520px;
+        .list {
+            margin-top: 14px;
+            max-height: calc(100vh - 290px);
             overflow: auto;
-            padding-right: 2px;
         }
 
         .word-item {
             border: 1px solid var(--border);
             border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 10px;
             background: #fff;
-            padding: 10px;
-            margin-bottom: 9px;
-            
         }
 
         .word {
+            font-size: 14px;
             font-weight: 700;
-            font-size: 13px;
+            margin-bottom: 10px;
             display: block;
-            line-height: 1.4;
-            margin-bottom: 8px;
-            word-break: break-word;
         }
 
         .learned {
+            color: #99858a;
             text-decoration: line-through;
-            color: #95a3bb;
         }
 
         .word-actions {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 6px;
+            grid-template-columns: repeat(4, minmax(80px, 130px));
+            gap: 8px;
         }
 
         .word-actions button {
-            padding: 6px;
-            font-size: 11px;
             border: 1px solid var(--border);
             background: #fff8f8;
             color: #5f2a31;
-            font-weight: 700;
+            padding: 8px;
+            font-size: 12px;
         }
 
-        .word-actions button:focus-visible {
-            outline: 2px solid #e86973;
-            outline-offset: 1px;
-        }
-
-        .action-audio {
-            background: #fff1f2 !important;
-            border-color: #f2d0d4 !important;
-            color: #8f2a35 !important;
-        }
-
-        .action-learn {
-            background: #eaf8f0 !important;
-            border-color: #bfe7ce !important;
-            color: #17683f !important;
-        }
-
-        .action-unlearn {
-            background: #fff2e5 !important;
-            border-color: #f1d0ad !important;
-            color: #93550f !important;
-        }
-
-        .action-delete {
-            background: #f1f3f5 !important;
-            border-color: #d5dae0 !important;
-            color: #344054 !important;
-        }
-
-        .action-audio:hover {
-            background: #ffe6e9 !important;
-        }
-
-        .action-learn:hover {
-            background: #dff3e8 !important;
-        }
-
-        .action-unlearn:hover {
-            background: #ffe8cb !important;
-        }
-
-        .action-delete:hover {
-            background: #e5e7eb !important;
-        }
-
+        .action-audio { background: #fff1f2 !important; }
+        .action-learn { background: #eaf8f0 !important; color: #17683f !important; border-color: #bfe7ce !important; }
+        .action-unlearn { background: #fff2e5 !important; color: #93550f !important; border-color: #f1d0ad !important; }
+        .action-delete { background: #f1f3f5 !important; color: #344054 !important; border-color: #d5dae0 !important; }
         .action-example { background: #eef4ff !important; border-color: #cfdcf8 !important; color: #274b8c !important; }
 
         .example-wrap {
@@ -252,10 +190,10 @@
 
         .example-list {
             margin: 0;
-            padding-left: 16px;
+            padding-left: 18px;
             color: var(--muted);
             font-size: 12px;
-            line-height: 1.45;
+            line-height: 1.5;
         }
 
         .example-list li {
@@ -334,27 +272,24 @@
         .empty {
             border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 16px 10px;
+            padding: 24px;
             color: var(--muted);
-            font-size: 12px;
             text-align: center;
-            background: #fffafb;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(3px); }
-            to { opacity: 1; transform: translateY(0); }
+            background: #fff;
         }
     </style>
 </head>
 <body>
     <div class="panel">
-        <div class="header">
+        <div class="top">
             <div>
-                <h1 class="title" id="popupTitle">單字中心</h1>
-                <p class="subtitle" id="popupSubtitle">檢視與管理你的學習單字。</p>
+                <h1 id="wordsTitle">全屏單字瀏覽</h1>
+                <p class="sub" id="wordsSubtitle">完整查看與管理所有已儲存單字</p>
             </div>
-            <a class="settings-link" href="options.html" id="settingsLink">設定</a>
+            <div style="display:flex; align-items:center;">
+                <a class="settings-link" id="settingsLink" href="options.html">設定</a>
+                <button class="btn-soft" id="closeBtn">關閉分頁</button>
+            </div>
         </div>
 
         <div class="stats">
@@ -367,9 +302,7 @@
 
         <div class="actions">
             <button class="btn-primary" id="toggleViewBtn">顯示全部</button>
-            <button class="btn-soft" id="fullscreenBtn">全屏瀏覽</button>
         </div>
-
         <div class="sort-row">
             <select id="sortMode">
                 <option value="recent_desc">依加入順序（新到舊）</option>
@@ -377,14 +310,12 @@
             </select>
         </div>
 
-        <div class="list-wrap">
-            <div id="wordsList"></div>
-        </div>
+        <div class="list" id="wordsList"></div>
     </div>
 
     <script src="storage.js"></script>
     <script src="ui-i18n.js"></script>
     <script src="ui-toast.js"></script>
-    <script src="popup.js"></script>
+    <script src="words.js"></script>
 </body>
 </html>

@@ -1,0 +1,8 @@
+{
+  "appName": {
+    "message": "Language Annotator"
+  },
+  "appDescription": {
+    "message": "Web閲覧中に単語をハイライト・保存・翻訳・復習して語彙力を伸ばします。"
+  }
+}

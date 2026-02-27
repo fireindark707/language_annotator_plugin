@@ -1,0 +1,8 @@
+{
+  "appName": {
+    "message": "Language Annotator"
+  },
+  "appDescription": {
+    "message": "웹을 탐색하면서 단어를 강조, 저장, 번역, 복습해 어휘 학습을 돕습니다."
+  }
+}
