@@ -8,9 +8,8 @@
   "host_permissions": [
     "https://translate.googleapis.com/*",
     "https://kateglo.lostfocus.org/*",
-    "https://api.dictionaryapi.dev/*",
-    "https://jotoba.de/*",
-    "https://en.wiktionary.org/*"
+    "https://freedictionaryapi.com/*",
+    "https://jotoba.de/*"
   ],
   "background": {
     "service_worker": "background.js"

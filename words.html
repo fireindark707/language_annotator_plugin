@@ -155,6 +155,15 @@
             max-height: calc(100vh - 290px);
             overflow: auto;
         }
+        .result-block {
+            margin-top: 10px;
+        }
+        .result-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #7d4a52;
+            margin: 4px 0 6px;
+        }
 
         .word-item {
             border: 1px solid var(--border);
@@ -169,6 +178,12 @@
             font-weight: 700;
             margin-bottom: 10px;
             display: block;
+        }
+        .word-count {
+            margin-left: 6px;
+            font-weight: 600;
+            font-size: 11px;
+            color: #98a2b3;
         }
 
         .learned {
@@ -362,13 +377,21 @@
             <select id="sortMode">
                 <option value="recent_desc">依加入順序（新到舊）</option>
                 <option value="alpha_asc">依字母順序（A-Z）</option>
+                <option value="freq_desc">依詞頻（高到低）</option>
             </select>
         </div>
         <div class="search-row">
             <input id="searchInput" type="text" placeholder="搜尋單詞、意思、詞典解釋" />
         </div>
 
-        <div class="list" id="wordsList"></div>
+        <div class="result-block" id="localResultBlock">
+            <div class="result-title" id="localResultTitle">已儲存單字</div>
+            <div class="list" id="wordsList"></div>
+        </div>
+        <div class="result-block" id="dictResultBlock" style="display:none;">
+            <div class="result-title" id="dictResultTitle">詞典搜尋結果</div>
+            <div class="list" id="dictWordsList"></div>
+        </div>
     </div>
 
     <script src="storage.js"></script>

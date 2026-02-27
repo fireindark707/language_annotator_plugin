@@ -43,19 +43,45 @@ function translateWithGoogle(text, sourceLang, targetLang) {
 }
 
 function fetchJsonSafe(url, options) {
-	return fetch(url, options).then((response) => {
-		if (!response.ok) return null;
-		return response.text().then((text) => {
-			const trimmed = (text || "").trim();
-			if (!trimmed) return null;
-			if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return null;
-			try {
-				return JSON.parse(trimmed);
-			} catch (error) {
+	const MAX_RETRIES = 1;
+	const TIMEOUT_MS = 6000;
+
+	const run = (attempt) => {
+		const controller = new AbortController();
+		const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+		const requestOptions = Object.assign({}, options || {}, { signal: controller.signal });
+
+		return fetch(url, requestOptions)
+			.then((response) => {
+				clearTimeout(timer);
+				if (!response.ok) return null;
+				return response.text().then((text) => {
+					const trimmed = (text || "").trim();
+					if (!trimmed) return null;
+					if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return null;
+					try {
+						return JSON.parse(trimmed);
+					} catch (error) {
+						return null;
+					}
+				});
+			})
+			.catch((error) => {
+				clearTimeout(timer);
+				const message = (error && error.message ? error.message : "").toLowerCase();
+				const retriable =
+					error && (
+						error.name === "AbortError" ||
+						error.name === "TypeError" ||
+						message.includes("failed to fetch") ||
+						message.includes("network")
+					);
+				if (retriable && attempt < MAX_RETRIES) return run(attempt + 1);
 				return null;
-			}
-		});
-	});
+			});
+	};
+
+	return run(0);
 }
 
 function flattenDictionaryEntries(node, out, inheritedPos) {
@@ -124,26 +150,29 @@ function lookupKateglo(word) {
 }
 
 function lookupEnglishFreeDictionary(word) {
-	const url = `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`;
-	return fetchJsonSafe(url)
-		.then((data) => {
-			if (!Array.isArray(data)) return { found: false, source: "dictionaryapi", entries: [] };
-			const entries = [];
-			data.forEach((entry) => {
-				const meanings = Array.isArray(entry && entry.meanings) ? entry.meanings : [];
-				meanings.forEach((meaning) => {
-					const pos = typeof meaning.partOfSpeech === "string" ? meaning.partOfSpeech.trim() : "";
-					const defs = Array.isArray(meaning.definitions) ? meaning.definitions : [];
-					defs.forEach((defItem) => {
-						const definition = typeof defItem.definition === "string" ? defItem.definition.trim() : "";
-						if (!definition) return;
-						entries.push({ pos, definition });
-					});
-				});
+	return lookupFreeDictionaryByLang(word, "en");
+}
+
+function lookupFreeDictionaryByLang(word, sourceLang) {
+	const base = ((sourceLang || "").split("-")[0] || "").toLowerCase();
+	const lang = base === "fil" ? "tl" : base;
+	if (!lang) return Promise.resolve({ found: false, source: "dictionaryapi", entries: [] });
+	const url = `https://freedictionaryapi.com/api/v1/entries/${encodeURIComponent(lang)}/${encodeURIComponent(word)}`;
+	return fetchJsonSafe(url).then((data) => {
+		if (!data || !Array.isArray(data.entries)) return { found: false, source: "dictionaryapi", entries: [] };
+		const entries = [];
+		data.entries.forEach((entry) => {
+			const pos = typeof entry.partOfSpeech === "string" ? entry.partOfSpeech.trim() : "";
+			const senses = Array.isArray(entry && entry.senses) ? entry.senses : [];
+			senses.forEach((sense) => {
+				const definition = typeof sense.definition === "string" ? sense.definition.trim() : "";
+				if (!definition) return;
+				entries.push({ pos, definition });
 			});
-			const dedup = dedupEntries(entries);
-			return { found: dedup.length > 0, source: "dictionaryapi", entries: dedup.slice(0, 5) };
 		});
+		const dedup = dedupEntries(entries);
+		return { found: dedup.length > 0, source: "dictionaryapi", entries: dedup.slice(0, 5) };
+	});
 }
 
 function parseJotobaEntries(data) {
@@ -347,29 +376,32 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 		if (isIndonesianSourceLang(sourceLang)) {
 			lookupPromise = tryLookupChain([
 				() => lookupKateglo(text),
-				() => lookupWiktionaryDictionary(text, sourceLang),
+				() => lookupFreeDictionaryByLang(text, sourceLang),
 			]);
 			sourceName = "kateglo";
 		} else if (isEnglishSourceLang(sourceLang)) {
 			lookupPromise = tryLookupChain([
 				() => lookupEnglishFreeDictionary(text),
-				() => lookupWiktionaryDictionary(text, sourceLang),
+				() => lookupFreeDictionaryByLang(text, sourceLang),
 			]);
 			sourceName = "dictionaryapi";
 		} else if (isJapaneseSourceLang(sourceLang)) {
 			lookupPromise = tryLookupChain([
 				() => lookupJotobaJapaneseDictionary(text),
-				() => lookupWiktionaryDictionary(text, sourceLang),
+				() => lookupFreeDictionaryByLang(text, sourceLang),
 			]);
 			sourceName = "jotoba";
 		} else {
-			lookupPromise = lookupWiktionaryDictionary(text, sourceLang);
+			lookupPromise = lookupFreeDictionaryByLang(text, sourceLang);
+			sourceName = "dictionaryapi";
 		}
 
 		lookupPromise
 			.then((result) => sendResponse(result))
 			.catch((error) => {
-				console.error("Dictionary lookup failed:", error);
+				if (!(error && error.name === "TypeError")) {
+					console.error("Dictionary lookup failed:", error);
+				}
 				sendResponse({ found: false, source: sourceName, entries: [] });
 			});
 		return true; // Indicates that the response is asynchronous

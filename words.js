@@ -12,15 +12,24 @@ const translateInflight = new Set();
 const translationMemoryCache = new Map();
 const exampleObservers = new WeakMap();
 const wordWriteLocks = new Map();
+function getEncounterCount(wordData) {
+	const count = wordData && typeof wordData.encounterCount === "number" ? wordData.encounterCount : 0;
+	const examples = Array.isArray(wordData && wordData.examples) ? wordData.examples.length : 0;
+	return Math.max(count, examples);
+}
 
 const toggleViewBtn = document.getElementById("toggleViewBtn");
 const sortModeSelect = document.getElementById("sortMode");
 const wordsList = document.getElementById("wordsList");
+const dictWordsList = document.getElementById("dictWordsList");
+const localResultBlock = document.getElementById("localResultBlock");
+const dictResultBlock = document.getElementById("dictResultBlock");
 const wordStats = document.getElementById("wordStats");
 const languageStats = document.getElementById("languageStats");
 const autoLangHint = document.getElementById("autoLangHint");
 const closeBtn = document.getElementById("closeBtn");
 const searchInput = document.getElementById("searchInput");
+let dictSearchReqId = 0;
 
 document.addEventListener("DOMContentLoaded", function () {
 	WordStorage.getUiLanguage().then((lang) => {
@@ -68,6 +77,110 @@ function refreshLanguageChip() {
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
+}
+
+function normalizeDictionaryQuery(text) {
+	const cleaned = (text || "")
+		.trim()
+		.replace(/^[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+/u, "")
+		.replace(/[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+$/u, "");
+	if (!cleaned) return "";
+	return cleaned.split(/\s+/)[0] || "";
+}
+
+function supportsDictionaryBySourceLang(sourceLang) {
+	const normalized = (sourceLang || "").toLowerCase();
+	if (!normalized || normalized === "auto") return false;
+	const base = normalized.split("-")[0];
+	const supported = new Set([
+		"cs", "de", "el", "en", "es", "fr", "id", "it", "ja", "ko",
+		"ku", "ms", "nl", "pl", "pt", "ru", "simple", "th", "tr", "vi", "zh",
+		"tl", "fil",
+	]);
+	return supported.has(base);
+}
+
+function renderDictionarySearchResults() {
+	const keyword = (searchKeyword || "").trim();
+	if (!keyword) {
+		dictResultBlock.style.display = "none";
+		wordsList.style.maxHeight = "calc(100vh - 290px)";
+		return;
+	}
+	dictResultBlock.style.display = "block";
+	wordsList.style.maxHeight = "34vh";
+	dictWordsList.style.maxHeight = "34vh";
+
+	const query = normalizeDictionaryQuery(keyword);
+	if (!query) {
+		dictWordsList.innerHTML = '<div class="empty">請輸入可查詢的單詞</div>';
+		return;
+	}
+
+	const reqId = ++dictSearchReqId;
+	dictWordsList.innerHTML = '<div class="empty">詞典查詢中…</div>';
+	Promise.all([
+		WordStorage.getSourceLang(),
+		WordStorage.getDictionaryLookupEnabled().catch(() => true),
+	]).then(([sourceLang, dictEnabled]) => {
+		if (reqId !== dictSearchReqId) return;
+		if (!(dictEnabled && supportsDictionaryBySourceLang(sourceLang))) {
+			dictWordsList.innerHTML = '<div class="empty">此語言未啟用詞典查詢</div>';
+			return;
+		}
+		chrome.runtime.sendMessage(
+			{ action: "lookupDictionary", text: query, sourceLang: sourceLang || "auto" },
+			(response) => {
+				if (reqId !== dictSearchReqId) return;
+				if (chrome.runtime.lastError || !response || !response.found || !Array.isArray(response.entries)) {
+					dictWordsList.innerHTML = '<div class="empty">詞典無結果</div>';
+					return;
+				}
+				const entries = response.entries.slice(0, 5);
+				if (entries.length === 0) {
+					dictWordsList.innerHTML = '<div class="empty">詞典無結果</div>';
+					return;
+				}
+				const wrap = document.createElement("div");
+				entries.forEach((item) => {
+					const row = document.createElement("div");
+					row.className = "word-item";
+					const pos = item && item.pos ? `[${item.pos}] ` : "";
+					const text = item && item.definition ? item.definition : "";
+					const title = document.createElement("div");
+					title.textContent = `${pos}${text}`;
+					row.appendChild(title);
+
+					const trans = document.createElement("div");
+					trans.className = "example-translation";
+					trans.textContent = "…";
+					row.appendChild(trans);
+
+					chrome.runtime.sendMessage(
+						{
+							action: "translate",
+							text: text,
+							sourceLang: sourceLang || "auto",
+						},
+						(transResp) => {
+							if (!row.isConnected) return;
+							if (chrome.runtime.lastError || !transResp || !transResp.translation) {
+								trans.textContent = "";
+								return;
+							}
+							trans.textContent = transResp.translation;
+						}
+					);
+					wrap.appendChild(row);
+				});
+				dictWordsList.innerHTML = "";
+				dictWordsList.appendChild(wrap);
+			}
+		);
+	}).catch(() => {
+		if (reqId !== dictSearchReqId) return;
+		dictWordsList.innerHTML = '<div class="empty">詞典查詢失敗</div>';
+	});
 }
 
 function escapeRegExp(text) {
@@ -459,6 +572,7 @@ function applyUiText() {
 	autoLangHint.textContent = t("auto_hint");
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");
+	if (sortModeSelect.options[2]) sortModeSelect.options[2].textContent = "依詞頻（高到低）";
 }
 
 function normalizeDictionaryEntries(wordData) {
@@ -503,6 +617,13 @@ function updateWordsList() {
 		const allWords = Object.keys(words);
 		if (sortMode === "alpha_asc") {
 			allWords.sort((a, b) => a.localeCompare(b));
+		} else if (sortMode === "freq_desc") {
+			allWords.sort((a, b) => {
+				const af = getEncounterCount(words[a]);
+				const bf = getEncounterCount(words[b]);
+				if (bf !== af) return bf - af;
+				return a.localeCompare(b);
+			});
 		} else {
 			allWords.sort((a, b) => {
 				const at = words[a] && words[a].createdAt ? words[a].createdAt : 0;
@@ -515,15 +636,22 @@ function updateWordsList() {
 		const unlearnedCount = allWords.filter((w) => !words[w].learned).length;
 		wordStats.textContent = `${t("words")}：${allWords.length} | ${t("unlearned")}：${unlearnedCount}`;
 
+		let renderedCount = 0;
 		allWords.forEach((word) => {
 			if (!showAllWords && words[word].learned) return;
 			if (!matchWordWithSearch(word, words[word], searchKeyword)) return;
+			renderedCount += 1;
 			const wordItem = document.createElement("div");
 			wordItem.className = "word-item";
 
 			const wordSpan = document.createElement("span");
 			wordSpan.className = `word${words[word].learned ? " learned" : ""}`;
 			wordSpan.textContent = `${word}: ${words[word].meaning}`;
+			const encounterCount = getEncounterCount(words[word]);
+			const countSpan = document.createElement("span");
+			countSpan.className = "word-count";
+			countSpan.textContent = `(${encounterCount})`;
+			wordSpan.appendChild(countSpan);
 
 			const actionWrap = document.createElement("div");
 			actionWrap.className = "word-actions";
@@ -652,12 +780,18 @@ function updateWordsList() {
 			wordsList.appendChild(wordItem);
 		});
 
-		if (!wordsList.hasChildNodes()) {
+		if (!wordsList.hasChildNodes() && !searchKeyword) {
 			const empty = document.createElement("div");
 			empty.className = "empty";
 			empty.textContent = t("empty_words");
 			wordsList.appendChild(empty);
 		}
+		if (searchKeyword) {
+			localResultBlock.style.display = renderedCount > 0 ? "block" : "none";
+		} else {
+			localResultBlock.style.display = "block";
+		}
+		renderDictionarySearchResults();
 	});
 }
 

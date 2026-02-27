@@ -734,20 +734,29 @@ function enqueueExampleCandidates(candidates) {
 						comparisonPool.push(sample.text);
 					}
 
-				if (newOnes.length === 0) return;
-				const merged = newOnes.map((item, index) => ({
-					text: item.text,
-					pinned: false,
+					if (newOnes.length === 0) return;
+					const merged = newOnes.map((item, index) => ({
+						text: item.text,
+						pinned: false,
 					createdAt: item.capturedAt || (Date.now() + index),
 					sourceUrl: item.sourceUrl || "",
 					capturedAt: item.capturedAt || 0,
 				})).concat(existing);
-				wordsData[word].examples = enforceExampleLimit(
-					sortExamples(merged),
-					MAX_EXAMPLES_PER_WORD
-				);
-				changed = true;
-			});
+					wordsData[word].examples = enforceExampleLimit(
+						sortExamples(merged),
+						MAX_EXAMPLES_PER_WORD
+					);
+					const prevCount =
+						typeof wordsData[word].encounterCount === "number"
+							? wordsData[word].encounterCount
+							: 0;
+					const nextCount = prevCount + newOnes.length;
+					const currentExampleCount = Array.isArray(wordsData[word].examples)
+						? wordsData[word].examples.length
+						: 0;
+					wordsData[word].encounterCount = Math.max(nextCount, currentExampleCount);
+					changed = true;
+				});
 
 			if (changed) {
 				await WordStorage.saveWords(wordsData);
@@ -1408,7 +1417,7 @@ function prefillMeaningFromTranslation(word, inputEl, isUserEdited, modalOverlay
 				if (!modalOverlay.isConnected) return;
 				if (chrome.runtime.lastError || !dictResponse || !dictResponse.found) return;
 				const rawEntries = Array.isArray(dictResponse.entries)
-					? dictResponse.entries.filter((item) => item && item.definition).slice(0, 5)
+					? dictResponse.entries.filter((item) => item && item.definition).slice(0, 3)
 					: [];
 				if (rawEntries.length === 0) return;
 				const mappedEntries = new Array(rawEntries.length);

@@ -11,6 +11,11 @@ const translateInflight = new Set();
 const translationMemoryCache = new Map();
 const exampleObservers = new WeakMap();
 const wordWriteLocks = new Map();
+function getEncounterCount(wordData) {
+	const count = wordData && typeof wordData.encounterCount === "number" ? wordData.encounterCount : 0;
+	const examples = Array.isArray(wordData && wordData.examples) ? wordData.examples.length : 0;
+	return Math.max(count, examples);
+}
 
 const toggleViewBtn = document.getElementById("toggleViewBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
@@ -443,6 +448,7 @@ function applyUiText() {
 	autoLangHint.textContent = t("auto_hint");
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");
+	if (sortModeSelect.options[2]) sortModeSelect.options[2].textContent = "依詞頻（高到低）";
 }
 
 function refreshLanguageChip() {
@@ -463,6 +469,13 @@ function updateWordsList() {
 		const wordsArray = Object.keys(words);
 		if (sortMode === "alpha_asc") {
 			wordsArray.sort((a, b) => a.localeCompare(b));
+		} else if (sortMode === "freq_desc") {
+			wordsArray.sort((a, b) => {
+				const af = getEncounterCount(words[a]);
+				const bf = getEncounterCount(words[b]);
+				if (bf !== af) return bf - af;
+				return a.localeCompare(b);
+			});
 		} else {
 			wordsArray.sort((a, b) => {
 				const at = words[a] && words[a].createdAt ? words[a].createdAt : 0;
@@ -485,6 +498,11 @@ function updateWordsList() {
 			const wordSpan = document.createElement("span");
 			wordSpan.className = `word${words[word].learned ? " learned" : ""}`;
 			wordSpan.textContent = `${word}: ${words[word].meaning}`;
+			const encounterCount = getEncounterCount(words[word]);
+			const countSpan = document.createElement("span");
+			countSpan.className = "word-count";
+			countSpan.textContent = `(${encounterCount})`;
+			wordSpan.appendChild(countSpan);
 
 			const actionWrap = document.createElement("div");
 			actionWrap.className = "word-actions";
