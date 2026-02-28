@@ -104,17 +104,32 @@
         .search-row {
             margin-top: 10px;
         }
+        .search-label {
+            display: inline-block;
+            margin-bottom: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #8f1f2d;
+            letter-spacing: 0.2px;
+        }
 
         .search-row input {
             width: 100%;
-            border: 1px solid var(--border);
-            border-radius: 10px;
+            border: 2px solid #f0b7bf;
+            border-radius: 12px;
             background: #fff;
             color: var(--text);
-            padding: 10px 12px;
-            font-size: 13px;
+            padding: 12px 14px;
+            font-size: 14px;
             font-weight: 600;
             outline: none;
+            box-shadow: 0 1px 2px rgba(143, 31, 45, 0.08);
+            transition: border-color 0.16s ease, box-shadow 0.16s ease;
+        }
+
+        .search-row input:focus {
+            border-color: #c62a3d;
+            box-shadow: 0 0 0 3px rgba(198, 42, 61, 0.14);
         }
 
         .sort-row select {
@@ -381,6 +396,7 @@
             </select>
         </div>
         <div class="search-row">
+            <label class="search-label" for="searchInput">快速搜尋</label>
             <input id="searchInput" type="text" placeholder="搜尋單詞、意思、詞典解釋" />
         </div>
 

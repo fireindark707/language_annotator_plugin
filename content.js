@@ -578,9 +578,20 @@ function sentenceSimilarity(a, b) {
 	return jaccard * 0.75 + lengthRatio * 0.25;
 }
 
+function getSimilarityThresholdForPair(a, b) {
+	const lenA = tokenizeForSimilarity(a).length;
+	const lenB = tokenizeForSimilarity(b).length;
+	const minLen = Math.min(lenA, lenB);
+	// Short template-like titles should be deduped more aggressively.
+	if (minLen <= 4) return 0.62;
+	if (minLen <= 6) return 0.74;
+	return EXAMPLE_SIMILARITY_THRESHOLD;
+}
+
 function isTooSimilarToAny(candidate, pool) {
 	for (let i = 0; i < pool.length; i += 1) {
-		if (sentenceSimilarity(candidate, pool[i]) >= EXAMPLE_SIMILARITY_THRESHOLD) {
+		const threshold = getSimilarityThresholdForPair(candidate, pool[i]);
+		if (sentenceSimilarity(candidate, pool[i]) >= threshold) {
 			return true;
 		}
 	}

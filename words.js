@@ -4,6 +4,7 @@ let sortMode = "recent_desc";
 let searchKeyword = "";
 const MAX_EXAMPLES_PER_WORD = 20;
 const MAX_TRANSLATE_CONCURRENCY = 2;
+const SEARCH_DEBOUNCE_MS = 350;
 
 let cachedSourceLangPromise = null;
 let activeTranslateJobs = 0;
@@ -30,6 +31,7 @@ const autoLangHint = document.getElementById("autoLangHint");
 const closeBtn = document.getElementById("closeBtn");
 const searchInput = document.getElementById("searchInput");
 let dictSearchReqId = 0;
+let searchDebounceTimer = null;
 
 document.addEventListener("DOMContentLoaded", function () {
 	WordStorage.getUiLanguage().then((lang) => {
@@ -56,8 +58,13 @@ document.addEventListener("DOMContentLoaded", function () {
 	});
 
 	searchInput.addEventListener("input", function () {
-		searchKeyword = (searchInput.value || "").trim().toLowerCase();
-		updateWordsList();
+		if (searchDebounceTimer) {
+			window.clearTimeout(searchDebounceTimer);
+		}
+		searchDebounceTimer = window.setTimeout(() => {
+			searchKeyword = (searchInput.value || "").trim().toLowerCase();
+			updateWordsList();
+		}, SEARCH_DEBOUNCE_MS);
 	});
 
 	closeBtn.addEventListener("click", function () {
