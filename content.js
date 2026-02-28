@@ -406,6 +406,46 @@ function normalizeDictionaryQuery(text) {
 	return cleaned.split(/\s+/)[0] || "";
 }
 
+function getBrowserBaseLang() {
+	const lang = (typeof navigator !== "undefined" && navigator.language ? navigator.language : "en").toLowerCase();
+	return (lang.split("-")[0] || "en");
+}
+
+function detectTextLanguageWithBrowserApi(text) {
+	return new Promise((resolve) => {
+		try {
+			if (!chrome || !chrome.i18n || typeof chrome.i18n.detectLanguage !== "function") {
+				resolve("");
+				return;
+			}
+			chrome.i18n.detectLanguage(text || "", (result) => {
+				if (chrome.runtime.lastError || !result || !Array.isArray(result.languages)) {
+					resolve("");
+					return;
+				}
+				if (result.languages.length === 0) {
+					resolve("");
+					return;
+				}
+				const top = result.languages[0];
+				const lang = (top && top.language ? top.language : "").toLowerCase();
+				resolve((lang.split("-")[0] || ""));
+			});
+		} catch (_) {
+			resolve("");
+		}
+	});
+}
+
+async function shouldSkipTranslateAndDictionary(text) {
+	const detected = await detectTextLanguageWithBrowserApi(text);
+	if (!detected) return false;
+	const browserLang = getBrowserBaseLang();
+	const normalizedDetected = detected === "fil" ? "tl" : detected;
+	const normalizedBrowser = browserLang === "fil" ? "tl" : browserLang;
+	return normalizedDetected === normalizedBrowser;
+}
+
 function shouldLookupDictionaryQuery(query) {
 	const q = (query || "").trim();
 	if (!q) return false;
@@ -1495,7 +1535,9 @@ document.addEventListener("mouseup", function () {
 });
 
 function translateText(text) {
-	Promise.all([
+	shouldSkipTranslateAndDictionary(text).then((shouldSkip) => {
+		if (shouldSkip) return;
+		return Promise.all([
 		WordStorage.getSourceLang(),
 		WordStorage.getDictionaryLookupEnabled().catch(() => true),
 	]).then(([sourceLang, dictionaryEnabled]) => {
@@ -1516,7 +1558,8 @@ function translateText(text) {
 				);
 			}
 		);
-		}).catch((error) => {
+		});
+	}).catch((error) => {
 		if (!isContextInvalidatedError(error)) {
 			console.error("Failed to get source language:", error);
 		}
