@@ -13,6 +13,7 @@ let previewTranslateActive = 0;
 const previewTranslateQueue = [];
 const previewTranslateInflight = new Set();
 const previewTranslateCache = new Map();
+let contentUiLang = "en";
 const SKIP_TEXT_TAGS = new Set([
 	"SCRIPT",
 	"STYLE",
@@ -24,6 +25,34 @@ const SKIP_TEXT_TAGS = new Set([
 	"CODE",
 	"PRE",
 ]);
+
+WordStorage.getUiLanguage()
+	.then((lang) => {
+		contentUiLang = lang || "en";
+	})
+	.catch(() => {
+		contentUiLang = "en";
+	});
+
+function contentT(key) {
+	if (globalThis.UiI18n && typeof globalThis.UiI18n.t === "function") {
+		return globalThis.UiI18n.t(contentUiLang, key);
+	}
+	const fallback = {
+		add_word_title: "Add Word",
+		add_word_hint: "Please enter the meaning of this word",
+		loading_translation: "Fetching translation...",
+		cancel: "Cancel",
+		save: "Save",
+		apply: "Apply",
+		confirm_action: "Confirm Action",
+		confirm: "Confirm",
+		meaning_placeholder: "For example: the meaning of this word in this context...",
+		mark_confirm_prefix: "Mark \"",
+		mark_confirm_suffix: "\" as learned?",
+	};
+	return fallback[key] || key;
+}
 
 function isContextInvalidatedError(error) {
 	return !!(error && typeof error.message === "string" && error.message.includes("Extension context invalidated"));
@@ -174,7 +203,7 @@ async function isCurrentDomainExcluded() {
 // 标记单词为已学会
 function markLearned(word) {
 	lowerCaseWord = word.toLowerCase();
-	showConfirmModal(`標記「${lowerCaseWord}」為已學會？`).then((confirmed) => {
+	showConfirmModal(`${contentT("mark_confirm_prefix")}${lowerCaseWord}${contentT("mark_confirm_suffix")}`).then((confirmed) => {
 		if (!confirmed) return;
 		WordStorage.getWords().then((words) => {
 			if (words[lowerCaseWord]) {
@@ -392,6 +421,27 @@ function containsWord(text, word) {
 
 function normalizeText(text) {
 	return (text || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizePageKey(url) {
+	if (!url) return "";
+	try {
+		const u = new URL(url);
+		return `${u.origin}${u.pathname}`;
+	} catch (error) {
+		return normalizeText(url);
+	}
+}
+
+function getDerivedPageCountFromExamples(wordData) {
+	const examples = Array.isArray(wordData && wordData.examples) ? wordData.examples : [];
+	const keys = new Set();
+	for (let i = 0; i < examples.length; i += 1) {
+		const entry = examples[i] || {};
+		const key = normalizePageKey(entry.sourceUrl || entry.url || "");
+		if (key) keys.add(key);
+	}
+	return keys.size;
 }
 
 function stripOuterPunctuation(text) {
@@ -811,6 +861,25 @@ function enqueueExampleCandidates(candidates) {
 						? wordsData[word].examples.length
 						: 0;
 					wordsData[word].encounterCount = Math.max(nextCount, currentExampleCount);
+
+					const existingPageKeys = Array.isArray(wordsData[word].encounterPageKeys)
+						? wordsData[word].encounterPageKeys.filter((x) => typeof x === "string" && x)
+						: [];
+					const pageKeySet = new Set(existingPageKeys);
+					const currentPageKey = normalizePageKey(location.href);
+					let newPageHits = 0;
+					// DF rule: only +1 when this page contributes at least one NEW example.
+					if (newOnes.length > 0 && currentPageKey && !pageKeySet.has(currentPageKey)) {
+						pageKeySet.add(currentPageKey);
+						newPageHits = 1;
+					}
+					wordsData[word].encounterPageKeys = Array.from(pageKeySet).slice(-300);
+					const prevPageCount =
+						typeof wordsData[word].pageCount === "number"
+							? wordsData[word].pageCount
+							: getDerivedPageCountFromExamples(wordsData[word]);
+					const derivedPageCount = getDerivedPageCountFromExamples(wordsData[word]);
+					wordsData[word].pageCount = Math.max(prevPageCount + newPageHits, derivedPageCount);
 					changed = true;
 				});
 
@@ -996,7 +1065,7 @@ function showAddWordModal(word) {
 
 	const title = document.createElement("h3");
 	title.className = "la-addword-title";
-	title.textContent = "新增單字";
+	title.textContent = contentT("add_word_title");
 
 	const wordLine = document.createElement("div");
 	wordLine.className = "la-addword-word";
@@ -1004,11 +1073,11 @@ function showAddWordModal(word) {
 
 	const hint = document.createElement("div");
 	hint.className = "la-addword-hint";
-	hint.textContent = "請輸入這個單字的意思";
+	hint.textContent = contentT("add_word_hint");
 
 	const input = document.createElement("textarea");
 	input.className = "la-addword-input";
-	input.placeholder = "正在取得翻譯...";
+	input.placeholder = contentT("loading_translation");
 	input.rows = 3;
 	let userEdited = false;
 
@@ -1031,11 +1100,11 @@ function showAddWordModal(word) {
 
 	const cancelBtn = document.createElement("button");
 	cancelBtn.className = "la-addword-btn la-addword-cancel";
-	cancelBtn.textContent = "取消";
+	cancelBtn.textContent = contentT("cancel");
 
 	const saveBtn = document.createElement("button");
 	saveBtn.className = "la-addword-btn la-addword-save";
-	saveBtn.textContent = "儲存";
+	saveBtn.textContent = contentT("save");
 
 	footer.appendChild(cancelBtn);
 	footer.appendChild(saveBtn);
@@ -1153,7 +1222,7 @@ function showAddWordModal(word) {
 				const applyBtn = document.createElement("button");
 				applyBtn.type = "button";
 				applyBtn.className = "la-addword-dict-apply";
-				applyBtn.textContent = "帶入";
+				applyBtn.textContent = contentT("apply");
 				applyBtn.addEventListener("click", () => {
 					const composed = item.definitionTranslated || item.definitionOriginal || "";
 					const text = item.pos ? `[${item.pos}] ${composed}` : composed;
@@ -1396,7 +1465,7 @@ function showConfirmModal(message) {
 
 		const title = document.createElement("h3");
 		title.className = "la-confirm-title";
-		title.textContent = "確認操作";
+		title.textContent = contentT("confirm_action");
 
 		const desc = document.createElement("p");
 		desc.className = "la-confirm-desc";
@@ -1407,11 +1476,11 @@ function showConfirmModal(message) {
 
 		const cancelBtn = document.createElement("button");
 		cancelBtn.className = "la-confirm-btn la-confirm-cancel";
-		cancelBtn.textContent = "取消";
+		cancelBtn.textContent = contentT("cancel");
 
 		const okBtn = document.createElement("button");
 		okBtn.className = "la-confirm-btn la-confirm-ok";
-		okBtn.textContent = "確認";
+		okBtn.textContent = contentT("confirm");
 
 		footer.appendChild(cancelBtn);
 		footer.appendChild(okBtn);
@@ -1454,14 +1523,14 @@ function prefillMeaningFromTranslation(word, inputEl, isUserEdited, modalOverlay
 			(response) => {
 				if (!modalOverlay.isConnected) return;
 				if (chrome.runtime.lastError) {
-					inputEl.placeholder = "例如：這個詞在句子中的意思...";
+					inputEl.placeholder = contentT("meaning_placeholder");
 					return;
 				}
 				const translated = response && response.translation ? response.translation.trim() : "";
 				if (translated && !isUserEdited() && inputEl.value.trim() === "") {
 					inputEl.value = translated;
 				}
-				inputEl.placeholder = "例如：這個詞在句子中的意思...";
+				inputEl.placeholder = contentT("meaning_placeholder");
 			}
 		);
 
@@ -1521,7 +1590,7 @@ function prefillMeaningFromTranslation(word, inputEl, isUserEdited, modalOverlay
 			}
 		);
 	}).catch(() => {
-		inputEl.placeholder = "例如：這個詞在句子中的意思...";
+		inputEl.placeholder = contentT("meaning_placeholder");
 	});
 }
 

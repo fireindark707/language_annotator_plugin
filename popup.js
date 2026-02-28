@@ -17,6 +17,15 @@ function getEncounterCount(wordData) {
 	return Math.max(count, examples);
 }
 
+function getPageCount(wordData) {
+	const count = wordData && typeof wordData.pageCount === "number" ? wordData.pageCount : 0;
+	const keys = Array.isArray(wordData && wordData.encounterPageKeys)
+		? wordData.encounterPageKeys.filter((x) => typeof x === "string" && x)
+		: [];
+	const derived = keys.length;
+	return Math.max(count, derived);
+}
+
 const toggleViewBtn = document.getElementById("toggleViewBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 const sortModeSelect = document.getElementById("sortMode");
@@ -315,7 +324,7 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 
 	if (normalizedExamples.length === 0) {
 		const li = document.createElement("li");
-		li.textContent = "尚無累積例句";
+		li.textContent = t("no_examples");
 		list.appendChild(li);
 		exampleWrap.appendChild(list);
 		return;
@@ -354,7 +363,7 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 		const removeBtn = document.createElement("button");
 		removeBtn.className = "example-remove";
 		removeBtn.textContent = "🗑️";
-		removeBtn.title = "刪除例句";
+		removeBtn.title = t("remove_example");
 		removeBtn.addEventListener("click", function () {
 			updateExamplesForWord(word, (listItems) => {
 				const idx = findExampleIndexByIdentity(listItems, example);
@@ -379,7 +388,7 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 		const pinBtn = document.createElement("button");
 		pinBtn.className = "example-remove";
 		pinBtn.textContent = example.pinned ? "📌" : "📍";
-		pinBtn.title = example.pinned ? "取消釘住" : "釘住例句";
+		pinBtn.title = example.pinned ? t("unpin_example") : t("pin_example");
 		pinBtn.addEventListener("click", function () {
 			updateExamplesForWord(word, (listItems) => {
 				const idx = findExampleIndexByIdentity(listItems, example);
@@ -448,7 +457,7 @@ function applyUiText() {
 	autoLangHint.textContent = t("auto_hint");
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");
-	if (sortModeSelect.options[2]) sortModeSelect.options[2].textContent = "依詞頻（高到低）";
+	if (sortModeSelect.options[2]) sortModeSelect.options[2].textContent = t("sort_freq");
 }
 
 function refreshLanguageChip() {
@@ -471,8 +480,11 @@ function updateWordsList() {
 			wordsArray.sort((a, b) => a.localeCompare(b));
 		} else if (sortMode === "freq_desc") {
 			wordsArray.sort((a, b) => {
+				const ad = getPageCount(words[a]);
+				const bd = getPageCount(words[b]);
 				const af = getEncounterCount(words[a]);
 				const bf = getEncounterCount(words[b]);
+				if (bd !== ad) return bd - ad;
 				if (bf !== af) return bf - af;
 				return a.localeCompare(b);
 			});
@@ -499,9 +511,10 @@ function updateWordsList() {
 			wordSpan.className = `word${words[word].learned ? " learned" : ""}`;
 			wordSpan.textContent = `${word}: ${words[word].meaning}`;
 			const encounterCount = getEncounterCount(words[word]);
+			const pageCount = getPageCount(words[word]);
 			const countSpan = document.createElement("span");
 			countSpan.className = "word-count";
-			countSpan.textContent = `(${encounterCount})`;
+			countSpan.textContent = `${pageCount}-${encounterCount}`;
 			wordSpan.appendChild(countSpan);
 
 			const actionWrap = document.createElement("div");
@@ -546,10 +559,10 @@ function updateWordsList() {
 			function syncExampleButtonText() {
 				const expanded = exampleWrap.style.display !== "none";
 				exampleButton.textContent = expanded
-					? `收起(${exampleCount})`
-					: `例句(${exampleCount})`;
+					? `${t("collapse")}(${exampleCount})`
+					: `${t("examples")}(${exampleCount})`;
 			}
-			exampleButton.textContent = `例句(${exampleCount})`;
+			exampleButton.textContent = `${t("examples")}(${exampleCount})`;
 			exampleButton.className = "action-example";
 
 			const exampleWrap = document.createElement("div");

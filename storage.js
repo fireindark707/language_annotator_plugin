@@ -119,6 +119,18 @@
 				learned: !!data.learned,
 				createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
 			};
+			if (typeof data.encounterCount === "number") {
+				next.encounterCount = data.encounterCount;
+			}
+			if (typeof data.pageCount === "number") {
+				next.pageCount = data.pageCount;
+			}
+			if (Array.isArray(data.encounterPageKeys)) {
+				const cap = level >= 2 ? 30 : 120;
+				next.encounterPageKeys = data.encounterPageKeys
+					.filter((x) => typeof x === "string" && x)
+					.slice(-cap);
+			}
 			if (level < 3 && Array.isArray(data.examples)) {
 				const cap = level >= 2 ? 8 : data.examples.length;
 				next.examples = data.examples
