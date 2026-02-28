@@ -408,7 +408,10 @@ function normalizeDictionaryQuery(text) {
 
 function getBrowserBaseLang() {
 	const lang = (typeof navigator !== "undefined" && navigator.language ? navigator.language : "en").toLowerCase();
-	return (lang.split("-")[0] || "en");
+	const base = (lang.split("-")[0] || "en");
+	// Normalize Chinese variants (zh-TW / zh-CN / zh-HK ...) into one bucket.
+	if (base === "zh") return "zh";
+	return base;
 }
 
 function detectTextLanguageWithBrowserApi(text) {
@@ -443,6 +446,7 @@ async function shouldSkipTranslateAndDictionary(text) {
 	const browserLang = getBrowserBaseLang();
 	const normalizedDetected = detected === "fil" ? "tl" : detected;
 	const normalizedBrowser = browserLang === "fil" ? "tl" : browserLang;
+	if (normalizedDetected === "zh" && normalizedBrowser === "zh") return true;
 	return normalizedDetected === normalizedBrowser;
 }
 
@@ -460,9 +464,10 @@ function supportsDictionaryBySourceLang(sourceLang) {
 	if (!normalized || normalized === "auto") return false;
 	const base = normalized.split("-")[0];
 	const supported = new Set([
-		"cs", "de", "el", "en", "es", "fr", "id", "it", "ja", "ko",
-		"ku", "ms", "nl", "pl", "pt", "ru", "simple", "th", "tr", "vi", "zh",
-		"tl", "fil",
+		"ar", "bn", "cs", "de", "el", "en", "es", "fa", "fil", "fr",
+		"he", "hi", "hu", "id", "it", "ja", "jv", "km", "ko", "lo",
+		"ms", "my", "nl", "pl", "pt", "ro", "ru", "su", "sv", "sw",
+		"ta", "te", "th", "tl", "tr", "ur", "vi", "zh",
 	]);
 	return supported.has(base);
 }

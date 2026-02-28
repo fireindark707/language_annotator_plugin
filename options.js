@@ -33,9 +33,10 @@ document.addEventListener("DOMContentLoaded", function () {
 		if (!normalized || normalized === "auto") return false;
 		const base = normalized.split("-")[0];
 		const supported = new Set([
-			"cs", "de", "el", "en", "es", "fr", "id", "it", "ja", "ko",
-			"ku", "ms", "nl", "pl", "pt", "ru", "simple", "th", "tr", "vi", "zh",
-			"tl", "fil",
+			"ar", "bn", "cs", "de", "el", "en", "es", "fa", "fil", "fr",
+			"he", "hi", "hu", "id", "it", "ja", "jv", "km", "ko", "lo",
+			"ms", "my", "nl", "pl", "pt", "ro", "ru", "su", "sv", "sw",
+			"ta", "te", "th", "tl", "tr", "ur", "vi", "zh",
 		]);
 		return supported.has(base);
 	}
