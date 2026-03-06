@@ -1,6 +1,6 @@
 # Language Annotator
 
-[![Version](https://img.shields.io/badge/version-1.3-d91f26)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-1.4-d91f26)](./manifest.json)
 [![Chrome](https://img.shields.io/badge/Chrome-Extension-1a73e8?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/language-annotator/pplocadbndpadfenglgleehcfjaciobg)
 [![Firefox](https://img.shields.io/badge/Firefox-Add--on-ff7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/zh-TW/firefox/addon/language-annotator/)
 [![Manifest](https://img.shields.io/badge/manifest-Chrome%20MV3%20%7C%20Firefox%20MV2-6b7280)](./manifests)
@@ -13,7 +13,17 @@ It highlights your saved words, translates selected text, lets you quickly add w
 - [Chrome Web Store](https://chromewebstore.google.com/detail/language-annotator/pplocadbndpadfenglgleehcfjaciobg)
 - [Firefox Add-ons](https://addons.mozilla.org/zh-TW/firefox/addon/language-annotator/)
 
-## What’s New (v1.3)
+## What’s New (v1.4)
+
+- Practice mode major upgrade:
+  - 10-question rounds with overtime extension based on streak,
+  - stronger feedback loop (answer flash, streak/combo effects, pronunciation playback),
+  - cloze questions with optional inline translation.
+- Practice mode localization expanded:
+  - full i18n coverage for practice UI strings across supported UI languages.
+- UI/UX refinement for practice flow:
+  - clearer chips/status hierarchy and improved round summary visibility.
+- Continued dictionary + example learning pipeline improvements from v1.3 are preserved.
 
 - Dictionary integration in translation/add-word flow.
 - Multi-source dictionary strategy:
@@ -159,4 +169,4 @@ Outputs:
 
 ## Version
 
-Current manifest version: `1.3`.
+Current manifest version: `1.4`.

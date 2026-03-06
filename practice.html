@@ -6,21 +6,25 @@
 	<title>Practice</title>
 	<style>
 		:root {
-			--bg: #fff7f8;
+			--bg: #f4f1f2;
 			--card: #ffffff;
-			--text: #2a1014;
-			--muted: #7d4a52;
-			--primary: #d91f26;
-			--primary-strong: #b9161d;
+			--text: #261419;
+			--muted: #6f4d55;
+			--primary: #7a1022;
+			--primary-strong: #5f0c1a;
+			--primary-soft: #f2e8ea;
 			--ok: #1d7f47;
 			--bad: #aa2e2e;
-			--border: #f1cfd3;
+			--border: #dec9cf;
+			--chip-bg: #f7f1f2;
+			--focus: #9f1a30;
+			--option-hover: #f6eff1;
 		}
 		* { box-sizing: border-box; }
 		body {
 			margin: 0;
 			padding: 18px;
-			background: var(--bg);
+			background: linear-gradient(180deg, #f8f6f7 0%, var(--bg) 100%);
 			color: var(--text);
 			font-family: "Manrope", "Noto Sans TC", "SF Pro Text", sans-serif;
 		}
@@ -29,11 +33,20 @@
 			margin: 0 auto;
 			background: var(--card);
 			border: 1px solid var(--border);
-			border-radius: 14px;
+			border-radius: 16px;
 			padding: 18px;
-			box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+			box-shadow: 0 14px 28px rgba(32, 16, 20, 0.09);
 			position: relative;
 			overflow: hidden;
+		}
+		.wrap::before {
+			content: "";
+			position: absolute;
+			top: 0;
+			left: 0;
+			right: 0;
+			height: 4px;
+			background: linear-gradient(90deg, #5a0c19 0%, #7a1022 55%, #991932 100%);
 		}
 		.head {
 			display: flex;
@@ -45,6 +58,7 @@
 			margin: 0;
 			font-size: 22px;
 			font-weight: 800;
+			letter-spacing: 0.2px;
 		}
 		.sub {
 			margin: 6px 0 0;
@@ -53,25 +67,102 @@
 		}
 		.stats {
 			margin-top: 12px;
-			display: flex;
-			gap: 8px;
-			flex-wrap: wrap;
+			display: grid;
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+			gap: 10px;
+		}
+		@media (max-width: 920px) {
+			.stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 		}
 		.chip {
-			font-size: 12px;
+			font-size: 19px;
+			font-weight: 900;
 			border: 1px solid var(--border);
-			border-radius: 999px;
-			padding: 5px 10px;
-			color: #6a3942;
+			border-radius: 12px;
+			padding: 12px 10px;
+			color: #3f2229;
 			background: #fff;
+			text-align: center;
+			line-height: 1.2;
+			min-height: 66px;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			letter-spacing: 0.2px;
+			box-shadow: 0 4px 10px rgba(37, 17, 23, 0.08);
+		}
+		#progressChip {
+			background: linear-gradient(180deg, #fff 0%, #f8f4f5 100%);
+		}
+		#scoreChip {
+			background: linear-gradient(180deg, #fff 0%, #f7f1f3 100%);
+		}
+		#challengeChip {
+			font-size: 15px;
+			font-weight: 800;
+			background: linear-gradient(180deg, #301117 0%, #1f0b10 100%);
+			color: #f0d6dc;
+			border-color: #4a1b25;
+		}
+		#streakChip {
+			font-size: 22px;
+			font-weight: 900;
+			color: #fff;
+			background: linear-gradient(180deg, #b91935 0%, #7a1022 100%);
+			border-color: #7a1022;
+			text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+			box-shadow: 0 8px 16px rgba(103, 16, 34, 0.28);
+			transform-origin: center;
+		}
+		#streakChip.streak-pop {
+			animation: streakPop 480ms cubic-bezier(.2,.8,.2,1);
+		}
+		#streakChip.streak-fire {
+			animation: streakFire 1.2s ease-in-out infinite alternate;
+		}
+		#streakChip.streak-drop {
+			animation: streakDrop 340ms cubic-bezier(.2,.8,.2,1);
+		}
+		@keyframes streakPop {
+			0% { transform: scale(1); }
+			35% { transform: scale(1.12); }
+			100% { transform: scale(1); }
+		}
+		@keyframes streakFire {
+			0% { box-shadow: 0 8px 16px rgba(103, 16, 34, 0.28); }
+			100% { box-shadow: 0 10px 24px rgba(185, 25, 53, 0.5); }
+		}
+		@keyframes streakDrop {
+			0% { transform: scale(1); }
+			45% { transform: scale(0.92); }
+			100% { transform: scale(1); }
+		}
+		.progress-wrap {
+			margin-top: 10px;
+		}
+		.progress-track {
+			height: 8px;
+			border-radius: 999px;
+			background: #eadde1;
+			overflow: hidden;
+		}
+		.progress-fill {
+			height: 100%;
+			width: 0%;
+			border-radius: 999px;
+			background: linear-gradient(90deg, #6a0f1e 0%, #8a1830 100%);
+			transition: width 240ms ease;
 		}
 		.card {
 			margin-top: 14px;
 			border: 1px solid var(--border);
-			border-radius: 12px;
-			padding: 16px;
+			border-radius: 14px;
+			padding: 18px;
 			background: #fff;
 			transition: transform 260ms cubic-bezier(.2,.8,.2,1), box-shadow 260ms cubic-bezier(.2,.8,.2,1), border-color 260ms ease;
+		}
+		.card.is-entering {
+			animation: cardEnter 360ms cubic-bezier(.2,.8,.2,1);
 		}
 		.card.is-correct {
 			border-color: #bde7ca;
@@ -95,33 +186,62 @@
 			75% { transform: translateX(-4px); }
 			100% { transform: translateX(0); }
 		}
+		@keyframes cardEnter {
+			0% { opacity: 0; transform: translateY(10px) scale(0.98); }
+			70% { opacity: 1; transform: translateY(-2px) scale(1.01); }
+			100% { opacity: 1; transform: translateY(0) scale(1); }
+		}
 		.prompt {
 			font-size: 13px;
 			color: var(--muted);
 		}
 		.stimulus {
 			margin-top: 8px;
-			font-size: 22px;
+			font-size: 24px;
 			font-weight: 800;
 			line-height: 1.35;
+			padding: 10px 12px;
+			border-radius: 10px;
+			background: #faf7f8;
+			border: 1px solid #eadde1;
 		}
 		.options {
 			margin-top: 14px;
 			display: grid;
 			gap: 8px;
-			grid-template-columns: 1fr;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		@media (max-width: 740px) {
+			.options { grid-template-columns: 1fr; }
 		}
 		.option {
 			border: 1px solid var(--border);
 			background: #fff;
 			color: var(--text);
-			border-radius: 10px;
-			padding: 11px 12px;
+			border-radius: 11px;
+			padding: 12px 13px;
 			font-size: 14px;
 			text-align: left;
 			cursor: pointer;
+			transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
 		}
-		.option:hover { border-color: #e69aa3; }
+		.option:hover {
+			border-color: #b06a78;
+			background: var(--option-hover);
+			transform: translateY(-1px);
+			box-shadow: 0 4px 10px rgba(62, 32, 39, 0.11);
+		}
+		.option:focus-visible {
+			outline: 2px solid var(--focus);
+			outline-offset: 2px;
+		}
+		.option-label {
+			display: inline-block;
+			min-width: 22px;
+			padding-right: 4px;
+			font-weight: 900;
+			color: #7a1022;
+		}
 		.option.is-correct { border-color: #7fce99; background: #effcf3; color: var(--ok); }
 		.option.is-wrong { border-color: #e79b9b; background: #fff2f2; color: var(--bad); }
 		.feedback {
@@ -144,27 +264,186 @@
 			font-size: 13px;
 			font-weight: 700;
 			cursor: pointer;
+			transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+		}
+		button:focus-visible {
+			outline: 2px solid var(--focus);
+			outline-offset: 2px;
+		}
+		button:disabled {
+			opacity: 0.6;
+			cursor: not-allowed;
+			transform: none !important;
+			box-shadow: none !important;
 		}
 		.btn-primary { background: var(--primary); color: #fff; }
-		.btn-primary:hover { background: var(--primary-strong); }
-		.btn-soft { background: #ffe9ec; color: #8f1f2d; }
+		.btn-primary:hover { background: var(--primary-strong); transform: translateY(-1px); box-shadow: 0 8px 16px rgba(52, 12, 21, 0.25); }
+		.btn-soft { background: var(--primary-soft); color: #651124; border: 1px solid #dcbec5; }
+		.btn-soft:hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(48, 18, 26, 0.16); }
 		.summary {
 			margin-top: 14px;
 			border: 1px solid var(--border);
 			border-radius: 12px;
-			background: #fff;
+			background: #fcfafb;
 			padding: 14px;
 			display: none;
+			position: relative;
+			overflow: hidden;
 		}
 		.summary h3 {
 			margin: 0 0 8px;
 			font-size: 18px;
 			font-weight: 800;
 		}
+		.summary-badge {
+			display: inline-block;
+			padding: 4px 10px;
+			border-radius: 999px;
+			background: #f2e8ea;
+			color: #651124;
+			font-size: 12px;
+			font-weight: 700;
+		}
+		.summary-score {
+			margin-top: 10px;
+			font-size: 34px;
+			font-weight: 900;
+			line-height: 1;
+			color: var(--primary);
+		}
+		.summary-comment {
+			margin-top: 8px;
+			font-size: 14px;
+			font-weight: 700;
+			color: #5f3b43;
+		}
+		.summary-metrics {
+			margin-top: 10px;
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			gap: 8px;
+		}
+		.summary-metric {
+			border: 1px solid #e3d6da;
+			border-radius: 10px;
+			background: #fff;
+			padding: 8px 10px;
+		}
+		.summary-metric-label {
+			font-size: 11px;
+			color: #7b5961;
+		}
+		.summary-metric-value {
+			margin-top: 3px;
+			font-size: 16px;
+			font-weight: 800;
+			color: #4b1e28;
+		}
+		#summaryCelebrate {
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+		}
+		.summary-spark {
+			position: absolute;
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			opacity: 0;
+			animation: burst 760ms ease-out forwards;
+		}
 		#celebrate {
 			position: absolute;
 			inset: 0;
 			pointer-events: none;
+		}
+		#answerFlash {
+			position: fixed;
+			top: 22vh;
+			left: 50%;
+			transform: translateX(-50%) translateY(-10px);
+			z-index: 10000;
+			opacity: 0;
+			pointer-events: none;
+			padding: 0 16px;
+		}
+		.answer-flash-card {
+			min-width: min(90vw, 520px);
+			max-width: min(92vw, 760px);
+			border-radius: 14px;
+			border: 1px solid #cdb5bc;
+			background: #fff;
+			color: #261419;
+			font-size: 17px;
+			font-weight: 800;
+			letter-spacing: 0.2px;
+			text-align: center;
+			box-shadow: 0 12px 24px rgba(21, 10, 13, 0.24);
+			padding: 14px 18px;
+		}
+		#answerFlash.show {
+			animation: answerFlashInOut 1600ms cubic-bezier(.2,.8,.2,1) forwards;
+		}
+		#answerFlash .status {
+			font-size: 12px;
+			font-weight: 800;
+			color: #6b4a52;
+			margin-bottom: 8px;
+			text-transform: uppercase;
+			letter-spacing: 0.8px;
+		}
+		#answerFlash .word {
+			color: #7a1022;
+			font-weight: 900;
+			padding-right: 8px;
+		}
+		#answerFlash .meaning {
+			color: #3a2328;
+			font-weight: 700;
+		}
+		@keyframes answerFlashInOut {
+			0% { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.98); }
+			15% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+			78% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+			100% { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.99); }
+		}
+		#megaOverlay {
+			position: fixed;
+			inset: 0;
+			pointer-events: none;
+			z-index: 9999;
+			display: none;
+			align-items: center;
+			justify-content: center;
+		}
+		#megaOverlay.active {
+			display: flex;
+			animation: megaFlash 900ms ease-out forwards;
+		}
+		#megaOverlay::before {
+			content: "";
+			position: absolute;
+			inset: 0;
+			background:
+				radial-gradient(circle at center, rgba(255, 233, 122, 0.42) 0%, rgba(255, 233, 122, 0.12) 30%, transparent 68%),
+				linear-gradient(180deg, rgba(255, 84, 120, 0.15) 0%, rgba(255, 84, 120, 0.02) 100%);
+		}
+		#megaText {
+			position: relative;
+			font-size: clamp(42px, 8vw, 110px);
+			font-weight: 900;
+			letter-spacing: 1px;
+			color: #fff6d0;
+			text-shadow:
+				0 0 20px rgba(255, 170, 60, 0.9),
+				0 6px 18px rgba(0, 0, 0, 0.35);
+			transform-origin: center;
+			animation: megaTextBoom 900ms cubic-bezier(.2,.8,.2,1) forwards;
+			text-align: center;
+			padding: 0 16px;
+		}
+		body.mega-shake .wrap {
+			animation: megaShake 420ms cubic-bezier(.2,.8,.2,1);
 		}
 		.spark {
 			position: absolute;
@@ -177,6 +456,32 @@
 		@keyframes burst {
 			0% { transform: translate(0,0) scale(0.8); opacity: 0.9; }
 			100% { transform: translate(var(--tx), var(--ty)) scale(0.2); opacity: 0; }
+		}
+		@keyframes megaFlash {
+			0% { opacity: 0; }
+			18% { opacity: 1; }
+			100% { opacity: 0; }
+		}
+		@keyframes megaTextBoom {
+			0% { opacity: 0; transform: scale(0.35) rotate(-4deg); }
+			25% { opacity: 1; transform: scale(1.18) rotate(1.8deg); }
+			45% { transform: scale(0.96) rotate(-0.8deg); }
+			100% { opacity: 0; transform: scale(1.1) rotate(0deg); }
+		}
+		@keyframes megaShake {
+			0% { transform: translateX(0); }
+			15% { transform: translateX(-12px); }
+			30% { transform: translateX(10px); }
+			45% { transform: translateX(-8px); }
+			60% { transform: translateX(8px); }
+			75% { transform: translateX(-4px); }
+			100% { transform: translateX(0); }
+		}
+		@media (prefers-reduced-motion: reduce) {
+			* {
+				animation: none !important;
+				transition: none !important;
+			}
 		}
 	</style>
 </head>
@@ -194,27 +499,58 @@
 		<div class="stats">
 			<span class="chip" id="progressChip">0 / 0</span>
 			<span class="chip" id="scoreChip">正確 0</span>
-			<span class="chip" id="modeChip">模式 -</span>
+			<span class="chip" id="streakChip">🔥 x0</span>
+			<span class="chip" id="challengeChip">⚔️ Challenge</span>
+		</div>
+		<div class="progress-wrap">
+			<div class="progress-track">
+				<div class="progress-fill" id="progressBar"></div>
+			</div>
 		</div>
 
 		<div class="card" id="card">
 			<div class="prompt" id="prompt"></div>
 			<div class="stimulus" id="stimulus"></div>
+			<div class="feedback" id="clozeTranslateText" style="display:none;"></div>
 			<div class="options" id="options"></div>
 			<div class="feedback" id="feedback"></div>
 			<div class="actions">
+				<button class="btn-soft" id="clozeTranslateBtn" style="display:none;">顯示翻譯</button>
+				<button class="btn-soft" id="markLearnedBtn" style="display:none;">標記已學會</button>
 				<button class="btn-primary" id="nextBtn" style="display:none;">下一題</button>
 			</div>
 		</div>
 
 		<div class="summary" id="summary">
 			<h3 id="summaryTitle">本輪小結</h3>
+			<div class="summary-badge" id="summaryBadge">Round Complete</div>
+			<div class="summary-score" id="summaryBigScore">0 / 100</div>
+			<div class="summary-comment" id="summaryComment"></div>
 			<div id="summaryText"></div>
+			<div class="summary-metrics">
+				<div class="summary-metric">
+					<div class="summary-metric-label" id="summaryAccuracyLabel">Accuracy</div>
+					<div class="summary-metric-value" id="summaryAccuracy">0%</div>
+				</div>
+				<div class="summary-metric">
+					<div class="summary-metric-label" id="summaryCorrectLabel">Correct</div>
+					<div class="summary-metric-value" id="summaryCorrect">0/0</div>
+				</div>
+				<div class="summary-metric">
+					<div class="summary-metric-label" id="summaryBestStreakLabel">Best Streak</div>
+					<div class="summary-metric-value" id="summaryBestStreak">x0</div>
+				</div>
+			</div>
+			<div id="summaryCelebrate"></div>
 			<div class="actions">
 				<button class="btn-primary" id="nextRoundBtn">下一輪</button>
 			</div>
 		</div>
 	</div>
+	<div id="megaOverlay">
+		<div id="megaText">10 COMBO!</div>
+	</div>
+	<div id="answerFlash"></div>
 
 	<script src="storage.js"></script>
 	<script src="ui-i18n.js"></script>

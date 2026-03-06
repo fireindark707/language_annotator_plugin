@@ -3,9 +3,13 @@ let allWords = [];
 let deck = [];
 let qIndex = 0;
 let score = 0;
+let correctCount = 0;
+let streak = 0;
+let bestStreak = 0;
+let overtimeActive = false;
 let answered = false;
 
-const MAX_QUESTIONS = 15;
+const MAX_QUESTIONS = 10;
 const CHOICE_COUNT = 4;
 
 const titleEl = document.getElementById("title");
@@ -13,21 +17,52 @@ const subtitleEl = document.getElementById("subtitle");
 const closeBtn = document.getElementById("closeBtn");
 const progressChip = document.getElementById("progressChip");
 const scoreChip = document.getElementById("scoreChip");
-const modeChip = document.getElementById("modeChip");
+const streakChip = document.getElementById("streakChip");
+const challengeChip = document.getElementById("challengeChip");
+const progressBar = document.getElementById("progressBar");
 const promptEl = document.getElementById("prompt");
 const stimulusEl = document.getElementById("stimulus");
 const optionsEl = document.getElementById("options");
 const feedbackEl = document.getElementById("feedback");
+const clozeTranslateBtn = document.getElementById("clozeTranslateBtn");
+const clozeTranslateTextEl = document.getElementById("clozeTranslateText");
 const nextBtn = document.getElementById("nextBtn");
+const markLearnedBtn = document.getElementById("markLearnedBtn");
 const cardEl = document.getElementById("card");
 const summaryEl = document.getElementById("summary");
 const summaryTitleEl = document.getElementById("summaryTitle");
+const summaryBadgeEl = document.getElementById("summaryBadge");
+const summaryBigScoreEl = document.getElementById("summaryBigScore");
+const summaryCommentEl = document.getElementById("summaryComment");
+const summaryAccuracyLabelEl = document.getElementById("summaryAccuracyLabel");
+const summaryCorrectLabelEl = document.getElementById("summaryCorrectLabel");
+const summaryBestStreakLabelEl = document.getElementById("summaryBestStreakLabel");
+const summaryAccuracyEl = document.getElementById("summaryAccuracy");
+const summaryCorrectEl = document.getElementById("summaryCorrect");
+const summaryBestStreakEl = document.getElementById("summaryBestStreak");
 const summaryTextEl = document.getElementById("summaryText");
+const summaryCelebrateEl = document.getElementById("summaryCelebrate");
+const megaOverlayEl = document.getElementById("megaOverlay");
+const megaTextEl = document.getElementById("megaText");
+const answerFlashEl = document.getElementById("answerFlash");
 const nextRoundBtn = document.getElementById("nextRoundBtn");
 const celebrateEl = document.getElementById("celebrate");
+let answerFlashTimer = null;
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
+}
+
+function tf(key, vars) {
+	let text = t(key);
+	Object.keys(vars || {}).forEach((k) => {
+		text = text.replaceAll(`{${k}}`, String(vars[k]));
+	});
+	return text;
+}
+
+function isZhUi() {
+	return (uiLang || "").toLowerCase().startsWith("zh");
 }
 
 function shuffle(arr) {
@@ -44,10 +79,157 @@ function chooseDistractors(base, field, answer, count) {
 	return pool.slice(0, count).map((x) => x[field]);
 }
 
-function updateChips(modeText) {
-	progressChip.textContent = `${Math.min(qIndex + 1, deck.length)} / ${deck.length}`;
-	scoreChip.textContent = `${t("practice_score")} ${score}`;
-	modeChip.textContent = modeText;
+function getMeaningByWord(word) {
+	const item = allWords.find((x) => x.word === word);
+	return item && item.meaning ? item.meaning : "";
+}
+
+function showAnswerFlash(word, meaning, isCorrect) {
+	if (!answerFlashEl) return;
+	const w = (word || "").trim();
+	const m = (meaning || "").trim();
+	const safeWord = w || "-";
+	const safeMeaning = m || t("practice_no_meaning");
+	const status = isCorrect ? t("practice_answer_status_correct") : t("practice_answer_status_answer");
+	answerFlashEl.innerHTML = `<div class="answer-flash-card"><div class="status">${status}</div><span class="word">${safeWord}</span><span class="meaning">${safeMeaning}</span></div>`;
+	answerFlashEl.classList.remove("show");
+	void answerFlashEl.offsetWidth;
+	answerFlashEl.classList.add("show");
+	if (answerFlashTimer) clearTimeout(answerFlashTimer);
+	answerFlashTimer = setTimeout(() => {
+		answerFlashEl.classList.remove("show");
+	}, 1650);
+}
+
+function getQuestionPool() {
+	const active = allWords.filter((x) => x && x.word && x.meaning && !x.learned);
+	if (active.length >= CHOICE_COUNT) return active;
+	return allWords.filter((x) => x && x.word && x.meaning);
+}
+
+function pickQuestionItem() {
+	const pool = getQuestionPool();
+	if (!pool.length) return null;
+	return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function escapeRegExp(text) {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeExampleText(example) {
+	if (!example) return "";
+	if (typeof example === "string") return example.trim();
+	if (typeof example === "object" && typeof example.text === "string") return example.text.trim();
+	return "";
+}
+
+function buildClozeStimulus(word, examples) {
+	const cleanedWord = (word || "").trim();
+	if (!cleanedWord || !Array.isArray(examples) || examples.length === 0) return "";
+	const candidates = shuffle(examples.map(normalizeExampleText).filter((x) => x.length > cleanedWord.length + 2));
+	if (!candidates.length) return "";
+	const pattern = new RegExp(`\\b${escapeRegExp(cleanedWord)}\\b`, "i");
+	for (let i = 0; i < candidates.length; i += 1) {
+		const sentence = candidates[i];
+		if (!pattern.test(sentence)) continue;
+		return sentence.replace(pattern, "_____");
+	}
+	return "";
+}
+
+function getModePrompt(mode) {
+	if (mode === "cloze") return t("practice_mode_prompt_cloze");
+	if (mode === "word2meaning") return t("practice_mode_prompt_word2meaning");
+	return t("practice_mode_prompt_meaning2word");
+}
+
+function getModeBadge(mode) {
+	if (mode === "cloze") return t("practice_badge_cloze");
+	if (mode === "word2meaning") return t("practice_badge_comprehension");
+	return t("practice_badge_recall");
+}
+
+function getSummaryTone(pct) {
+	if (pct >= 90) return { badge: t("practice_tone_badge_90"), comment: t("practice_tone_comment_90") };
+	if (pct >= 75) return { badge: t("practice_tone_badge_75"), comment: t("practice_tone_comment_75") };
+	if (pct >= 55) return { badge: t("practice_tone_badge_55"), comment: t("practice_tone_comment_55") };
+	return { badge: t("practice_tone_badge_low"), comment: t("practice_tone_comment_low") };
+}
+
+function burstAtElement(el, count) {
+	if (!el || !celebrateEl) return;
+	const elRect = el.getBoundingClientRect();
+	const layerRect = celebrateEl.getBoundingClientRect();
+	const cx = elRect.left + elRect.width / 2 - layerRect.left;
+	const cy = elRect.top + elRect.height / 2 - layerRect.top;
+	for (let i = 0; i < count; i += 1) {
+		const dot = document.createElement("div");
+		dot.className = "spark";
+		dot.style.left = `${cx}px`;
+		dot.style.top = `${cy}px`;
+		const angle = Math.random() * Math.PI * 2;
+		const r = 36 + Math.random() * 74;
+		dot.style.setProperty("--tx", `${Math.cos(angle) * r}px`);
+		dot.style.setProperty("--ty", `${Math.sin(angle) * r}px`);
+		dot.style.background = ["#ffdd7a", "#ffb347", "#d3495f", "#f06b83"][i % 4];
+		celebrateEl.appendChild(dot);
+	}
+	setTimeout(() => {
+		celebrateEl.innerHTML = "";
+	}, 820);
+}
+
+function animateStreakFx(isCorrect) {
+	streakChip.classList.remove("streak-pop", "streak-drop");
+	if (isCorrect) {
+		void streakChip.offsetWidth;
+		streakChip.classList.add("streak-pop");
+		if (streak >= 3) {
+			streakChip.classList.add("streak-fire");
+		}
+		if (streak === 3 || streak === 5 || (streak > 5 && streak % 5 === 0)) {
+			burstAtElement(streakChip, 18);
+		}
+		if (streak >= 10 && streak % 10 === 0) {
+			megaStreakCelebration(streak);
+		}
+		return;
+	}
+	streakChip.classList.remove("streak-fire");
+	void streakChip.offsetWidth;
+	streakChip.classList.add("streak-drop");
+}
+
+function megaStreakCelebration(combo) {
+	if (!megaOverlayEl || !megaTextEl) return;
+	const label = tf("practice_mega_combo", { combo: combo });
+	megaTextEl.textContent = label;
+	megaOverlayEl.classList.remove("active");
+	void megaOverlayEl.offsetWidth;
+	megaOverlayEl.classList.add("active");
+	document.body.classList.add("mega-shake");
+	burstAtElement(streakChip, 60);
+	setTimeout(() => burstAtElement(streakChip, 40), 140);
+	setTimeout(() => burstAtElement(streakChip, 34), 280);
+	setTimeout(() => {
+		megaOverlayEl.classList.remove("active");
+		document.body.classList.remove("mega-shake");
+	}, 980);
+}
+
+function updateChips(mode) {
+	const current = qIndex + 1;
+	const totalLabel = overtimeActive ? `${MAX_QUESTIONS}+` : MAX_QUESTIONS;
+	progressChip.textContent = tf("practice_progress", { current: current, total: totalLabel });
+	scoreChip.textContent = tf("practice_score_points", { score: score });
+	streakChip.textContent = tf("practice_streak", { streak: streak });
+	challengeChip.textContent = overtimeActive
+		? t("practice_badge_overtime")
+		: getModeBadge(mode);
+	const done = Math.min(qIndex + (answered ? 1 : 0), MAX_QUESTIONS);
+	const pct = overtimeActive ? 100 : (MAX_QUESTIONS ? (done / MAX_QUESTIONS) * 100 : 0);
+	progressBar.style.width = `${pct}%`;
 }
 
 function playTone(ok) {
@@ -69,6 +251,43 @@ function playTone(ok) {
 	} catch (_) {}
 }
 
+function playWordPronunciation(word) {
+	if (!word) return;
+	try {
+		const utterance = new SpeechSynthesisUtterance(word);
+		WordStorage.getSourceLang().then((sourceLang) => {
+			utterance.lang = sourceLang || "en";
+			const voices = window.speechSynthesis.getVoices();
+			for (let i = 0; i < voices.length; i += 1) {
+				if (voices[i].lang === utterance.lang) {
+					utterance.voice = voices[i];
+					break;
+				}
+			}
+			window.speechSynthesis.cancel();
+			window.speechSynthesis.speak(utterance);
+		}).catch(() => {
+			window.speechSynthesis.cancel();
+			window.speechSynthesis.speak(utterance);
+		});
+	} catch (_) {}
+}
+
+function translateText(text) {
+	return WordStorage.getSourceLang().then((sourceLang) => new Promise((resolve) => {
+		chrome.runtime.sendMessage(
+			{ action: "translate", text: text, sourceLang: sourceLang || "auto" },
+			(response) => {
+				if (chrome.runtime.lastError || !response || !response.translation) {
+					resolve("");
+					return;
+				}
+				resolve(response.translation);
+			}
+		);
+	})).catch(() => "");
+}
+
 function burst() {
 	celebrateEl.innerHTML = "";
 	for (let i = 0; i < 16; i += 1) {
@@ -80,7 +299,7 @@ function burst() {
 		const r = 70 + Math.random() * 120;
 		dot.style.setProperty("--tx", `${Math.cos(angle) * r}px`);
 		dot.style.setProperty("--ty", `${Math.sin(angle) * r}px`);
-		dot.style.background = ["#d91f26", "#ffd166", "#06d6a0", "#118ab2"][i % 4];
+		dot.style.background = ["#7a1022", "#a81631", "#c12a46", "#d3495f"][i % 4];
 		celebrateEl.appendChild(dot);
 	}
 	setTimeout(() => {
@@ -88,14 +307,48 @@ function burst() {
 	}, 740);
 }
 
+function burstSummary() {
+	summaryCelebrateEl.innerHTML = "";
+	for (let i = 0; i < 24; i += 1) {
+		const dot = document.createElement("div");
+		dot.className = "summary-spark";
+		dot.style.left = `${20 + Math.random() * 60}%`;
+		dot.style.top = `${15 + Math.random() * 55}%`;
+		const angle = Math.random() * Math.PI * 2;
+		const r = 50 + Math.random() * 110;
+		dot.style.setProperty("--tx", `${Math.cos(angle) * r}px`);
+		dot.style.setProperty("--ty", `${Math.sin(angle) * r}px`);
+		dot.style.background = ["#7a1022", "#a81631", "#c12a46", "#d3495f"][i % 4];
+		summaryCelebrateEl.appendChild(dot);
+	}
+	setTimeout(() => {
+		summaryCelebrateEl.innerHTML = "";
+	}, 820);
+}
+
 function buildQuestion(item) {
-	const askWord = Math.random() < 0.5;
-	if (askWord) {
+	const clozeStimulus = buildClozeStimulus(item.word, item.examples);
+	const modes = clozeStimulus ? ["word2meaning", "meaning2word", "cloze"] : ["word2meaning", "meaning2word"];
+	const pickedMode = modes[Math.floor(Math.random() * modes.length)];
+
+	if (pickedMode === "cloze") {
+		const answer = item.word;
+		const wrong = chooseDistractors(allWords, "word", answer, CHOICE_COUNT - 1);
+		return {
+			mode: "cloze",
+			word: item.word,
+			stimulus: clozeStimulus,
+			answer,
+			choices: shuffle([answer].concat(wrong)),
+		};
+	}
+
+	if (pickedMode === "word2meaning") {
 		const answer = item.meaning;
 		const wrong = chooseDistractors(allWords, "meaning", answer, CHOICE_COUNT - 1);
 		return {
-			prompt: t("practice_prompt_word_to_meaning"),
 			mode: "word2meaning",
+			word: item.word,
 			stimulus: item.word,
 			answer,
 			choices: shuffle([answer].concat(wrong)),
@@ -104,8 +357,8 @@ function buildQuestion(item) {
 	const answer = item.word;
 	const wrong = chooseDistractors(allWords, "word", answer, CHOICE_COUNT - 1);
 	return {
-		prompt: t("practice_prompt_meaning_to_word"),
 		mode: "meaning2word",
+		word: item.word,
 		stimulus: item.meaning,
 		answer,
 		choices: shuffle([answer].concat(wrong)),
@@ -113,32 +366,62 @@ function buildQuestion(item) {
 }
 
 function renderQuestion() {
+	if (qIndex >= deck.length) {
+		if (overtimeActive && streak > 0) {
+			const nextItem = pickQuestionItem();
+			if (nextItem) {
+				deck.push(buildQuestion(nextItem));
+			} else {
+				return finishRound();
+			}
+		} else {
+			return finishRound();
+		}
+	}
 	const q = deck[qIndex];
 	if (!q) return finishRound();
 	answered = false;
 	cardEl.classList.remove("is-correct", "is-wrong");
+	cardEl.classList.remove("is-entering");
+	void cardEl.offsetWidth;
+	cardEl.classList.add("is-entering");
 	feedbackEl.textContent = "";
 	feedbackEl.className = "feedback";
 	nextBtn.style.display = "none";
-	promptEl.textContent = q.prompt;
+	clozeTranslateBtn.style.display = "none";
+	clozeTranslateBtn.disabled = false;
+	clozeTranslateTextEl.style.display = "none";
+	clozeTranslateTextEl.textContent = "";
+	markLearnedBtn.style.display = "none";
+	markLearnedBtn.disabled = false;
+	markLearnedBtn.textContent = t("mark");
+	promptEl.textContent = getModePrompt(q.mode);
 	stimulusEl.textContent = q.stimulus;
 	optionsEl.innerHTML = "";
-	updateChips(
-		q.mode === "word2meaning"
-			? t("practice_prompt_word_to_meaning")
-			: t("practice_prompt_meaning_to_word")
-	);
+	if (q.mode === "cloze") {
+		clozeTranslateBtn.style.display = "";
+	}
+	updateChips(q.mode);
 
-	q.choices.forEach((choice) => {
+	q.choices.forEach((choice, idx) => {
 		const btn = document.createElement("button");
 		btn.className = "option";
-		btn.textContent = choice;
+		btn.dataset.idx = String(idx);
+		const labelSpan = document.createElement("span");
+		labelSpan.className = "option-label";
+		labelSpan.textContent = `${String.fromCharCode(65 + idx)}.`;
+		btn.appendChild(labelSpan);
+		btn.appendChild(document.createTextNode(` ${choice}`));
 		btn.addEventListener("click", () => {
 			if (answered) return;
 			answered = true;
 			const isOk = choice === q.answer;
 			if (isOk) {
-				score += 1;
+				score += 10;
+				correctCount += 1;
+				streak += 1;
+				bestStreak = Math.max(bestStreak, streak);
+				animateStreakFx(true);
 				cardEl.classList.add("is-correct");
 				feedbackEl.classList.add("ok");
 				feedbackEl.textContent = t("practice_correct");
@@ -146,23 +429,52 @@ function renderQuestion() {
 				playTone(true);
 				burst();
 			} else {
+				streak = 0;
+				animateStreakFx(false);
 				cardEl.classList.add("is-wrong");
 				feedbackEl.classList.add("bad");
 				feedbackEl.textContent = `${t("practice_wrong_prefix")} ${q.answer}`;
 				btn.classList.add("is-wrong");
 				playTone(false);
-				const correctBtn = Array.from(optionsEl.children).find((x) => x.textContent === q.answer);
+				const correctBtn = Array.from(optionsEl.children).find((x) => x.textContent.replace(/^[A-D]\.\s*/, "") === q.answer);
 				if (correctBtn) correctBtn.classList.add("is-correct");
 			}
+			showAnswerFlash(q.word, getMeaningByWord(q.word), isOk);
+			setTimeout(() => {
+				playWordPronunciation(q.word);
+			}, 320);
 			Array.from(optionsEl.children).forEach((x) => { x.disabled = true; });
-			updateChips(
-				q.mode === "word2meaning"
-					? t("practice_prompt_word_to_meaning")
-					: t("practice_prompt_meaning_to_word")
-			);
+			if (!overtimeActive && (qIndex + 1) >= MAX_QUESTIONS && streak >= 5) {
+				overtimeActive = true;
+			}
+			updateChips(q.mode);
+			if (isOk) {
+				markLearnedBtn.style.display = "";
+			}
 			nextBtn.style.display = "";
 		});
 		optionsEl.appendChild(btn);
+	});
+}
+
+function markCurrentQuestionLearned() {
+	const q = deck[qIndex];
+	if (!q || !q.word) return;
+	markLearnedBtn.disabled = true;
+	WordStorage.getWords().then((words) => {
+		if (!words[q.word]) return false;
+		words[q.word].learned = true;
+		return WordStorage.saveWords(words).then(() => true);
+	}).then((saved) => {
+		if (!saved) {
+			markLearnedBtn.disabled = false;
+			return;
+		}
+		const idx = allWords.findIndex((item) => item.word === q.word);
+		if (idx !== -1) allWords[idx].learned = true;
+		markLearnedBtn.textContent = t("saved");
+	}).catch(() => {
+		markLearnedBtn.disabled = false;
 	});
 }
 
@@ -170,15 +482,29 @@ function finishRound() {
 	cardEl.style.display = "none";
 	summaryEl.style.display = "block";
 	summaryTitleEl.textContent = t("practice_summary_title");
-	const pct = deck.length ? Math.round((score / deck.length) * 100) : 0;
-	summaryTextEl.textContent = `${t("practice_summary_score")} ${score}/${deck.length} (${pct}%)`;
+	const pct = deck.length ? Math.round((correctCount / deck.length) * 100) : 0;
+	const tone = getSummaryTone(pct);
+	summaryBadgeEl.textContent = tone.badge;
+	summaryBigScoreEl.textContent = `${score} / ${deck.length * 10}`;
+	summaryCommentEl.textContent = tone.comment;
+	summaryTextEl.textContent = `${t("practice_summary_score")} ${score}/${deck.length * 10} (${pct}%)`;
+	summaryAccuracyEl.textContent = `${pct}%`;
+	summaryCorrectEl.textContent = `${correctCount}/${deck.length}`;
+	summaryBestStreakEl.textContent = `x${bestStreak}`;
+	progressBar.style.width = "100%";
+	overtimeActive = false;
+	burstSummary();
 }
 
 function startRound() {
-	const picked = shuffle(allWords).slice(0, Math.min(MAX_QUESTIONS, allWords.length));
+	const picked = shuffle(getQuestionPool()).slice(0, Math.min(MAX_QUESTIONS, allWords.length));
 	deck = picked.map((item) => buildQuestion(item));
 	qIndex = 0;
 	score = 0;
+	correctCount = 0;
+	streak = 0;
+	bestStreak = 0;
+	overtimeActive = false;
 	cardEl.style.display = "";
 	summaryEl.style.display = "none";
 	renderQuestion();
@@ -194,29 +520,39 @@ function init() {
 			.map(([word, data]) => ({
 				word,
 				meaning: (data && data.meaning) || "",
+				examples: Array.isArray(data && data.examples) ? data.examples : [],
 				learned: !!(data && data.learned),
 			}))
 			.filter((x) => x.word && x.meaning && !x.learned);
 
 		allWords = words;
 		titleEl.textContent = t("practice_mode");
-		subtitleEl.textContent = t("practice_subtitle");
+		subtitleEl.textContent = tf("practice_subtitle_challenge", { questions: MAX_QUESTIONS, points: 10 });
 		closeBtn.textContent = t("close_tab");
 		nextBtn.textContent = t("practice_next");
+		markLearnedBtn.textContent = t("mark");
+		clozeTranslateBtn.textContent = t("practice_show_translation");
 		nextRoundBtn.textContent = t("practice_next_round");
 		summaryTitleEl.textContent = t("practice_summary_title");
+		summaryBadgeEl.textContent = t("practice_round_complete");
+		summaryAccuracyLabelEl.textContent = t("practice_metric_accuracy");
+		summaryCorrectLabelEl.textContent = t("practice_metric_correct");
+		summaryBestStreakLabelEl.textContent = t("practice_metric_best_streak");
 
-		if (allWords.length < CHOICE_COUNT) {
-			promptEl.textContent = "";
-			stimulusEl.textContent = "";
-			optionsEl.innerHTML = "";
-			feedbackEl.className = "feedback bad";
-			feedbackEl.textContent = t("practice_need_words");
-			progressChip.textContent = "0 / 0";
-			scoreChip.textContent = `${t("practice_score")} 0`;
-			modeChip.textContent = "-";
-			nextBtn.style.display = "none";
-			return;
+			if (allWords.length < CHOICE_COUNT) {
+				promptEl.textContent = "";
+				stimulusEl.textContent = "";
+				optionsEl.innerHTML = "";
+				feedbackEl.className = "feedback bad";
+				feedbackEl.textContent = t("practice_need_words");
+				progressChip.textContent = tf("practice_progress", { current: 0, total: 0 });
+				scoreChip.textContent = tf("practice_score_points", { score: 0 });
+				streakChip.textContent = tf("practice_streak", { streak: 0 });
+				challengeChip.textContent = t("practice_badge_overtime");
+				progressBar.style.width = "0%";
+				nextBtn.style.display = "none";
+				markLearnedBtn.style.display = "none";
+				return;
 		}
 		startRound();
 	}).catch(() => {
@@ -229,8 +565,45 @@ nextBtn.addEventListener("click", () => {
 	qIndex += 1;
 	renderQuestion();
 });
+clozeTranslateBtn.addEventListener("click", () => {
+	const q = deck[qIndex];
+	if (!q || q.mode !== "cloze" || !q.stimulus) return;
+	clozeTranslateBtn.style.display = "none";
+	clozeTranslateTextEl.style.display = "";
+	clozeTranslateTextEl.className = "feedback";
+	clozeTranslateTextEl.textContent = t("loading_translation");
+	translateText(q.stimulus).then((translated) => {
+		clozeTranslateTextEl.className = translated ? "feedback ok" : "feedback bad";
+		clozeTranslateTextEl.textContent = translated || t("dict_search_failed");
+	}).catch(() => {
+		clozeTranslateTextEl.className = "feedback bad";
+		clozeTranslateTextEl.textContent = t("dict_search_failed");
+	});
+});
+markLearnedBtn.addEventListener("click", markCurrentQuestionLearned);
 nextRoundBtn.addEventListener("click", () => {
 	startRound();
+});
+document.addEventListener("keydown", (event) => {
+	if (summaryEl.style.display !== "none") {
+		if (event.key === "Enter") {
+			startRound();
+		}
+		return;
+	}
+	if (nextBtn.style.display !== "none" && event.key === "Enter") {
+		qIndex += 1;
+		renderQuestion();
+		return;
+	}
+	if (answered) return;
+	const raw = (event.key || "").toLowerCase();
+	const indexByNumber = ["1", "2", "3", "4"].indexOf(raw);
+	const indexByAlpha = ["a", "b", "c", "d"].indexOf(raw);
+	const idx = indexByNumber !== -1 ? indexByNumber : indexByAlpha;
+	if (idx === -1) return;
+	const target = optionsEl.querySelector(`.option[data-idx="${idx}"]`);
+	if (target) target.click();
 });
 closeBtn.addEventListener("click", () => window.close());
 
