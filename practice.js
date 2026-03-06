@@ -516,6 +516,9 @@ function init() {
 		WordStorage.getWords(),
 	]).then(([lang, wordsObj]) => {
 		uiLang = lang || "en";
+		document.documentElement.lang = UiI18n.langAttr(uiLang);
+		document.documentElement.dir = UiI18n.dir(uiLang);
+		document.title = t("practice_mode");
 		const words = Object.entries(wordsObj || {})
 			.map(([word, data]) => ({
 				word,
@@ -539,23 +542,27 @@ function init() {
 		summaryCorrectLabelEl.textContent = t("practice_metric_correct");
 		summaryBestStreakLabelEl.textContent = t("practice_metric_best_streak");
 
-			if (allWords.length < CHOICE_COUNT) {
-				promptEl.textContent = "";
-				stimulusEl.textContent = "";
-				optionsEl.innerHTML = "";
-				feedbackEl.className = "feedback bad";
-				feedbackEl.textContent = t("practice_need_words");
-				progressChip.textContent = tf("practice_progress", { current: 0, total: 0 });
-				scoreChip.textContent = tf("practice_score_points", { score: 0 });
-				streakChip.textContent = tf("practice_streak", { streak: 0 });
-				challengeChip.textContent = t("practice_badge_overtime");
-				progressBar.style.width = "0%";
-				nextBtn.style.display = "none";
-				markLearnedBtn.style.display = "none";
-				return;
+		if (allWords.length < CHOICE_COUNT) {
+			promptEl.textContent = "";
+			stimulusEl.textContent = "";
+			optionsEl.innerHTML = "";
+			feedbackEl.className = "feedback bad";
+			feedbackEl.textContent = t("practice_need_words");
+			progressChip.textContent = tf("practice_progress", { current: 0, total: 0 });
+			scoreChip.textContent = tf("practice_score_points", { score: 0 });
+			streakChip.textContent = tf("practice_streak", { streak: 0 });
+			challengeChip.textContent = t("practice_badge_overtime");
+			progressBar.style.width = "0%";
+			nextBtn.style.display = "none";
+			markLearnedBtn.style.display = "none";
+			return;
 		}
+
 		startRound();
 	}).catch(() => {
+		document.documentElement.lang = UiI18n.langAttr(uiLang);
+		document.documentElement.dir = UiI18n.dir(uiLang);
+		document.title = t("practice_mode");
 		feedbackEl.className = "feedback bad";
 		feedbackEl.textContent = t("practice_load_failed");
 	});

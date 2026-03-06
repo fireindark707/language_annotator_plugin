@@ -28,7 +28,42 @@ function getPageCount(wordData) {
 	return Math.max(count, derived);
 }
 
+function formatWordCount(pageCount, encounterCount) {
+	return `${pageCount}p · ${encounterCount}x`;
+}
+
+function formatWordCountTooltip(pageCount, encounterCount) {
+	return `${t("count_pages")}: ${pageCount} · ${t("count_encounters")}: ${encounterCount}`;
+}
+
+function retriggerEffect(element, className) {
+	if (!element) return;
+	element.classList.remove(className);
+	void element.offsetWidth;
+	element.classList.add(className);
+	window.setTimeout(() => {
+		element.classList.remove(className);
+	}, 700);
+}
+
+function toggleAnimatedPanel(panel, shouldOpen) {
+	if (!panel) return;
+	panel.classList.remove("fx-panel-open", "fx-panel-close");
+	if (shouldOpen) {
+		panel.style.display = "block";
+		void panel.offsetWidth;
+		panel.classList.add("fx-panel-open");
+		return;
+	}
+	panel.classList.add("fx-panel-close");
+	window.setTimeout(() => {
+		panel.style.display = "none";
+		panel.classList.remove("fx-panel-close");
+	}, 170);
+}
+
 const toggleViewBtn = document.getElementById("toggleViewBtn");
+const practiceBtn = document.getElementById("practiceBtn");
 const sortModeSelect = document.getElementById("sortMode");
 const wordsList = document.getElementById("wordsList");
 const dictWordsList = document.getElementById("dictWordsList");
@@ -59,6 +94,10 @@ document.addEventListener("DOMContentLoaded", function () {
 		showAllWords = !showAllWords;
 		toggleViewBtn.textContent = showAllWords ? t("show_unlearned") : t("show_all");
 		updateWordsList();
+	});
+
+	practiceBtn.addEventListener("click", function () {
+		chrome.tabs.create({ url: chrome.runtime.getURL("practice.html") });
 	});
 
 	sortModeSelect.addEventListener("change", function () {
@@ -117,16 +156,30 @@ function supportsDictionaryBySourceLang(sourceLang) {
 	return supported.has(base);
 }
 
-function renderDictionarySearchResults() {
-	const keyword = (searchKeyword || "").trim();
-	if (!keyword) {
+function updateSearchLayout(hasLocalResults, hasKeyword) {
+	if (!hasKeyword) {
+		localResultBlock.style.display = "block";
 		dictResultBlock.style.display = "none";
-		wordsList.style.maxHeight = "calc(100vh - 290px)";
 		return;
 	}
+
+	if (hasLocalResults) {
+		localResultBlock.style.display = "block";
+		dictResultBlock.style.display = "block";
+		return;
+	}
+
+	localResultBlock.style.display = "none";
 	dictResultBlock.style.display = "block";
-	wordsList.style.maxHeight = "34vh";
-	dictWordsList.style.maxHeight = "34vh";
+}
+
+function renderDictionarySearchResults(hasLocalResults) {
+	const keyword = (searchKeyword || "").trim();
+	if (!keyword) {
+		updateSearchLayout(hasLocalResults, false);
+		return;
+	}
+	updateSearchLayout(hasLocalResults, true);
 
 	const query = normalizeDictionaryQuery(keyword);
 	if (!query) {
@@ -517,10 +570,10 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 			});
 		});
 
-		const pinBtn = document.createElement("button");
-		pinBtn.className = "example-remove";
-		pinBtn.textContent = example.pinned ? "📌" : "📍";
-		pinBtn.title = example.pinned ? t("unpin_example") : t("pin_example");
+			const pinBtn = document.createElement("button");
+			pinBtn.className = "example-remove";
+			pinBtn.textContent = example.pinned ? "📌" : "📍";
+			pinBtn.title = example.pinned ? t("unpin_example") : t("pin_example");
 		pinBtn.addEventListener("click", function () {
 			updateExamplesForWord(word, (listItems) => {
 				const idx = findExampleIndexByIdentity(listItems, example);
@@ -544,11 +597,15 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 			});
 		});
 
-		item.appendChild(content);
-		item.appendChild(pinBtn);
-		item.appendChild(removeBtn);
-		li.appendChild(item);
-		list.appendChild(li);
+			const exampleActions = document.createElement("div");
+			exampleActions.className = "example-actions";
+			exampleActions.appendChild(pinBtn);
+			exampleActions.appendChild(removeBtn);
+
+			item.appendChild(content);
+			item.appendChild(exampleActions);
+			li.appendChild(item);
+			list.appendChild(li);
 
 		if (!example.translation) {
 			translation.textContent = "…";
@@ -581,14 +638,17 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 }
 
 function applyUiText() {
+	document.documentElement.lang = UiI18n.langAttr(uiLang);
+	document.documentElement.dir = UiI18n.dir(uiLang);
+	document.title = t("fullscreen");
 	document.getElementById("wordsTitle").textContent = t("fullscreen");
 	document.getElementById("wordsSubtitle").textContent = t("popup_subtitle");
 	document.getElementById("settingsLink").textContent = t("settings");
-	document.getElementById("searchLabel").textContent = t("quick_search");
 	document.getElementById("searchInput").placeholder = t("search_prompt");
 	document.getElementById("localResultTitle").textContent = t("local_saved_words");
 	document.getElementById("dictResultTitle").textContent = t("dictionary_search_results");
 	closeBtn.textContent = t("close_tab");
+	practiceBtn.textContent = t("practice_mode");
 	toggleViewBtn.textContent = showAllWords ? t("show_unlearned") : t("show_all");
 	autoLangHint.textContent = t("auto_hint");
 	sortModeSelect.options[0].textContent = t("sort_recent");
@@ -661,30 +721,47 @@ function updateWordsList() {
 		wordStats.textContent = `${t("words")}：${allWords.length} | ${t("unlearned")}：${unlearnedCount}`;
 
 		let renderedCount = 0;
-		allWords.forEach((word) => {
-			if (!showAllWords && words[word].learned) return;
-			if (!matchWordWithSearch(word, words[word], searchKeyword)) return;
-			renderedCount += 1;
-			const wordItem = document.createElement("div");
-			wordItem.className = "word-item";
+			allWords.forEach((word) => {
+				if (!showAllWords && words[word].learned) return;
+				if (!matchWordWithSearch(word, words[word], searchKeyword)) return;
+				renderedCount += 1;
+				const wordItem = document.createElement("div");
+				wordItem.className = "word-item";
 
-			const wordSpan = document.createElement("span");
-			wordSpan.className = `word${words[word].learned ? " learned" : ""}`;
-			wordSpan.textContent = `${word}: ${words[word].meaning}`;
-			const encounterCount = getEncounterCount(words[word]);
-			const pageCount = getPageCount(words[word]);
-			const countSpan = document.createElement("span");
-			countSpan.className = "word-count";
-			countSpan.textContent = `${pageCount}-${encounterCount}`;
-			wordSpan.appendChild(countSpan);
+				const wordHeader = document.createElement("div");
+				wordHeader.className = "word-header";
 
-			const actionWrap = document.createElement("div");
-			actionWrap.className = "word-actions";
+				const wordMain = document.createElement("div");
+				wordMain.className = "word-main";
+
+				const wordLine = document.createElement("div");
+				wordLine.className = "word-line";
+
+				const wordSpan = document.createElement("span");
+				wordSpan.className = `word${words[word].learned ? " learned" : ""}`;
+				wordSpan.textContent = word;
+				const encounterCount = getEncounterCount(words[word]);
+				const pageCount = getPageCount(words[word]);
+				const countSpan = document.createElement("span");
+				countSpan.className = "word-count";
+				const countTooltip = formatWordCountTooltip(pageCount, encounterCount);
+				countSpan.textContent = formatWordCount(pageCount, encounterCount);
+				countSpan.title = countTooltip;
+				countSpan.setAttribute("aria-label", countTooltip);
+
+				const meaningSpan = document.createElement("div");
+				meaningSpan.className = "word-meaning";
+				meaningSpan.textContent = words[word].meaning || "";
+
+				const actionWrap = document.createElement("div");
+				actionWrap.className = "word-actions";
 
 			const audioButton = document.createElement("button");
 			audioButton.className = "action-audio";
 			audioButton.textContent = `🔊 ${t("pronounce")}`;
 			audioButton.addEventListener("click", function () {
+				retriggerEffect(audioButton, "fx-audio");
+				retriggerEffect(wordItem, "fx-row-audio");
 				const utterance = new SpeechSynthesisUtterance(word);
 				WordStorage.getSourceLang().then((sourceLang) => {
 					utterance.lang = sourceLang;
@@ -696,6 +773,8 @@ function updateWordsList() {
 			markButton.className = words[word].learned ? "action-unlearn" : "action-learn";
 			markButton.textContent = words[word].learned ? t("unmark") : t("mark");
 			markButton.addEventListener("click", function () {
+				retriggerEffect(markButton, "fx-learned");
+				retriggerEffect(wordItem, "fx-row-learned");
 				toggleLearned(word);
 			});
 
@@ -703,14 +782,14 @@ function updateWordsList() {
 			deleteButton.className = "action-delete";
 			deleteButton.textContent = t("delete");
 			deleteButton.addEventListener("click", function () {
-				deleteWord(word);
+				retriggerEffect(deleteButton, "fx-delete");
+				deleteWord(word, wordItem);
 			});
 
 			const exampleButton = document.createElement("button");
 			exampleButton.className = "action-example";
 			let exampleCount = Array.isArray(words[word].examples) ? words[word].examples.length : 0;
-			function syncExampleButtonText() {
-				const expanded = exampleWrap.style.display !== "none";
+			function syncExampleButtonText(expanded = exampleWrap.style.display !== "none") {
 				exampleButton.textContent = expanded
 					? `${t("collapse")}(${exampleCount})`
 					: `${t("examples")}(${exampleCount})`;
@@ -772,8 +851,10 @@ function updateWordsList() {
 
 			exampleButton.addEventListener("click", function () {
 				const expanded = exampleWrap.style.display !== "none";
-				exampleWrap.style.display = expanded ? "none" : "block";
-				syncExampleButtonText();
+				retriggerEffect(exampleButton, "fx-example");
+				retriggerEffect(wordItem, "fx-row-example");
+				toggleAnimatedPanel(exampleWrap, !expanded);
+				syncExampleButtonText(!expanded);
 				if (!expanded && !examplesRendered) {
 					renderExamples(exampleWrap, examples, word, (count) => {
 						exampleCount = count;
@@ -783,57 +864,66 @@ function updateWordsList() {
 				}
 			});
 
-			dictButton.addEventListener("click", function () {
-				const expanded = dictWrap.style.display !== "none";
-				dictWrap.style.display = expanded ? "none" : "block";
-				syncDictButtonText();
+				dictButton.addEventListener("click", function () {
+					const expanded = dictWrap.style.display !== "none";
+					dictWrap.style.display = expanded ? "none" : "block";
+					syncDictButtonText();
 				if (!expanded && !dictRendered) {
 					renderDictionary();
 					dictRendered = true;
 				}
 			});
 
-			actionWrap.appendChild(audioButton);
-			actionWrap.appendChild(markButton);
-			actionWrap.appendChild(exampleButton);
-			actionWrap.appendChild(dictButton);
-			actionWrap.appendChild(deleteButton);
-			wordItem.appendChild(wordSpan);
-			wordItem.appendChild(actionWrap);
-			wordItem.appendChild(exampleWrap);
-			wordItem.appendChild(dictWrap);
-			wordsList.appendChild(wordItem);
+				actionWrap.appendChild(audioButton);
+				actionWrap.appendChild(markButton);
+				actionWrap.appendChild(exampleButton);
+				actionWrap.appendChild(dictButton);
+				actionWrap.appendChild(deleteButton);
+				wordLine.appendChild(wordSpan);
+				wordLine.appendChild(countSpan);
+				wordMain.appendChild(wordLine);
+				wordMain.appendChild(meaningSpan);
+				wordHeader.appendChild(wordMain);
+				wordHeader.appendChild(actionWrap);
+				wordItem.appendChild(wordHeader);
+				wordItem.appendChild(exampleWrap);
+				wordItem.appendChild(dictWrap);
+				wordsList.appendChild(wordItem);
 		});
 
-		if (!wordsList.hasChildNodes() && !searchKeyword) {
-			const empty = document.createElement("div");
-			empty.className = "empty";
-			empty.textContent = t("empty_words");
-			wordsList.appendChild(empty);
-		}
-		if (searchKeyword) {
-			localResultBlock.style.display = renderedCount > 0 ? "block" : "none";
-		} else {
-			localResultBlock.style.display = "block";
-		}
-		renderDictionarySearchResults();
-	});
-}
+			if (!wordsList.hasChildNodes() && !searchKeyword) {
+				const empty = document.createElement("div");
+				empty.className = "empty";
+				empty.textContent = t("empty_words");
+				wordsList.appendChild(empty);
+			}
+			updateSearchLayout(renderedCount > 0, !!searchKeyword);
+			renderDictionarySearchResults(renderedCount > 0);
+		});
+	}
 
-function deleteWord(word) {
-	WordStorage.getWords().then((words) => {
+function deleteWord(word, wordItem) {
+	if (wordItem) {
+		wordItem.classList.add("is-deleting");
+	}
+	const runDelete = () => WordStorage.getWords().then((words) => {
 		delete words[word];
 		return WordStorage.saveWords(words);
-	}).then(() => {
+	});
+	const promise = wordItem ? new Promise((resolve) => window.setTimeout(resolve, 210)).then(runDelete) : runDelete();
+	promise.then(() => {
 		updateWordsList();
 		UiToast.show(t("deleted"), "success");
 	}).catch(() => {
+		if (wordItem) {
+			wordItem.classList.remove("is-deleting");
+		}
 		UiToast.show(t("save_failed"), "error");
 	});
 }
 
 function toggleLearned(word) {
-	WordStorage.getWords().then((words) => {
+	new Promise((resolve) => window.setTimeout(resolve, 170)).then(() => WordStorage.getWords()).then((words) => {
 		words[word].learned = !words[word].learned;
 		return WordStorage.saveWords(words);
 	}).then(() => {

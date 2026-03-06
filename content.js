@@ -147,11 +147,11 @@ function createPreviewHighlightedSentence(sentence, word) {
 			wrapper.appendChild(document.createTextNode(sentence.slice(cursor, start)));
 		}
 		const mark = document.createElement("span");
-		mark.style.background = "#fff3a3";
-		mark.style.color = "#2a2210";
-		mark.style.borderRadius = "4px";
-		mark.style.padding = "0 2px";
-		mark.style.boxShadow = "inset 0 -1px 0 rgba(0, 0, 0, 0.08)";
+		mark.style.background = "#efe0a8";
+		mark.style.color = "#4b392c";
+		mark.style.borderRadius = "6px 5px 7px 5px";
+		mark.style.padding = "0 3px";
+		mark.style.boxShadow = "inset 0 -1px 0 rgba(120, 98, 67, 0.12)";
 		mark.textContent = sentence.slice(start, end);
 		wrapper.appendChild(mark);
 		cursor = end;
@@ -242,28 +242,28 @@ function ensureWordPreviewStyle() {
 			z-index: 2147483645;
 			min-width: 260px;
 			max-width: 420px;
-			background: #ffffff;
-			border: 1px solid #f0c9cf;
-			border-radius: 12px;
-			box-shadow: 0 14px 34px rgba(145, 15, 30, 0.2);
-			padding: 10px 12px;
-			color: #2a1014;
-			font-family: "Manrope", "Noto Sans TC", "SF Pro Text", sans-serif;
+			background: #fffaf3;
+			border: 1px solid #dccabd;
+			border-radius: 16px 14px 18px 13px;
+			box-shadow: 0 14px 28px rgba(88, 63, 50, 0.14);
+			padding: 11px 13px;
+			color: #34251f;
+			font-family: "Noto Sans TC", "Hiragino Sans", "Yu Gothic UI", sans-serif;
 			pointer-events: auto;
-			animation: laWordPreviewIn 120ms ease-out;
+			animation: laWordPreviewIn 160ms ease-out;
 		}
 		.la-word-preview-meaning {
 			font-size: 13px;
 			font-weight: 700;
 			line-height: 1.45;
-			color: #7f1d2a;
+			color: #7f5a4d;
 		}
 		.la-word-preview-list {
 			margin: 8px 0 0;
 			padding-left: 18px;
 			font-size: 12px;
 			line-height: 1.45;
-			color: #344054;
+			color: #4e3e36;
 		}
 		.la-word-preview-list li {
 			margin-bottom: 4px;
@@ -271,12 +271,12 @@ function ensureWordPreviewStyle() {
 		.la-word-preview-trans {
 			margin-top: 2px;
 			font-size: 11px;
-			color: #667085;
-			border-left: 2px solid #e4e7ec;
+			color: #7a685d;
+			border-left: 2px solid #ddd0c2;
 			padding-left: 6px;
 		}
 		@keyframes laWordPreviewIn {
-			from { opacity: 0; transform: translateY(4px) scale(0.985); }
+			from { opacity: 0; transform: translateY(5px) scale(0.985); }
 			to { opacity: 1; transform: translateY(0) scale(1); }
 		}
 	`;
@@ -356,19 +356,19 @@ function createHighlightSpan(word, meaning, examples) {
 	const span = document.createElement("span");
 	span.className = "plugin-highlight-word";
 	span.textContent = word;
-	span.style.backgroundColor = "#fff3a3";
+	span.style.backgroundColor = "#efe0a8";
 	span.style.cursor = "pointer";
-	span.style.color = "#2a2210";
-	span.style.padding = "0 2px";
-	span.style.borderRadius = "4px";
-	span.style.boxShadow = "inset 0 -1px 0 rgba(0, 0, 0, 0.08)";
+	span.style.color = "#4b392c";
+	span.style.padding = "0 3px";
+	span.style.borderRadius = "6px 5px 7px 5px";
+	span.style.boxShadow = "inset 0 -1px 0 rgba(120, 98, 67, 0.12)";
 	span.title = "";
 	span.addEventListener("mouseenter", () => {
-		span.style.backgroundColor = "#ffe978";
+		span.style.backgroundColor = "#e4d295";
 		showWordPreview(span, meaning, examples);
 	});
 	span.addEventListener("mouseleave", () => {
-		span.style.backgroundColor = "#fff3a3";
+		span.style.backgroundColor = "#efe0a8";
 		hideWordPreview(70);
 	});
 	// span.addEventListener("click", () => markLearned(word));
@@ -1257,7 +1257,7 @@ function ensureAddWordModalStyle() {
 		.la-addword-overlay {
 			position: fixed;
 			inset: 0;
-			background: rgba(30, 12, 14, 0.28);
+			background: rgba(83, 61, 50, 0.24);
 			z-index: 2147483646;
 			display: flex;
 			align-items: center;
@@ -1267,36 +1267,37 @@ function ensureAddWordModalStyle() {
 		}
 		.la-addword-modal {
 			width: min(520px, 96vw);
-			background: #ffffff;
-			border: 1px solid #efc8cd;
-			border-radius: 14px;
-			box-shadow: 0 20px 38px rgba(145, 15, 30, 0.2);
+			background: #fffaf3;
+			border: 1px solid #dccabd;
+			border-radius: 18px 15px 20px 16px;
+			box-shadow: 0 18px 30px rgba(88, 63, 50, 0.16);
 			padding: 16px;
-			color: #2a1014;
-			font-family: "Manrope", "Noto Sans TC", "SF Pro Text", sans-serif;
+			color: #34251f;
+			font-family: "Noto Sans TC", "Hiragino Sans", "Yu Gothic UI", sans-serif;
 			animation: laRiseIn 170ms ease-out;
 		}
 		.la-addword-title {
 			margin: 0;
 			font-size: 18px;
 			font-weight: 800;
+			font-family: "Noto Serif TC", "Hiragino Mincho ProN", "Yu Mincho", serif;
 		}
 		.la-addword-word {
 			margin-top: 8px;
 			font-size: 14px;
 			font-weight: 700;
-			color: #ab1d2a;
+			color: #8f5143;
 		}
 		.la-addword-hint {
 			margin-top: 10px;
 			font-size: 12px;
-			color: #7d4a52;
+			color: #7b655b;
 		}
 		.la-addword-input {
 			width: 100%;
 			margin-top: 8px;
-			border: 1px solid #efc8cd;
-			border-radius: 10px;
+			border: 1px solid #dccabd;
+			border-radius: 14px 12px 16px 11px;
 			padding: 10px;
 			font-size: 14px;
 			line-height: 1.4;
@@ -1304,8 +1305,8 @@ function ensureAddWordModalStyle() {
 			outline: none;
 		}
 		.la-addword-input:focus {
-			border-color: #d91f26;
-			box-shadow: 0 0 0 3px rgba(217, 31, 38, 0.12);
+			border-color: #a55143;
+			box-shadow: 0 0 0 3px rgba(165, 81, 67, 0.12);
 		}
 		.la-addword-footer {
 			margin-top: 12px;
@@ -1316,14 +1317,14 @@ function ensureAddWordModalStyle() {
 		.la-addword-dict {
 			margin-top: 10px;
 			padding: 8px 10px;
-			border: 1px solid #f1d7da;
-			border-radius: 10px;
-			background: #fff8f8;
+			border: 1px solid #e2d3c6;
+			border-radius: 14px 12px 16px 11px;
+			background: #fffdf9;
 		}
 		.la-addword-dict-title {
 			font-size: 11px;
 			font-weight: 700;
-			color: #8a3340;
+			color: #8b6c53;
 		}
 		.la-addword-dict-list {
 			display: grid;
@@ -1331,64 +1332,65 @@ function ensureAddWordModalStyle() {
 			margin-top: 6px;
 		}
 		.la-addword-dict-item {
-			border: 1px solid #edc9ce;
-			border-radius: 8px;
-			background: #fffdfd;
+			border: 1px solid #ded0c3;
+			border-radius: 12px 10px 14px 10px;
+			background: #fffaf5;
 			padding: 7px 8px;
 		}
 		.la-addword-dict-item.is-selected {
-			border-color: #d91f26;
-			box-shadow: 0 0 0 2px rgba(217, 31, 38, 0.12);
+			border-color: #a55143;
+			box-shadow: 0 0 0 2px rgba(165, 81, 67, 0.12);
 		}
 		.la-addword-dict-pos {
 			font-size: 11px;
-			color: #9a5d66;
+			color: #8c7567;
 		}
 		.la-addword-dict-original {
 			margin-top: 3px;
 			font-size: 12px;
 			line-height: 1.45;
-			color: #5a2a30;
+			color: #5a473d;
 		}
 		.la-addword-dict-translated {
 			margin-top: 4px;
 			font-size: 12px;
 			line-height: 1.45;
-			color: #2f3b4b;
-			border-left: 2px solid #ebc6cb;
+			color: #6d5d56;
+			border-left: 2px solid #ddd0c2;
 			padding-left: 6px;
 		}
 		.la-addword-dict-apply {
 			margin-top: 6px;
 			border: 0;
-			border-radius: 7px;
+			border-radius: 10px 9px 11px 8px;
 			padding: 4px 8px;
 			font-size: 11px;
 			font-weight: 700;
 			cursor: pointer;
-			background: #d91f26;
-			color: #ffffff;
+			background: #b26b54;
+			color: #fffaf3;
 		}
 		.la-addword-btn {
-			border: 0;
-			border-radius: 9px;
+			border: 1px solid #d8c7b8;
+			border-radius: 12px 10px 14px 10px;
 			padding: 8px 12px;
 			font-size: 13px;
 			font-weight: 700;
 			cursor: pointer;
 		}
 		.la-addword-cancel {
-			background: #ffe9ec;
-			color: #8f1f2d;
+			background: #f4eadf;
+			color: #7a6155;
 		}
 		.la-addword-save {
-			background: #d91f26;
-			color: #ffffff;
+			background: #a55143;
+			border-color: #9a5b49;
+			color: #fffaf3;
 		}
 		.la-confirm-overlay {
 			position: fixed;
 			inset: 0;
-			background: rgba(30, 12, 14, 0.28);
+			background: rgba(83, 61, 50, 0.24);
 			z-index: 2147483646;
 			display: flex;
 			align-items: center;
@@ -1398,24 +1400,25 @@ function ensureAddWordModalStyle() {
 		}
 		.la-confirm-modal {
 			width: min(420px, 94vw);
-			background: #ffffff;
-			border: 1px solid #efc8cd;
-			border-radius: 14px;
-			box-shadow: 0 20px 38px rgba(145, 15, 30, 0.2);
+			background: #fffaf3;
+			border: 1px solid #dccabd;
+			border-radius: 18px 15px 20px 16px;
+			box-shadow: 0 18px 30px rgba(88, 63, 50, 0.16);
 			padding: 16px;
-			color: #2a1014;
-			font-family: "Manrope", "Noto Sans TC", "SF Pro Text", sans-serif;
+			color: #34251f;
+			font-family: "Noto Sans TC", "Hiragino Sans", "Yu Gothic UI", sans-serif;
 			animation: laRiseIn 170ms ease-out;
 		}
 		.la-confirm-title {
 			margin: 0 0 8px 0;
 			font-size: 16px;
 			font-weight: 800;
+			font-family: "Noto Serif TC", "Hiragino Mincho ProN", "Yu Mincho", serif;
 		}
 		.la-confirm-desc {
 			margin: 0;
 			font-size: 13px;
-			color: #7d4a52;
+			color: #7b655b;
 			line-height: 1.45;
 		}
 		.la-confirm-footer {
@@ -1425,20 +1428,21 @@ function ensureAddWordModalStyle() {
 			gap: 8px;
 		}
 		.la-confirm-btn {
-			border: 0;
-			border-radius: 9px;
+			border: 1px solid #d8c7b8;
+			border-radius: 12px 10px 14px 10px;
 			padding: 8px 12px;
 			font-size: 13px;
 			font-weight: 700;
 			cursor: pointer;
 		}
 		.la-confirm-cancel {
-			background: #ffe9ec;
-			color: #8f1f2d;
+			background: #f4eadf;
+			color: #7a6155;
 		}
 		.la-confirm-ok {
-			background: #d91f26;
-			color: #ffffff;
+			background: #a55143;
+			border-color: #9a5b49;
+			color: #fffaf3;
 		}
 		@keyframes laFadeIn {
 			from { opacity: 0; }
@@ -1663,19 +1667,19 @@ function showTranslation(translation) {
 	translationBox.style.left = `${rect.left + window.scrollX}px`; // 使用选中文本的左边界加上页面滚动的位移
 	translationBox.style.top = `${rect.bottom + window.scrollY + 10}px`; // 选中文本的下边界作为顶部位置，加上页面滚动的位移，并增加一些偏移量
 	translationBox.style.padding = '0';
-	translationBox.style.setProperty('background', '#ffffff', 'important');
-	translationBox.style.setProperty('color', '#000000', 'important');
-	translationBox.style.setProperty('border', '1px solid #e6b8bc', 'important');
-	translationBox.style.setProperty('border-radius', '12px', 'important');
-	translationBox.style.setProperty('box-shadow', '0 12px 28px rgba(145, 15, 30, 0.22)', 'important');
+	translationBox.style.setProperty('background', '#fffaf3', 'important');
+	translationBox.style.setProperty('color', '#34251f', 'important');
+	translationBox.style.setProperty('border', '1px solid #dccabd', 'important');
+	translationBox.style.setProperty('border-radius', '16px 14px 18px 13px', 'important');
+	translationBox.style.setProperty('box-shadow', '0 14px 28px rgba(88, 63, 50, 0.16)', 'important');
 	translationBox.style.setProperty('opacity', '1', 'important');
 	translationBox.style.setProperty('mix-blend-mode', 'normal', 'important');
-	translationBox.style.setProperty('backdrop-filter', 'blur(2px)', 'important');
+	translationBox.style.setProperty('backdrop-filter', 'blur(1px)', 'important');
 	translationBox.style.zIndex = '10000';
 	translationBox.style.maxWidth = `${window.innerWidth / 3}px`; // 设置最大宽度为屏幕宽度的1/3
 	translationBox.style.overflow = 'auto'; // 超出部分显示滚动条
 	translationBox.style.minWidth = '220px';
-	translationBox.style.padding = '10px 30px 10px 10px';
+	translationBox.style.padding = '11px 34px 11px 12px';
 	translationBox.style.animation = "pluginTranslationIn 180ms ease-out";
 	translationBox.style.willChange = "transform, opacity";
 	translationBox.style.pointerEvents = "auto";
@@ -1688,7 +1692,7 @@ function showTranslation(translation) {
 	closeBtn.style.top = "6px";
 	closeBtn.style.border = "0";
 	closeBtn.style.background = "transparent";
-	closeBtn.style.color = "#9b3a44";
+	closeBtn.style.color = "#8f6f62";
 	closeBtn.style.fontSize = "14px";
 	closeBtn.style.cursor = "pointer";
 	closeBtn.style.lineHeight = "1";
@@ -1704,10 +1708,10 @@ function showTranslation(translation) {
 	dictWrap.id = "translationDictionary";
 	dictWrap.style.marginTop = "8px";
 	dictWrap.style.paddingTop = "8px";
-	dictWrap.style.borderTop = "1px solid #f0d3d7";
+	dictWrap.style.borderTop = "1px solid #e1d4c7";
 	dictWrap.style.fontSize = "12px";
 	dictWrap.style.lineHeight = "1.45";
-	dictWrap.style.color = "#4b5563";
+	dictWrap.style.color = "#6a5a52";
 	dictWrap.style.display = "none";
 
 	let pointerDownInside = false;
@@ -1788,6 +1792,7 @@ function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
 	title.textContent = getDictionarySourceLabel(dictResponse.source);
 	title.style.fontWeight = "700";
 	title.style.marginBottom = "4px";
+	title.style.color = "#856a5f";
 	dictWrap.appendChild(title);
 
 	const entries = dictResponse.entries.slice(0, 3);
@@ -1796,7 +1801,7 @@ function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
 		row.style.marginTop = "5px";
 		const pos = document.createElement("div");
 		pos.style.fontSize = "11px";
-		pos.style.color = "#7d4a52";
+		pos.style.color = "#8b7368";
 		pos.textContent = item.pos ? `[${item.pos}]` : "";
 		const def = document.createElement("div");
 		def.textContent = "…";
@@ -1824,7 +1829,7 @@ function ensureTranslationUiStyles() {
 	style.id = "pluginTranslationStyle";
 	style.textContent = `
 		@keyframes pluginTranslationIn {
-			from { opacity: 0; transform: translateY(6px) scale(0.98); }
+			from { opacity: 0; transform: translateY(7px) scale(0.985); }
 			to { opacity: 1; transform: translateY(0) scale(1); }
 		}
 	`;

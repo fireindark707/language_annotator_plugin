@@ -1,4 +1,3 @@
-let showAllWords = false;
 let uiLang = "zh-TW";
 let sortMode = "recent_desc";
 const MAX_EXAMPLES_PER_WORD = 20;
@@ -26,7 +25,6 @@ function getPageCount(wordData) {
 	return Math.max(count, derived);
 }
 
-const toggleViewBtn = document.getElementById("toggleViewBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 const practiceBtn = document.getElementById("practiceBtn");
 const sortModeSelect = document.getElementById("sortMode");
@@ -45,12 +43,6 @@ document.addEventListener("DOMContentLoaded", function () {
 		uiLang = "zh-TW";
 		applyUiText();
 		refreshLanguageChip();
-		updateWordsList();
-	});
-
-	toggleViewBtn.addEventListener("click", function () {
-		showAllWords = !showAllWords;
-		toggleViewBtn.textContent = showAllWords ? t("show_unlearned") : t("show_all");
 		updateWordsList();
 	});
 
@@ -238,6 +230,14 @@ function getExampleCacheKey(word, exampleText) {
 	return `${word}__${exampleText}`;
 }
 
+function formatWordCount(pageCount, encounterCount) {
+	return `${pageCount}p · ${encounterCount}x`;
+}
+
+function formatWordCountTooltip(pageCount, encounterCount) {
+	return `${t("count_pages")}: ${pageCount} · ${t("count_encounters")}: ${encounterCount}`;
+}
+
 function formatExampleTime(ts) {
 	if (!ts) return "";
 	try {
@@ -245,6 +245,32 @@ function formatExampleTime(ts) {
 	} catch (error) {
 		return "";
 	}
+}
+
+function retriggerEffect(element, className) {
+	if (!element) return;
+	element.classList.remove(className);
+	void element.offsetWidth;
+	element.classList.add(className);
+	window.setTimeout(() => {
+		element.classList.remove(className);
+	}, 700);
+}
+
+function toggleAnimatedPanel(panel, shouldOpen) {
+	if (!panel) return;
+	panel.classList.remove("fx-panel-open", "fx-panel-close");
+	if (shouldOpen) {
+		panel.style.display = "block";
+		void panel.offsetWidth;
+		panel.classList.add("fx-panel-open");
+		return;
+	}
+	panel.classList.add("fx-panel-close");
+	window.setTimeout(() => {
+		panel.style.display = "none";
+		panel.classList.remove("fx-panel-close");
+	}, 170);
 }
 
 function formatExampleHost(url) {
@@ -364,8 +390,8 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 		meta.appendChild(timeSpan);
 		content.appendChild(meta);
 
-		const removeBtn = document.createElement("button");
-		removeBtn.className = "example-remove";
+			const removeBtn = document.createElement("button");
+			removeBtn.className = "example-remove";
 		removeBtn.textContent = "🗑️";
 		removeBtn.title = t("remove_example");
 		removeBtn.addEventListener("click", function () {
@@ -389,8 +415,8 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 			});
 		});
 
-		const pinBtn = document.createElement("button");
-		pinBtn.className = "example-remove";
+			const pinBtn = document.createElement("button");
+			pinBtn.className = "example-remove";
 		pinBtn.textContent = example.pinned ? "📌" : "📍";
 		pinBtn.title = example.pinned ? t("unpin_example") : t("pin_example");
 		pinBtn.addEventListener("click", function () {
@@ -416,9 +442,13 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 			});
 		});
 
-		item.appendChild(content);
-		item.appendChild(pinBtn);
-		item.appendChild(removeBtn);
+			const exampleActions = document.createElement("div");
+			exampleActions.className = "example-actions";
+			exampleActions.appendChild(pinBtn);
+			exampleActions.appendChild(removeBtn);
+
+			item.appendChild(content);
+			item.appendChild(exampleActions);
 		li.appendChild(item);
 		list.appendChild(li);
 
@@ -453,10 +483,12 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 }
 
 function applyUiText() {
+	document.documentElement.lang = UiI18n.langAttr(uiLang);
+	document.documentElement.dir = UiI18n.dir(uiLang);
+	document.title = t("popup_title");
 	document.getElementById("popupTitle").textContent = t("popup_title");
 	document.getElementById("popupSubtitle").textContent = t("popup_subtitle");
 	document.getElementById("settingsLink").textContent = t("settings");
-	toggleViewBtn.textContent = showAllWords ? t("show_unlearned") : t("show_all");
 	fullscreenBtn.textContent = t("fullscreen");
 	practiceBtn.textContent = t("practice_mode");
 	autoLangHint.textContent = t("auto_hint");
@@ -480,11 +512,11 @@ function updateWordsList() {
 	wordsList.innerHTML = "";
 
 	WordStorage.getWords().then((words) => {
-		const wordsArray = Object.keys(words);
+		const allWordsArray = Object.keys(words);
 		if (sortMode === "alpha_asc") {
-			wordsArray.sort((a, b) => a.localeCompare(b));
+			allWordsArray.sort((a, b) => a.localeCompare(b));
 		} else if (sortMode === "freq_desc") {
-			wordsArray.sort((a, b) => {
+			allWordsArray.sort((a, b) => {
 				const ad = getPageCount(words[a]);
 				const bd = getPageCount(words[b]);
 				const af = getEncounterCount(words[a]);
@@ -494,41 +526,75 @@ function updateWordsList() {
 				return a.localeCompare(b);
 			});
 		} else {
-			wordsArray.sort((a, b) => {
+			allWordsArray.sort((a, b) => {
 				const at = words[a] && words[a].createdAt ? words[a].createdAt : 0;
 				const bt = words[b] && words[b].createdAt ? words[b].createdAt : 0;
 				if (bt !== at) return bt - at;
 				return a.localeCompare(b);
 			});
 		}
-		const unlearnedCount = wordsArray.filter((word) => !words[word].learned).length;
-		wordStats.textContent = `${t("words")}：${wordsArray.length} | ${t("unlearned")}：${unlearnedCount}`;
+		const unlearnedCount = allWordsArray.filter((word) => !words[word].learned).length;
+		const wordsArray = allWordsArray.filter((word) => !words[word].learned);
+		wordStats.textContent = `${t("words")}：${allWordsArray.length} | ${t("unlearned")}：${unlearnedCount}`;
 
 		wordsArray.forEach((word) => {
-			if (!showAllWords && words[word].learned) {
-				return;
-			}
-
 			const wordItem = document.createElement("div");
 			wordItem.className = "word-item";
 
+			const wordTop = document.createElement("div");
+			wordTop.className = "word-top";
+
+			const wordMain = document.createElement("div");
+			wordMain.className = "word-main";
+
+			const wordLabelRow = document.createElement("div");
+			wordLabelRow.className = "word-label-row";
+
+			const wordToolbar = document.createElement("div");
+			wordToolbar.className = "word-toolbar";
+
 			const wordSpan = document.createElement("span");
 			wordSpan.className = `word${words[word].learned ? " learned" : ""}`;
-			wordSpan.textContent = `${word}: ${words[word].meaning}`;
+			wordSpan.textContent = word;
 			const encounterCount = getEncounterCount(words[word]);
 			const pageCount = getPageCount(words[word]);
 			const countSpan = document.createElement("span");
 			countSpan.className = "word-count";
-			countSpan.textContent = `${pageCount}-${encounterCount}`;
-			wordSpan.appendChild(countSpan);
+			const countTooltip = formatWordCountTooltip(pageCount, encounterCount);
+			countSpan.textContent = formatWordCount(pageCount, encounterCount);
+			countSpan.title = countTooltip;
+			countSpan.setAttribute("aria-label", countTooltip);
 
-			const actionWrap = document.createElement("div");
-			actionWrap.className = "word-actions";
+			const meaningSpan = document.createElement("div");
+			meaningSpan.className = "word-meaning";
+			meaningSpan.textContent = words[word].meaning || "";
+
+			const toggleLearnedButton = document.createElement("button");
+			toggleLearnedButton.textContent = "✓";
+			toggleLearnedButton.className = "word-tool action-learned";
+			toggleLearnedButton.title = words[word].learned ? t("unmark") : t("mark");
+			toggleLearnedButton.setAttribute("aria-label", words[word].learned ? t("unmark") : t("mark"));
+			toggleLearnedButton.classList.toggle("is-active", !!words[word].learned);
+			toggleLearnedButton.addEventListener("click", function () {
+				retriggerEffect(toggleLearnedButton, "fx-learned");
+				retriggerEffect(wordItem, "fx-row-learned");
+				toggleLearned(word);
+			});
+
+			const exampleButton = document.createElement("button");
+			let exampleCount = Array.isArray(words[word].examples) ? words[word].examples.length : 0;
+			exampleButton.textContent = "≡";
+			exampleButton.className = "word-tool action-example";
+			exampleButton.dataset.count = String(exampleCount);
 
 			const audioButton = document.createElement("button");
-			audioButton.textContent = `🔊 ${t("pronounce")}`;
-			audioButton.className = "action-audio";
+			audioButton.textContent = "🔊";
+			audioButton.className = "word-tool action-audio";
+			audioButton.title = t("pronounce");
+			audioButton.setAttribute("aria-label", t("pronounce"));
 			audioButton.addEventListener("click", function () {
+				retriggerEffect(audioButton, "fx-audio");
+				retriggerEffect(wordItem, "fx-row-audio");
 				const utterance = new SpeechSynthesisUtterance(word);
 				WordStorage.getSourceLang().then((sourceLang) => {
 					utterance.lang = sourceLang;
@@ -544,31 +610,14 @@ function updateWordsList() {
 			});
 
 			const deleteButton = document.createElement("button");
-			deleteButton.textContent = t("delete");
-			deleteButton.className = "action-delete";
+			deleteButton.textContent = "✕";
+			deleteButton.className = "word-tool action-delete";
+			deleteButton.title = t("delete");
+			deleteButton.setAttribute("aria-label", t("delete"));
 			deleteButton.addEventListener("click", function () {
-				deleteWord(word);
+				retriggerEffect(deleteButton, "fx-delete");
+				deleteWord(word, wordItem);
 			});
-
-			const toggleLearnedButton = document.createElement("button");
-			toggleLearnedButton.textContent = words[word].learned ? t("unmark") : t("mark");
-			toggleLearnedButton.className = words[word].learned
-				? "action-unlearn"
-				: "action-learn";
-			toggleLearnedButton.addEventListener("click", function () {
-				toggleLearned(word);
-			});
-
-			const exampleButton = document.createElement("button");
-			let exampleCount = Array.isArray(words[word].examples) ? words[word].examples.length : 0;
-			function syncExampleButtonText() {
-				const expanded = exampleWrap.style.display !== "none";
-				exampleButton.textContent = expanded
-					? `${t("collapse")}(${exampleCount})`
-					: `${t("examples")}(${exampleCount})`;
-			}
-			exampleButton.textContent = `${t("examples")}(${exampleCount})`;
-			exampleButton.className = "action-example";
 
 			const exampleWrap = document.createElement("div");
 			exampleWrap.className = "example-wrap";
@@ -576,25 +625,48 @@ function updateWordsList() {
 			const examples = Array.isArray(words[word].examples) ? words[word].examples : [];
 			let examplesRendered = false;
 
+			function syncExampleButtonState(expanded = exampleWrap.style.display !== "none") {
+				exampleButton.textContent = expanded ? "▾" : "≡";
+				exampleButton.dataset.count = String(exampleCount);
+				exampleButton.title = expanded
+					? `${t("collapse")} (${exampleCount})`
+					: `${t("examples")} (${exampleCount})`;
+				exampleButton.setAttribute(
+					"aria-label",
+					expanded
+						? `${t("collapse")} (${exampleCount})`
+						: `${t("examples")} (${exampleCount})`
+				);
+				exampleButton.classList.toggle("is-active", expanded);
+			}
+			syncExampleButtonState();
+
 			exampleButton.addEventListener("click", function () {
 				const expanded = exampleWrap.style.display !== "none";
-				exampleWrap.style.display = expanded ? "none" : "block";
-				syncExampleButtonText();
+				retriggerEffect(exampleButton, "fx-example");
+				retriggerEffect(wordItem, "fx-row-example");
+				toggleAnimatedPanel(exampleWrap, !expanded);
+				syncExampleButtonState(!expanded);
 				if (!expanded && !examplesRendered) {
 					renderExamples(exampleWrap, examples, word, (count) => {
 						exampleCount = count;
-						syncExampleButtonText();
+						syncExampleButtonState();
 					});
 					examplesRendered = true;
 				}
 			});
 
-			actionWrap.appendChild(audioButton);
-			actionWrap.appendChild(toggleLearnedButton);
-			actionWrap.appendChild(exampleButton);
-			actionWrap.appendChild(deleteButton);
-			wordItem.appendChild(wordSpan);
-			wordItem.appendChild(actionWrap);
+			wordLabelRow.appendChild(wordSpan);
+			wordLabelRow.appendChild(countSpan);
+			wordMain.appendChild(wordLabelRow);
+			wordMain.appendChild(meaningSpan);
+			wordTop.appendChild(wordMain);
+			wordToolbar.appendChild(audioButton);
+			wordToolbar.appendChild(exampleButton);
+			wordToolbar.appendChild(toggleLearnedButton);
+			wordToolbar.appendChild(deleteButton);
+			wordTop.appendChild(wordToolbar);
+			wordItem.appendChild(wordTop);
 			wordItem.appendChild(exampleWrap);
 			wordsList.appendChild(wordItem);
 		});
@@ -611,21 +683,29 @@ function updateWordsList() {
 	});
 }
 
-function deleteWord(word) {
-	WordStorage.getWords().then((words) => {
+function deleteWord(word, wordItem) {
+	if (wordItem) {
+		wordItem.classList.add("is-deleting");
+	}
+	const runDelete = () => WordStorage.getWords().then((words) => {
 		delete words[word];
 		return WordStorage.saveWords(words);
-	}).then(() => {
+	});
+	const promise = wordItem ? new Promise((resolve) => window.setTimeout(resolve, 210)).then(runDelete) : runDelete();
+	promise.then(() => {
 		updateWordsList();
 		UiToast.show(t("deleted"), "success");
 	}).catch((error) => {
+		if (wordItem) {
+			wordItem.classList.remove("is-deleting");
+		}
 		console.error("Failed to delete word:", error);
 		UiToast.show(t("save_failed"), "error");
 	});
 }
 
 function toggleLearned(word) {
-	WordStorage.getWords().then((words) => {
+	new Promise((resolve) => window.setTimeout(resolve, 170)).then(() => WordStorage.getWords()).then((words) => {
 		words[word].learned = !words[word].learned;
 		return WordStorage.saveWords(words);
 	}).then(() => {

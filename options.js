@@ -21,6 +21,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	const excludedDomainList = document.getElementById("excludedDomainList");
 	let excludedDomains = [];
 	let saveTimer = null;
+	saveStatus.setAttribute("aria-live", "polite");
 
 	function t(uiLang, key) {
 		return UiI18n.t(uiLang, key);
@@ -85,6 +86,9 @@ document.addEventListener("DOMContentLoaded", function () {
 	}
 
 	function applyUiLanguage(uiLang) {
+		document.documentElement.lang = UiI18n.langAttr(uiLang);
+		document.documentElement.dir = UiI18n.dir(uiLang);
+		document.title = t(uiLang, "options_title");
 		document.getElementById("optionsTitle").textContent = t(uiLang, "options_title");
 		document.getElementById("optionsDesc").textContent = t(uiLang, "options_desc");
 		document.getElementById("generalSettingsTitle").textContent = t(uiLang, "general_settings");
@@ -98,6 +102,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		document.getElementById("importExportLabel").textContent = t(uiLang, "import_export");
 		document.getElementById("excludedDomainsLabel").textContent = t(uiLang, "excluded_domains");
 		document.getElementById("excludedDomainsDesc").textContent = t(uiLang, "excluded_domains_desc");
+		excludedDomainInput.placeholder = "example.com";
 		addExcludedDomainBtn.textContent = t(uiLang, "add");
 		saveBtn.textContent = t(uiLang, "save");
 		syncBtn.textContent = t(uiLang, "sync_now");

@@ -1,41 +1,45 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
 	<meta charset="UTF-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-	<title>Practice</title>
+	<title>抽卡練習</title>
 	<style>
 		:root {
-			--bg: #f4f1f2;
-			--card: #ffffff;
-			--text: #261419;
-			--muted: #6f4d55;
-			--primary: #7a1022;
-			--primary-strong: #5f0c1a;
-			--primary-soft: #f2e8ea;
-			--ok: #1d7f47;
-			--bad: #aa2e2e;
-			--border: #dec9cf;
-			--chip-bg: #f7f1f2;
-			--focus: #9f1a30;
-			--option-hover: #f6eff1;
+			--bg: #f5efe6;
+			--bg-wash: #eee4d6;
+			--card: #fffaf3;
+			--card-soft: #f7efe3;
+			--text: #34251f;
+			--muted: #766258;
+			--primary: #8f5143;
+			--primary-strong: #784136;
+			--primary-soft: #f1e6da;
+			--ok: #5f7d4a;
+			--bad: #9a5c50;
+			--border: #d8c6b8;
+			--chip-bg: #f8f1e8;
+			--focus: #a26650;
+			--option-hover: #f8f0e6;
 		}
-		* { box-sizing: border-box; }
-		body {
-			margin: 0;
-			padding: 18px;
-			background: linear-gradient(180deg, #f8f6f7 0%, var(--bg) 100%);
-			color: var(--text);
-			font-family: "Manrope", "Noto Sans TC", "SF Pro Text", sans-serif;
-		}
+			* { box-sizing: border-box; }
+			body {
+				margin: 0;
+				padding: clamp(12px, 2vw, 18px);
+				background:
+					radial-gradient(circle at top left, rgba(255, 250, 243, 0.92) 0, rgba(255, 250, 243, 0) 24%),
+					linear-gradient(180deg, var(--bg) 0%, var(--bg-wash) 100%);
+				color: var(--text);
+				font-family: "Noto Sans TC", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+			}
 		.wrap {
 			max-width: 880px;
 			margin: 0 auto;
 			background: var(--card);
 			border: 1px solid var(--border);
-			border-radius: 16px;
+			border-radius: 20px 17px 22px 18px;
 			padding: 18px;
-			box-shadow: 0 14px 28px rgba(32, 16, 20, 0.09);
+			box-shadow: 0 12px 26px rgba(79, 57, 46, 0.08), inset 0 1px 0 rgba(255,255,255,0.72);
 			position: relative;
 			overflow: hidden;
 		}
@@ -45,8 +49,8 @@
 			top: 0;
 			left: 0;
 			right: 0;
-			height: 4px;
-			background: linear-gradient(90deg, #5a0c19 0%, #7a1022 55%, #991932 100%);
+			height: 5px;
+			background: linear-gradient(90deg, #b2866d 0%, #8f5143 58%, #c19b83 100%);
 		}
 		.head {
 			display: flex;
@@ -59,6 +63,7 @@
 			font-size: 22px;
 			font-weight: 800;
 			letter-spacing: 0.2px;
+			font-family: "Noto Serif TC", "Hiragino Mincho ProN", "Yu Mincho", serif;
 		}
 		.sub {
 			margin: 6px 0 0;
@@ -78,10 +83,10 @@
 			font-size: 19px;
 			font-weight: 900;
 			border: 1px solid var(--border);
-			border-radius: 12px;
+			border-radius: 16px 14px 18px 13px;
 			padding: 12px 10px;
-			color: #3f2229;
-			background: #fff;
+			color: #4a352d;
+			background: #fffdf9;
 			text-align: center;
 			line-height: 1.2;
 			min-height: 66px;
@@ -89,29 +94,29 @@
 			align-items: center;
 			justify-content: center;
 			letter-spacing: 0.2px;
-			box-shadow: 0 4px 10px rgba(37, 17, 23, 0.08);
+			box-shadow: 0 5px 12px rgba(79, 57, 46, 0.06);
 		}
 		#progressChip {
-			background: linear-gradient(180deg, #fff 0%, #f8f4f5 100%);
+			background: linear-gradient(180deg, #fffdf9 0%, #f6eee4 100%);
 		}
 		#scoreChip {
-			background: linear-gradient(180deg, #fff 0%, #f7f1f3 100%);
+			background: linear-gradient(180deg, #fffdf9 0%, #f4ecdf 100%);
 		}
 		#challengeChip {
 			font-size: 15px;
 			font-weight: 800;
-			background: linear-gradient(180deg, #301117 0%, #1f0b10 100%);
-			color: #f0d6dc;
-			border-color: #4a1b25;
+			background: linear-gradient(180deg, #6f584d 0%, #5d483f 100%);
+			color: #f7efe6;
+			border-color: #8a7063;
 		}
 		#streakChip {
 			font-size: 22px;
 			font-weight: 900;
-			color: #fff;
-			background: linear-gradient(180deg, #b91935 0%, #7a1022 100%);
-			border-color: #7a1022;
-			text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-			box-shadow: 0 8px 16px rgba(103, 16, 34, 0.28);
+			color: #fffaf3;
+			background: linear-gradient(180deg, #b4745f 0%, #8f5143 100%);
+			border-color: #9b5c49;
+			text-shadow: 0 1px 2px rgba(90, 57, 40, 0.24);
+			box-shadow: 0 8px 16px rgba(133, 89, 64, 0.22);
 			transform-origin: center;
 		}
 		#streakChip.streak-pop {
@@ -143,35 +148,35 @@
 		.progress-track {
 			height: 8px;
 			border-radius: 999px;
-			background: #eadde1;
+			background: #e5d7ca;
 			overflow: hidden;
 		}
 		.progress-fill {
 			height: 100%;
 			width: 0%;
 			border-radius: 999px;
-			background: linear-gradient(90deg, #6a0f1e 0%, #8a1830 100%);
+			background: linear-gradient(90deg, #c19b83 0%, #8f5143 100%);
 			transition: width 240ms ease;
 		}
 		.card {
 			margin-top: 14px;
 			border: 1px solid var(--border);
-			border-radius: 14px;
+			border-radius: 18px 15px 20px 16px;
 			padding: 18px;
-			background: #fff;
+			background: #fffdf9;
 			transition: transform 260ms cubic-bezier(.2,.8,.2,1), box-shadow 260ms cubic-bezier(.2,.8,.2,1), border-color 260ms ease;
 		}
 		.card.is-entering {
 			animation: cardEnter 360ms cubic-bezier(.2,.8,.2,1);
 		}
 		.card.is-correct {
-			border-color: #bde7ca;
-			box-shadow: 0 0 0 3px rgba(29, 127, 71, 0.14);
+			border-color: #cadcb8;
+			box-shadow: 0 0 0 3px rgba(95, 125, 74, 0.12);
 			animation: popYes 520ms cubic-bezier(.2,.8,.2,1);
 		}
 		.card.is-wrong {
-			border-color: #f1c2c2;
-			box-shadow: 0 0 0 3px rgba(170, 46, 46, 0.14);
+			border-color: #e2cfc5;
+			box-shadow: 0 0 0 3px rgba(154, 92, 80, 0.12);
 			animation: shakeNo 440ms cubic-bezier(.2,.8,.2,1);
 		}
 		@keyframes popYes {
@@ -201,9 +206,9 @@
 			font-weight: 800;
 			line-height: 1.35;
 			padding: 10px 12px;
-			border-radius: 10px;
-			background: #faf7f8;
-			border: 1px solid #eadde1;
+			border-radius: 14px 12px 16px 11px;
+			background: #faf4ec;
+			border: 1px solid #e1d3c7;
 		}
 		.options {
 			margin-top: 14px;
@@ -216,9 +221,9 @@
 		}
 		.option {
 			border: 1px solid var(--border);
-			background: #fff;
+			background: #fffdf9;
 			color: var(--text);
-			border-radius: 11px;
+			border-radius: 14px 12px 16px 11px;
 			padding: 12px 13px;
 			font-size: 14px;
 			text-align: left;
@@ -240,26 +245,29 @@
 			min-width: 22px;
 			padding-right: 4px;
 			font-weight: 900;
-			color: #7a1022;
+			color: #8f5143;
 		}
-		.option.is-correct { border-color: #7fce99; background: #effcf3; color: var(--ok); }
-		.option.is-wrong { border-color: #e79b9b; background: #fff2f2; color: var(--bad); }
+		.option.is-correct { border-color: #b9d0a4; background: #f2f8eb; color: var(--ok); }
+		.option.is-wrong { border-color: #dcc4bb; background: #fbf1ee; color: var(--bad); }
 		.feedback {
 			margin-top: 10px;
 			font-size: 13px;
 			min-height: 20px;
 		}
-		.feedback.ok { color: var(--ok); }
-		.feedback.bad { color: var(--bad); }
-		.actions {
-			margin-top: 14px;
-			display: flex;
-			gap: 8px;
-			flex-wrap: wrap;
-		}
+			.feedback.ok { color: var(--ok); }
+			.feedback.bad { color: var(--bad); }
+			.actions {
+				margin-top: 14px;
+				display: flex;
+				gap: 8px;
+				flex-wrap: wrap;
+			}
+			.actions button {
+				flex: 1 1 160px;
+			}
 		button {
-			border: 0;
-			border-radius: 10px;
+			border: 1px solid #c9b09f;
+			border-radius: 14px 12px 16px 11px;
 			padding: 10px 14px;
 			font-size: 13px;
 			font-weight: 700;
@@ -276,15 +284,15 @@
 			transform: none !important;
 			box-shadow: none !important;
 		}
-		.btn-primary { background: var(--primary); color: #fff; }
-		.btn-primary:hover { background: var(--primary-strong); transform: translateY(-1px); box-shadow: 0 8px 16px rgba(52, 12, 21, 0.25); }
-		.btn-soft { background: var(--primary-soft); color: #651124; border: 1px solid #dcbec5; }
-		.btn-soft:hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(48, 18, 26, 0.16); }
+		.btn-primary { background: var(--primary); color: #fffaf3; border-color: #9d6652; }
+		.btn-primary:hover { background: var(--primary-strong); transform: translateY(-1px); box-shadow: 0 8px 16px rgba(123, 89, 70, 0.2); }
+		.btn-soft { background: var(--primary-soft); color: #76584e; border: 1px solid #dbc8b7; }
+		.btn-soft:hover { transform: translateY(-1px); box-shadow: 0 5px 12px rgba(88, 63, 50, 0.12); }
 		.summary {
 			margin-top: 14px;
 			border: 1px solid var(--border);
-			border-radius: 12px;
-			background: #fcfafb;
+			border-radius: 16px 14px 18px 13px;
+			background: #fffdf9;
 			padding: 14px;
 			display: none;
 			position: relative;
@@ -299,8 +307,8 @@
 			display: inline-block;
 			padding: 4px 10px;
 			border-radius: 999px;
-			background: #f2e8ea;
-			color: #651124;
+			background: #f1e7da;
+			color: #7d5a4d;
 			font-size: 12px;
 			font-weight: 700;
 		}
@@ -309,35 +317,35 @@
 			font-size: 34px;
 			font-weight: 900;
 			line-height: 1;
-			color: var(--primary);
+			color: #8f5143;
 		}
-		.summary-comment {
-			margin-top: 8px;
-			font-size: 14px;
-			font-weight: 700;
-			color: #5f3b43;
-		}
-		.summary-metrics {
-			margin-top: 10px;
-			display: grid;
-			grid-template-columns: repeat(3, minmax(0, 1fr));
-			gap: 8px;
-		}
+			.summary-comment {
+				margin-top: 8px;
+				font-size: 14px;
+				font-weight: 700;
+			color: #6e584f;
+			}
+			.summary-metrics {
+				margin-top: 10px;
+				display: grid;
+				grid-template-columns: repeat(3, minmax(0, 1fr));
+				gap: 8px;
+			}
 		.summary-metric {
-			border: 1px solid #e3d6da;
-			border-radius: 10px;
-			background: #fff;
+			border: 1px solid #e1d2c4;
+			border-radius: 14px 12px 16px 11px;
+			background: #fffaf5;
 			padding: 8px 10px;
 		}
 		.summary-metric-label {
 			font-size: 11px;
-			color: #7b5961;
+			color: #847067;
 		}
 		.summary-metric-value {
 			margin-top: 3px;
 			font-size: 16px;
 			font-weight: 800;
-			color: #4b1e28;
+			color: #58433a;
 		}
 		#summaryCelebrate {
 			position: absolute;
@@ -370,15 +378,15 @@
 		.answer-flash-card {
 			min-width: min(90vw, 520px);
 			max-width: min(92vw, 760px);
-			border-radius: 14px;
-			border: 1px solid #cdb5bc;
-			background: #fff;
-			color: #261419;
+			border-radius: 18px 15px 20px 16px;
+			border: 1px solid #d8c7b8;
+			background: #fffaf4;
+			color: #34251f;
 			font-size: 17px;
 			font-weight: 800;
 			letter-spacing: 0.2px;
 			text-align: center;
-			box-shadow: 0 12px 24px rgba(21, 10, 13, 0.24);
+			box-shadow: 0 10px 20px rgba(88, 63, 50, 0.18);
 			padding: 14px 18px;
 		}
 		#answerFlash.show {
@@ -387,18 +395,18 @@
 		#answerFlash .status {
 			font-size: 12px;
 			font-weight: 800;
-			color: #6b4a52;
+			color: #82695f;
 			margin-bottom: 8px;
 			text-transform: uppercase;
 			letter-spacing: 0.8px;
 		}
 		#answerFlash .word {
-			color: #7a1022;
+			color: #8f5143;
 			font-weight: 900;
 			padding-right: 8px;
 		}
 		#answerFlash .meaning {
-			color: #3a2328;
+			color: #4f3a33;
 			font-weight: 700;
 		}
 		@keyframes answerFlashInOut {
@@ -477,13 +485,31 @@
 			75% { transform: translateX(-4px); }
 			100% { transform: translateX(0); }
 		}
-		@media (prefers-reduced-motion: reduce) {
-			* {
-				animation: none !important;
-				transition: none !important;
+			@media (prefers-reduced-motion: reduce) {
+				* {
+					animation: none !important;
+					transition: none !important;
+				}
 			}
-		}
-	</style>
+			@media (max-width: 720px) {
+				.head {
+					align-items: flex-start;
+				}
+
+				.summary-metrics {
+					grid-template-columns: 1fr;
+				}
+
+				.summary-score {
+					font-size: 30px;
+				}
+
+				#answerFlash {
+					top: 16vh;
+					padding: 0 12px;
+				}
+			}
+		</style>
 </head>
 <body>
 	<div class="wrap">
@@ -491,16 +517,16 @@
 		<div class="head">
 			<div>
 				<h1 class="title" id="title">抽卡練習模式</h1>
-				<p class="sub" id="subtitle">隨機題型，最多 15 題一輪</p>
+				<p class="sub" id="subtitle">混合題型挑戰，每輪 10 題，每題 10 分。</p>
 			</div>
-			<button class="btn-soft" id="closeBtn">關閉</button>
+			<button class="btn-soft" id="closeBtn">關閉分頁</button>
 		</div>
 
 		<div class="stats">
-			<span class="chip" id="progressChip">0 / 0</span>
-			<span class="chip" id="scoreChip">正確 0</span>
-			<span class="chip" id="streakChip">🔥 x0</span>
-			<span class="chip" id="challengeChip">⚔️ Challenge</span>
+			<span class="chip" id="progressChip">🎯 0/10 題</span>
+			<span class="chip" id="scoreChip">🏆 0 分</span>
+			<span class="chip" id="streakChip">🔥 x0 連擊</span>
+			<span class="chip" id="challengeChip">⚔️ 連擊加時</span>
 		</div>
 		<div class="progress-wrap">
 			<div class="progress-track">
@@ -523,21 +549,21 @@
 
 		<div class="summary" id="summary">
 			<h3 id="summaryTitle">本輪小結</h3>
-			<div class="summary-badge" id="summaryBadge">Round Complete</div>
+			<div class="summary-badge" id="summaryBadge">完成挑戰</div>
 			<div class="summary-score" id="summaryBigScore">0 / 100</div>
 			<div class="summary-comment" id="summaryComment"></div>
 			<div id="summaryText"></div>
 			<div class="summary-metrics">
 				<div class="summary-metric">
-					<div class="summary-metric-label" id="summaryAccuracyLabel">Accuracy</div>
+					<div class="summary-metric-label" id="summaryAccuracyLabel">正確率</div>
 					<div class="summary-metric-value" id="summaryAccuracy">0%</div>
 				</div>
 				<div class="summary-metric">
-					<div class="summary-metric-label" id="summaryCorrectLabel">Correct</div>
+					<div class="summary-metric-label" id="summaryCorrectLabel">答對題數</div>
 					<div class="summary-metric-value" id="summaryCorrect">0/0</div>
 				</div>
 				<div class="summary-metric">
-					<div class="summary-metric-label" id="summaryBestStreakLabel">Best Streak</div>
+					<div class="summary-metric-label" id="summaryBestStreakLabel">最高連對</div>
 					<div class="summary-metric-value" id="summaryBestStreak">x0</div>
 				</div>
 			</div>

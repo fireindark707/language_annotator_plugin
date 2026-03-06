@@ -15,20 +15,29 @@
 				pointer-events: none;
 			}
 			.la-toast {
-				background: #2a1014;
-				color: #ffffff;
-				border-radius: 10px;
-				padding: 10px 12px;
+				background: #fffaf3;
+				color: #3a2b24;
+				border: 1px solid #dccabd;
+				border-radius: 16px 14px 18px 13px;
+				padding: 11px 13px;
 				font-size: 12px;
 				font-weight: 700;
-				box-shadow: 0 10px 26px rgba(33, 16, 18, 0.28);
-				animation: laToastIn 150ms ease-out;
+				box-shadow: 0 10px 22px rgba(88, 63, 50, 0.14);
+				animation: laToastIn 180ms ease-out;
 				max-width: min(320px, 82vw);
 			}
-			.la-toast.success { background: #1d7f47; }
-			.la-toast.error { background: #9b1c31; }
+			.la-toast.success {
+				background: #f2f7ea;
+				border-color: #cfddbf;
+				color: #5b7449;
+			}
+			.la-toast.error {
+				background: #fbf1ee;
+				border-color: #dfc9c0;
+				color: #946456;
+			}
 			@keyframes laToastIn {
-				from { opacity: 0; transform: translateY(6px); }
+				from { opacity: 0; transform: translateY(8px) scale(0.985); }
 				to { opacity: 1; transform: translateY(0); }
 			}
 		`;
