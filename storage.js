@@ -143,6 +143,95 @@
 		return result;
 	}
 
+	function normalizeExampleForMerge(entry) {
+		if (typeof entry === "string") {
+			const text = entry.trim();
+			return text ? { text, pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0, sourceUrl: "", capturedAt: 0 } : null;
+		}
+		if (!entry || typeof entry !== "object") return null;
+		const text = typeof entry.text === "string" ? entry.text.trim() : "";
+		if (!text) return null;
+		return {
+			text: text,
+			pinned: !!entry.pinned,
+			createdAt: typeof entry.createdAt === "number" ? entry.createdAt : 0,
+			pinnedAt: typeof entry.pinnedAt === "number" ? entry.pinnedAt : 0,
+			translation: typeof entry.translation === "string" ? entry.translation : "",
+			translatedAt: typeof entry.translatedAt === "number" ? entry.translatedAt : 0,
+			sourceUrl: typeof entry.sourceUrl === "string" ? entry.sourceUrl : "",
+			capturedAt: typeof entry.capturedAt === "number" ? entry.capturedAt : 0,
+		};
+	}
+
+	function mergeExamples(localExamples, cloudExamples) {
+		const merged = [];
+		const indexMap = new Map();
+		const pushOrMerge = (raw) => {
+			const item = normalizeExampleForMerge(raw);
+			if (!item) return;
+			const key = item.text.toLowerCase();
+			if (!indexMap.has(key)) {
+				indexMap.set(key, merged.length);
+				merged.push(item);
+				return;
+			}
+			const idx = indexMap.get(key);
+			const base = merged[idx];
+			if (!base.sourceUrl && item.sourceUrl) base.sourceUrl = item.sourceUrl;
+			if (!base.capturedAt && item.capturedAt) base.capturedAt = item.capturedAt;
+			if (!base.createdAt && item.createdAt) base.createdAt = item.createdAt;
+			if (!base.translation && item.translation) base.translation = item.translation;
+			if (!base.translatedAt && item.translatedAt) base.translatedAt = item.translatedAt;
+			base.pinned = base.pinned || item.pinned;
+			base.pinnedAt = Math.max(base.pinnedAt || 0, item.pinnedAt || 0);
+		};
+		(Array.isArray(localExamples) ? localExamples : []).forEach(pushOrMerge);
+		(Array.isArray(cloudExamples) ? cloudExamples : []).forEach(pushOrMerge);
+		return merged;
+	}
+
+	function mergeWordRecord(localData, cloudData) {
+		const local = localData && typeof localData === "object" ? localData : {};
+		const cloud = cloudData && typeof cloudData === "object" ? cloudData : {};
+		const localMeaning = typeof local.meaning === "string" ? local.meaning : "";
+		const cloudMeaning = typeof cloud.meaning === "string" ? cloud.meaning : "";
+		const mergedExamples = mergeExamples(local.examples, cloud.examples);
+		const mergedPageKeys = Array.from(new Set(
+			[]
+				.concat(Array.isArray(local.encounterPageKeys) ? local.encounterPageKeys : [])
+				.concat(Array.isArray(cloud.encounterPageKeys) ? cloud.encounterPageKeys : [])
+				.filter((x) => typeof x === "string" && x)
+		));
+		const mergedEncounter = Math.max(
+			typeof local.encounterCount === "number" ? local.encounterCount : 0,
+			typeof cloud.encounterCount === "number" ? cloud.encounterCount : 0,
+			mergedExamples.length
+		);
+		const mergedPageCount = Math.max(
+			typeof local.pageCount === "number" ? local.pageCount : 0,
+			typeof cloud.pageCount === "number" ? cloud.pageCount : 0,
+			mergedPageKeys.length
+		);
+		return {
+			meaning: localMeaning || cloudMeaning,
+			learned: !!local.learned || !!cloud.learned,
+			createdAt: Math.min(
+				typeof local.createdAt === "number" && local.createdAt > 0 ? local.createdAt : Number.MAX_SAFE_INTEGER,
+				typeof cloud.createdAt === "number" && cloud.createdAt > 0 ? cloud.createdAt : Number.MAX_SAFE_INTEGER
+			) === Number.MAX_SAFE_INTEGER
+				? 0
+				: Math.min(
+					typeof local.createdAt === "number" && local.createdAt > 0 ? local.createdAt : Number.MAX_SAFE_INTEGER,
+					typeof cloud.createdAt === "number" && cloud.createdAt > 0 ? cloud.createdAt : Number.MAX_SAFE_INTEGER
+				),
+			dictionary: local.dictionary || cloud.dictionary || null,
+			examples: mergedExamples,
+			encounterCount: mergedEncounter,
+			pageCount: mergedPageCount,
+			encounterPageKeys: mergedPageKeys.slice(-300),
+		};
+	}
+
 	function detectBrowserUiLanguage() {
 		const rawLang =
 			(typeof navigator !== "undefined" && navigator.language
@@ -191,7 +280,7 @@
 			oldMeta && Array.isArray(oldMeta.shards) ? oldMeta.shards : [];
 
 		let lastError = null;
-		for (let level = 0; level <= 3; level += 1) {
+		for (let level = 0; level <= 1; level += 1) {
 			try {
 				const compacted = compactWordsForSync(words, level);
 				const shards = splitWordsToShards(compacted);
@@ -217,12 +306,64 @@
 				if (level > 0) {
 					console.warn(`Word sync used compact level ${level} due to sync quota.`);
 				}
-				return;
+				return { compactLevel: level, droppedWords: 0 };
 			} catch (error) {
 				lastError = error;
 			}
 		}
+
+		// If sync quota is still exceeded, drop oldest words in sync payload only.
+		const entries = Object.entries(words || {});
+		entries.sort((a, b) => {
+			const at = a[1] && typeof a[1].createdAt === "number" ? a[1].createdAt : 0;
+			const bt = b[1] && typeof b[1].createdAt === "number" ? b[1].createdAt : 0;
+			return at - bt;
+		});
+		let dropped = 0;
+		for (let keepFrom = 1; keepFrom < entries.length; keepFrom += 1) {
+			const trimmed = {};
+			for (let i = keepFrom; i < entries.length; i += 1) {
+				trimmed[entries[i][0]] = entries[i][1];
+			}
+			for (let level = 0; level <= 1; level += 1) {
+				try {
+					const compacted = compactWordsForSync(trimmed, level);
+					const shards = splitWordsToShards(compacted);
+					const payload = {};
+					const ids = [];
+					for (let i = 0; i < shards.length; i += 1) {
+						ids.push(i);
+						payload[`${WORDS_SHARD_PREFIX}${i}`] = shards[i];
+					}
+					payload[WORDS_META_KEY] = {
+						version: VERSION,
+						shards: ids,
+						updatedAt: Date.now(),
+						sync_compact_level: level,
+					};
+					const staleKeys = oldShardIds
+						.filter((id) => !ids.includes(id))
+						.map((id) => `${WORDS_SHARD_PREFIX}${id}`);
+					await setToArea(chrome.storage.sync, payload);
+					await removeFromArea(chrome.storage.sync, [LEGACY_WORDS_KEY].concat(staleKeys));
+					dropped = keepFrom;
+					console.warn(`Word sync dropped ${dropped} oldest words to fit sync quota.`);
+					return { compactLevel: level, droppedWords: dropped };
+				} catch (error) {
+					lastError = error;
+				}
+			}
+		}
 		throw lastError || new Error("Failed to write words to sync.");
+	}
+
+	async function writeWordsToSyncSafe(words) {
+		try {
+			return await writeWordsToSync(words);
+		} catch (error) {
+			console.error("Sync write failed after compaction and trimming:", error);
+			return { compactLevel: -1, droppedWords: 0, failed: true };
+		}
 	}
 
 	async function hydrateLocalFromSyncIfNeeded() {
@@ -372,7 +513,7 @@
 
 		async saveWords(words) {
 			await setToArea(chrome.storage.local, { [LEGACY_WORDS_KEY]: words });
-			await writeWordsToSync(words);
+			await writeWordsToSyncSafe(words);
 		},
 
 		async getSourceLang() {
@@ -487,6 +628,36 @@
 				.filter((d) => d.length > 0);
 			await setToArea(chrome.storage.local, { [EXCLUDED_DOMAINS_KEY]: safeDomains });
 			await setToArea(chrome.storage.sync, { [EXCLUDED_DOMAINS_KEY]: safeDomains });
+		},
+
+		async syncFromCloud() {
+			await this.init();
+			const localWords = await this.getWords();
+			// Push first, then pull and merge.
+			await writeWordsToSyncSafe(localWords);
+			const cloudWords = await readWordsFromSync();
+			const merged = Object.assign({}, localWords);
+			let mergedWords = 0;
+			const cloudEntries = Object.entries(cloudWords || {});
+			for (let i = 0; i < cloudEntries.length; i += 1) {
+				const word = cloudEntries[i][0];
+				const cloudData = cloudEntries[i][1];
+				const localData = merged[word];
+				if (!localData) {
+					merged[word] = cloudData;
+					mergedWords += 1;
+					continue;
+				}
+				const next = mergeWordRecord(localData, cloudData);
+				merged[word] = next;
+				mergedWords += 1;
+			}
+			await this.saveWords(merged);
+			return {
+				cloudWords: cloudEntries.length,
+				processedWords: mergedWords,
+				totalWords: Object.keys(merged).length,
+			};
 		},
 	};
 

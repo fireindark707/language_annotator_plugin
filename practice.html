@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Practice</title>
+	<style>
+		:root {
+			--bg: #fff7f8;
+			--card: #ffffff;
+			--text: #2a1014;
+			--muted: #7d4a52;
+			--primary: #d91f26;
+			--primary-strong: #b9161d;
+			--ok: #1d7f47;
+			--bad: #aa2e2e;
+			--border: #f1cfd3;
+		}
+		* { box-sizing: border-box; }
+		body {
+			margin: 0;
+			padding: 18px;
+			background: var(--bg);
+			color: var(--text);
+			font-family: "Manrope", "Noto Sans TC", "SF Pro Text", sans-serif;
+		}
+		.wrap {
+			max-width: 880px;
+			margin: 0 auto;
+			background: var(--card);
+			border: 1px solid var(--border);
+			border-radius: 14px;
+			padding: 18px;
+			box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+			position: relative;
+			overflow: hidden;
+		}
+		.head {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 10px;
+		}
+		.title {
+			margin: 0;
+			font-size: 22px;
+			font-weight: 800;
+		}
+		.sub {
+			margin: 6px 0 0;
+			color: var(--muted);
+			font-size: 13px;
+		}
+		.stats {
+			margin-top: 12px;
+			display: flex;
+			gap: 8px;
+			flex-wrap: wrap;
+		}
+		.chip {
+			font-size: 12px;
+			border: 1px solid var(--border);
+			border-radius: 999px;
+			padding: 5px 10px;
+			color: #6a3942;
+			background: #fff;
+		}
+		.card {
+			margin-top: 14px;
+			border: 1px solid var(--border);
+			border-radius: 12px;
+			padding: 16px;
+			background: #fff;
+			transition: transform 260ms cubic-bezier(.2,.8,.2,1), box-shadow 260ms cubic-bezier(.2,.8,.2,1), border-color 260ms ease;
+		}
+		.card.is-correct {
+			border-color: #bde7ca;
+			box-shadow: 0 0 0 3px rgba(29, 127, 71, 0.14);
+			animation: popYes 520ms cubic-bezier(.2,.8,.2,1);
+		}
+		.card.is-wrong {
+			border-color: #f1c2c2;
+			box-shadow: 0 0 0 3px rgba(170, 46, 46, 0.14);
+			animation: shakeNo 440ms cubic-bezier(.2,.8,.2,1);
+		}
+		@keyframes popYes {
+			0% { transform: scale(1); }
+			30% { transform: scale(1.035); }
+			100% { transform: scale(1); }
+		}
+		@keyframes shakeNo {
+			0% { transform: translateX(0); }
+			25% { transform: translateX(-6px); }
+			50% { transform: translateX(6px); }
+			75% { transform: translateX(-4px); }
+			100% { transform: translateX(0); }
+		}
+		.prompt {
+			font-size: 13px;
+			color: var(--muted);
+		}
+		.stimulus {
+			margin-top: 8px;
+			font-size: 22px;
+			font-weight: 800;
+			line-height: 1.35;
+		}
+		.options {
+			margin-top: 14px;
+			display: grid;
+			gap: 8px;
+			grid-template-columns: 1fr;
+		}
+		.option {
+			border: 1px solid var(--border);
+			background: #fff;
+			color: var(--text);
+			border-radius: 10px;
+			padding: 11px 12px;
+			font-size: 14px;
+			text-align: left;
+			cursor: pointer;
+		}
+		.option:hover { border-color: #e69aa3; }
+		.option.is-correct { border-color: #7fce99; background: #effcf3; color: var(--ok); }
+		.option.is-wrong { border-color: #e79b9b; background: #fff2f2; color: var(--bad); }
+		.feedback {
+			margin-top: 10px;
+			font-size: 13px;
+			min-height: 20px;
+		}
+		.feedback.ok { color: var(--ok); }
+		.feedback.bad { color: var(--bad); }
+		.actions {
+			margin-top: 14px;
+			display: flex;
+			gap: 8px;
+			flex-wrap: wrap;
+		}
+		button {
+			border: 0;
+			border-radius: 10px;
+			padding: 10px 14px;
+			font-size: 13px;
+			font-weight: 700;
+			cursor: pointer;
+		}
+		.btn-primary { background: var(--primary); color: #fff; }
+		.btn-primary:hover { background: var(--primary-strong); }
+		.btn-soft { background: #ffe9ec; color: #8f1f2d; }
+		.summary {
+			margin-top: 14px;
+			border: 1px solid var(--border);
+			border-radius: 12px;
+			background: #fff;
+			padding: 14px;
+			display: none;
+		}
+		.summary h3 {
+			margin: 0 0 8px;
+			font-size: 18px;
+			font-weight: 800;
+		}
+		#celebrate {
+			position: absolute;
+			inset: 0;
+			pointer-events: none;
+		}
+		.spark {
+			position: absolute;
+			width: 10px;
+			height: 10px;
+			border-radius: 50%;
+			opacity: 0;
+			animation: burst 700ms ease-out forwards;
+		}
+		@keyframes burst {
+			0% { transform: translate(0,0) scale(0.8); opacity: 0.9; }
+			100% { transform: translate(var(--tx), var(--ty)) scale(0.2); opacity: 0; }
+		}
+	</style>
+</head>
+<body>
+	<div class="wrap">
+		<div id="celebrate"></div>
+		<div class="head">
+			<div>
+				<h1 class="title" id="title">抽卡練習模式</h1>
+				<p class="sub" id="subtitle">隨機題型，最多 15 題一輪</p>
+			</div>
+			<button class="btn-soft" id="closeBtn">關閉</button>
+		</div>
+
+		<div class="stats">
+			<span class="chip" id="progressChip">0 / 0</span>
+			<span class="chip" id="scoreChip">正確 0</span>
+			<span class="chip" id="modeChip">模式 -</span>
+		</div>
+
+		<div class="card" id="card">
+			<div class="prompt" id="prompt"></div>
+			<div class="stimulus" id="stimulus"></div>
+			<div class="options" id="options"></div>
+			<div class="feedback" id="feedback"></div>
+			<div class="actions">
+				<button class="btn-primary" id="nextBtn" style="display:none;">下一題</button>
+			</div>
+		</div>
+
+		<div class="summary" id="summary">
+			<h3 id="summaryTitle">本輪小結</h3>
+			<div id="summaryText"></div>
+			<div class="actions">
+				<button class="btn-primary" id="nextRoundBtn">下一輪</button>
+			</div>
+		</div>
+	</div>
+
+	<script src="storage.js"></script>
+	<script src="ui-i18n.js"></script>
+	<script src="practice.js"></script>
+</body>
+</html>

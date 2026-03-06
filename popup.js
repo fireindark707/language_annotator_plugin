@@ -28,6 +28,7 @@ function getPageCount(wordData) {
 
 const toggleViewBtn = document.getElementById("toggleViewBtn");
 const fullscreenBtn = document.getElementById("fullscreenBtn");
+const practiceBtn = document.getElementById("practiceBtn");
 const sortModeSelect = document.getElementById("sortMode");
 const wordsList = document.getElementById("wordsList");
 const wordStats = document.getElementById("wordStats");
@@ -55,6 +56,9 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	fullscreenBtn.addEventListener("click", function () {
 		chrome.tabs.create({ url: chrome.runtime.getURL("words.html") });
+	});
+	practiceBtn.addEventListener("click", function () {
+		chrome.tabs.create({ url: chrome.runtime.getURL("practice.html") });
 	});
 
 	sortModeSelect.addEventListener("change", function () {
@@ -454,6 +458,7 @@ function applyUiText() {
 	document.getElementById("settingsLink").textContent = t("settings");
 	toggleViewBtn.textContent = showAllWords ? t("show_unlearned") : t("show_all");
 	fullscreenBtn.textContent = t("fullscreen");
+	practiceBtn.textContent = t("practice_mode");
 	autoLangHint.textContent = t("auto_hint");
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");

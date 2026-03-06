@@ -12,6 +12,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	const currentLang = document.getElementById("currentLang");
 	const saveBtn = document.getElementById("save");
 	const saveStatus = document.getElementById("saveStatus");
+	const syncBtn = document.getElementById("syncBtn");
 	const exportBtn = document.getElementById("exportBtn");
 	const importBtn = document.getElementById("importBtn");
 	const importFile = document.getElementById("importFile");
@@ -99,6 +100,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		document.getElementById("excludedDomainsDesc").textContent = t(uiLang, "excluded_domains_desc");
 		addExcludedDomainBtn.textContent = t(uiLang, "add");
 		saveBtn.textContent = t(uiLang, "save");
+		syncBtn.textContent = t(uiLang, "sync_now");
 		exportBtn.textContent = t(uiLang, "export");
 		importBtn.textContent = t(uiLang, "import");
 	}
@@ -192,6 +194,24 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	saveBtn.addEventListener("click", function () {
 		persistSettings(true);
+	});
+
+	syncBtn.addEventListener("click", function () {
+		const uiLanguage = uiLanguageSelect.value || "en";
+		syncBtn.disabled = true;
+		syncBtn.textContent = t(uiLanguage, "syncing");
+		WordStorage.syncFromCloud().then(function () {
+			UiToast.show(t(uiLanguage, "synced"), "success");
+			saveStatus.textContent = t(uiLanguage, "synced");
+			applyUiLanguage(uiLanguage);
+		}).catch(function (error) {
+			console.error("Manual sync failed:", error);
+			UiToast.show(t(uiLanguage, "sync_failed"), "error");
+			saveStatus.textContent = t(uiLanguage, "sync_failed");
+			applyUiLanguage(uiLanguage);
+		}).finally(function () {
+			syncBtn.disabled = false;
+		});
 	});
 
 	exportBtn.addEventListener("click", function () {
