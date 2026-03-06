@@ -15,6 +15,7 @@ const CHOICE_COUNT = 4;
 const titleEl = document.getElementById("title");
 const subtitleEl = document.getElementById("subtitle");
 const closeBtn = document.getElementById("closeBtn");
+const helpBtn = document.getElementById("helpBtn");
 const progressChip = document.getElementById("progressChip");
 const scoreChip = document.getElementById("scoreChip");
 const streakChip = document.getElementById("streakChip");
@@ -48,6 +49,7 @@ const answerFlashEl = document.getElementById("answerFlash");
 const nextRoundBtn = document.getElementById("nextRoundBtn");
 const celebrateEl = document.getElementById("celebrate");
 let answerFlashTimer = null;
+let practiceTourAttempted = false;
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
@@ -59,6 +61,26 @@ function tf(key, vars) {
 		text = text.replaceAll(`{${k}}`, String(vars[k]));
 	});
 	return text;
+}
+
+function startPracticeTour(force) {
+	if (!globalThis.UiTour) return;
+	const run = force ? UiTour.start : UiTour.maybeStartOnce;
+	run({
+		storageKey: "practice_v1",
+		lang: uiLang,
+		steps: UiTour.getSteps(uiLang, "practice"),
+	});
+}
+
+function startPracticeNeedWordsTour(force) {
+	if (!globalThis.UiTour) return;
+	const run = force ? UiTour.start : UiTour.maybeStartOnce;
+	run({
+		storageKey: "practice_need_words_v1",
+		lang: uiLang,
+		steps: UiTour.getSteps(uiLang, "practiceNeedWords"),
+	});
 }
 
 function isZhUi() {
@@ -380,6 +402,10 @@ function renderQuestion() {
 	}
 	const q = deck[qIndex];
 	if (!q) return finishRound();
+	if (!practiceTourAttempted) {
+		practiceTourAttempted = true;
+		window.setTimeout(() => startPracticeTour(false), 220);
+	}
 	answered = false;
 	cardEl.classList.remove("is-correct", "is-wrong");
 	cardEl.classList.remove("is-entering");
@@ -519,6 +545,10 @@ function init() {
 		document.documentElement.lang = UiI18n.langAttr(uiLang);
 		document.documentElement.dir = UiI18n.dir(uiLang);
 		document.title = t("practice_mode");
+		if (helpBtn && globalThis.UiTour) {
+			helpBtn.title = UiTour.getLabel(uiLang, "replay");
+			helpBtn.setAttribute("aria-label", UiTour.getLabel(uiLang, "replay"));
+		}
 		const words = Object.entries(wordsObj || {})
 			.map(([word, data]) => ({
 				word,
@@ -555,6 +585,10 @@ function init() {
 			progressBar.style.width = "0%";
 			nextBtn.style.display = "none";
 			markLearnedBtn.style.display = "none";
+			if (!practiceTourAttempted) {
+				practiceTourAttempted = true;
+				window.setTimeout(() => startPracticeNeedWordsTour(false), 220);
+			}
 			return;
 		}
 
@@ -613,5 +647,21 @@ document.addEventListener("keydown", (event) => {
 	if (target) target.click();
 });
 closeBtn.addEventListener("click", () => window.close());
+if (helpBtn) {
+	helpBtn.addEventListener("click", () => {
+		if (!globalThis.UiTour) return;
+		const hasEnoughWords = Array.isArray(allWords) && allWords.length >= CHOICE_COUNT;
+		const storageKey = hasEnoughWords ? "practice_v1" : "practice_need_words_v1";
+		UiTour.reset(storageKey).then(() => {
+			window.setTimeout(() => {
+				if (hasEnoughWords) {
+					startPracticeTour(true);
+					return;
+				}
+				startPracticeNeedWordsTour(true);
+			}, 40);
+		});
+	});
+}
 
 document.addEventListener("DOMContentLoaded", init);

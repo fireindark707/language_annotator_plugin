@@ -76,6 +76,21 @@
             margin-right: 6px;
         }
 
+        .help-btn {
+            width: 28px;
+            min-width: 28px;
+            height: 28px;
+            min-height: 28px;
+            padding: 0;
+            border-radius: 999px;
+            border: 1px solid #dccabd;
+            background: #fffaf5;
+            color: #7d5547;
+            font-size: 13px;
+            font-weight: 800;
+            line-height: 1;
+        }
+
         .settings-link:focus-visible {
             outline: 2px solid #e86973;
             outline-offset: 3px;
@@ -656,6 +671,7 @@
                 <p class="sub" id="wordsSubtitle">完整查看與管理所有已儲存單字</p>
             </div>
             <div class="top-actions">
+                <button class="help-btn" id="helpBtn" type="button" aria-label="Help">?</button>
                 <a class="settings-link" id="settingsLink" href="options.html">設定</a>
                 <button class="btn-soft" id="closeBtn">關閉分頁</button>
             </div>
@@ -702,6 +718,7 @@
 
     <script src="storage.js"></script>
     <script src="ui-i18n.js"></script>
+    <script src="ui-tour.js"></script>
     <script src="ui-toast.js"></script>
     <script src="words.js"></script>
 </body>

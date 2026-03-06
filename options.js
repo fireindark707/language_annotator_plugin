@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	const saveBtn = document.getElementById("save");
 	const saveStatus = document.getElementById("saveStatus");
 	const syncBtn = document.getElementById("syncBtn");
+	const helpBtn = document.getElementById("helpBtn");
 	const exportBtn = document.getElementById("exportBtn");
 	const importBtn = document.getElementById("importBtn");
 	const importFile = document.getElementById("importFile");
@@ -25,6 +26,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	function t(uiLang, key) {
 		return UiI18n.t(uiLang, key);
+	}
+
+	function startOptionsTour(force) {
+		if (!globalThis.UiTour) return;
+		const run = force ? UiTour.start : UiTour.maybeStartOnce;
+		run({
+			storageKey: "options_v1",
+			lang: uiLanguageSelect.value || "en",
+			steps: UiTour.getSteps(uiLanguageSelect.value || "en", "options"),
+		});
 	}
 
 	function renderCurrentLabel() {
@@ -108,6 +119,10 @@ document.addEventListener("DOMContentLoaded", function () {
 		syncBtn.textContent = t(uiLang, "sync_now");
 		exportBtn.textContent = t(uiLang, "export");
 		importBtn.textContent = t(uiLang, "import");
+		if (helpBtn && globalThis.UiTour) {
+			helpBtn.title = UiTour.getLabel(uiLang, "replay");
+			helpBtn.setAttribute("aria-label", UiTour.getLabel(uiLang, "replay"));
+		}
 	}
 
 	function persistSettings(showToast) {
@@ -158,6 +173,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		renderCurrentLabel();
 		renderDictionaryLookupVisibility();
 		renderExcludedDomains();
+		window.setTimeout(() => startOptionsTour(false), 200);
 	}).catch(function (error) {
 		console.error("Failed to load options:", error);
 		uiLanguageSelect.value = "zh-TW";
@@ -167,6 +183,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		renderCurrentLabel();
 		renderDictionaryLookupVisibility();
 		renderExcludedDomains();
+		window.setTimeout(() => startOptionsTour(false), 200);
 	});
 
 	sourceLangSelect.addEventListener("change", function () {
@@ -263,4 +280,15 @@ document.addEventListener("DOMContentLoaded", function () {
 		};
 		reader.readAsText(file);
 	});
+
+	if (helpBtn) {
+		helpBtn.addEventListener("click", function () {
+			if (!globalThis.UiTour) return;
+			UiTour.reset("options_v1").then(function () {
+				window.setTimeout(function () {
+					startOptionsTour(true);
+				}, 40);
+			});
+		});
+	}
 });

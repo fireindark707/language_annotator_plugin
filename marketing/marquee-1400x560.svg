@@ -1,0 +1,49 @@
+<svg width="1400" height="560" viewBox="0 0 1400 560" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="560" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7F0E7"/>
+      <stop offset="1" stop-color="#EADDCF"/>
+    </linearGradient>
+    <filter id="shadow" x="0" y="0" width="1400" height="560" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="12" stdDeviation="20" flood-color="#5C4338" flood-opacity="0.12"/>
+    </filter>
+  </defs>
+  <rect width="1400" height="560" fill="url(#bg)"/>
+  <circle cx="1240" cy="94" r="180" fill="#F4E8DB"/>
+  <circle cx="1130" cy="490" r="160" fill="#F0E4D8"/>
+
+  <text x="92" y="168" fill="#372620" font-size="62" font-weight="700" font-family="Georgia, 'Noto Serif', serif">Build vocabulary while you read.</text>
+  <text x="92" y="220" fill="#7A665C" font-size="24" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">Highlight saved words, translate selected text, collect examples,</text>
+  <text x="92" y="254" fill="#7A665C" font-size="24" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">and review everything in one calm workspace.</text>
+
+  <g>
+    <rect x="92" y="306" width="180" height="46" rx="22" fill="#BC7057" stroke="#A45C49"/>
+    <text x="138" y="336" fill="#FFF9F3" font-size="20" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Practice Mode</text>
+    <rect x="286" y="306" width="176" height="46" rx="22" fill="#FFF8F1" stroke="#DECFC1"/>
+    <text x="331" y="336" fill="#7B5F53" font-size="20" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Example Bank</text>
+    <rect x="476" y="306" width="162" height="46" rx="22" fill="#FFF8F1" stroke="#DECFC1"/>
+    <text x="526" y="336" fill="#7B5F53" font-size="20" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Dictionary</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="810" y="68" width="500" height="408" rx="34" fill="#FFFAF3" stroke="#DCCABD"/>
+    <rect x="840" y="100" width="120" height="22" rx="10" fill="#EFE5D8"/>
+    <rect x="840" y="146" width="252" height="22" rx="11" fill="#35251F" opacity="0.96"/>
+    <rect x="1118" y="142" width="62" height="28" rx="14" fill="#F2E7DA" stroke="#DFCFC2"/>
+    <text x="1131" y="160" fill="#7A6156" font-size="14" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">0p · 4x</text>
+    <rect x="840" y="188" width="314" height="18" rx="9" fill="#7E6A61" opacity="0.30"/>
+    <rect x="840" y="214" width="268" height="18" rx="9" fill="#7E6A61" opacity="0.22"/>
+    <rect x="840" y="264" width="146" height="36" rx="18" fill="#EEF4E7" stroke="#D4DFC8"/>
+    <text x="874" y="287" fill="#60764C" font-size="16" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">✓ Learned</text>
+    <rect x="998" y="264" width="128" height="36" rx="18" fill="#EDF3EE" stroke="#D7E0DA"/>
+    <text x="1037" y="287" fill="#5D736D" font-size="16" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Examples</text>
+    <circle cx="1204" cy="281" r="18" fill="#FFF8F1" stroke="#DECFC1"/>
+    <text x="1194" y="287" fill="#7C5A4D" font-size="16" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">🔊</text>
+    <rect x="840" y="328" width="420" height="116" rx="22" fill="#FFFDF9" stroke="#E3D3C6"/>
+    <text x="868" y="362" fill="#4E3E36" font-size="20" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">1. Read in context and notice known words.</text>
+    <text x="868" y="394" fill="#776358" font-size="16" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">Hover to see meaning and up to 3 saved examples.</text>
+    <text x="868" y="426" fill="#776358" font-size="16" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">Collect more examples automatically over time.</text>
+  </g>
+
+  <text x="92" y="468" fill="#9B8478" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Language Annotator for Chrome & Firefox</text>
+</svg>

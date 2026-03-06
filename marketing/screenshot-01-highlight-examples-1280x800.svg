@@ -1,0 +1,31 @@
+<svg width="1280" height="800" viewBox="0 0 1280 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="800" fill="#F5EEE5"/>
+  <rect x="36" y="36" width="1208" height="728" rx="28" fill="#FFFAF3" stroke="#DCCABD"/>
+  <text x="70" y="94" fill="#372620" font-size="42" font-weight="700" font-family="Georgia, 'Noto Serif', serif">Highlight saved words and learn from context</text>
+  <text x="70" y="130" fill="#7A665C" font-size="20" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">Hover any highlighted word to see meaning and example sentences.</text>
+
+  <rect x="70" y="174" width="840" height="520" rx="24" fill="#FFFDF9" stroke="#E2D2C5"/>
+  <rect x="100" y="214" width="320" height="18" rx="9" fill="#EDE1D4"/>
+  <rect x="100" y="270" width="736" height="22" rx="11" fill="#4B3A32" opacity="0.92"/>
+  <rect x="487" y="266" width="104" height="30" rx="8" fill="#EFE0A8"/>
+  <text x="508" y="287" fill="#4B392C" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">vulgar</text>
+  <rect x="100" y="312" width="700" height="18" rx="9" fill="#7E6A61" opacity="0.28"/>
+  <rect x="100" y="344" width="740" height="18" rx="9" fill="#7E6A61" opacity="0.22"/>
+  <rect x="100" y="414" width="682" height="18" rx="9" fill="#7E6A61" opacity="0.24"/>
+  <rect x="532" y="410" width="132" height="30" rx="8" fill="#EFE0A8"/>
+  <text x="560" y="431" fill="#4B392C" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">bermuatan</text>
+  <rect x="100" y="456" width="716" height="18" rx="9" fill="#7E6A61" opacity="0.22"/>
+
+  <rect x="860" y="244" width="330" height="286" rx="22" fill="#FFF8F2" stroke="#DCCABD"/>
+  <text x="888" y="290" fill="#8F5A4D" font-size="22" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">[Adjektiva] rude, impolite</text>
+  <text x="888" y="332" fill="#4F3D34" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">1. ... petugas menemukan foto-foto</text>
+  <rect x="1112" y="312" width="56" height="24" rx="7" fill="#EFE0A8"/>
+  <text x="1123" y="329" fill="#4B392C" font-size="14" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">vulgar</text>
+  <text x="888" y="356" fill="#7A685D" font-size="15" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">檢查中，頁面中出現了露骨照片。</text>
+  <text x="888" y="406" fill="#4F3D34" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">2. ... foto sensitif (vulgar) di ponselnya.</text>
+  <text x="888" y="430" fill="#7A685D" font-size="15" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">在移民局的手機裡發現敏感照片。</text>
+  <text x="888" y="486" fill="#9B8478" font-size="15" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">projectmultatuli.org</text>
+
+  <rect x="70" y="720" width="182" height="38" rx="19" fill="#BC7057" stroke="#A45C49"/>
+  <text x="110" y="744" fill="#FFF9F3" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Core Feature 01</text>
+</svg>

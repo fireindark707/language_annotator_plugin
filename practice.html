@@ -58,6 +58,25 @@
 			justify-content: space-between;
 			gap: 10px;
 		}
+		.head-actions {
+			display: flex;
+			align-items: center;
+			gap: 10px;
+		}
+		.help-btn {
+			width: 28px;
+			min-width: 28px;
+			height: 28px;
+			min-height: 28px;
+			padding: 0;
+			border-radius: 999px;
+			border: 1px solid #dccabd;
+			background: #fffaf5;
+			color: #7d5547;
+			font-size: 13px;
+			font-weight: 800;
+			line-height: 1;
+		}
 		.title {
 			margin: 0;
 			font-size: 22px;
@@ -519,7 +538,10 @@
 				<h1 class="title" id="title">抽卡練習模式</h1>
 				<p class="sub" id="subtitle">混合題型挑戰，每輪 10 題，每題 10 分。</p>
 			</div>
-			<button class="btn-soft" id="closeBtn">關閉分頁</button>
+			<div class="head-actions">
+				<button class="help-btn" id="helpBtn" type="button" aria-label="Help">?</button>
+				<button class="btn-soft" id="closeBtn">關閉分頁</button>
+			</div>
 		</div>
 
 		<div class="stats">
@@ -540,7 +562,7 @@
 			<div class="feedback" id="clozeTranslateText" style="display:none;"></div>
 			<div class="options" id="options"></div>
 			<div class="feedback" id="feedback"></div>
-			<div class="actions">
+			<div class="actions" id="cardActions">
 				<button class="btn-soft" id="clozeTranslateBtn" style="display:none;">顯示翻譯</button>
 				<button class="btn-soft" id="markLearnedBtn" style="display:none;">標記已學會</button>
 				<button class="btn-primary" id="nextBtn" style="display:none;">下一題</button>
@@ -580,6 +602,7 @@
 
 	<script src="storage.js"></script>
 	<script src="ui-i18n.js"></script>
+	<script src="ui-tour.js"></script>
 	<script src="practice.js"></script>
 </body>
 </html>

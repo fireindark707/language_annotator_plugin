@@ -74,8 +74,10 @@ const languageStats = document.getElementById("languageStats");
 const autoLangHint = document.getElementById("autoLangHint");
 const closeBtn = document.getElementById("closeBtn");
 const searchInput = document.getElementById("searchInput");
+const helpBtn = document.getElementById("helpBtn");
 let dictSearchReqId = 0;
 let searchDebounceTimer = null;
+let wordsTourAttempted = false;
 
 document.addEventListener("DOMContentLoaded", function () {
 	WordStorage.getUiLanguage().then((lang) => {
@@ -118,6 +120,15 @@ document.addEventListener("DOMContentLoaded", function () {
 	closeBtn.addEventListener("click", function () {
 		window.close();
 	});
+
+	if (helpBtn) {
+		helpBtn.addEventListener("click", function () {
+			if (!globalThis.UiTour) return;
+			UiTour.reset("words_v1").then(() => {
+				window.setTimeout(() => startWordsTour(true), 40);
+			});
+		});
+	}
 });
 
 function refreshLanguageChip() {
@@ -132,6 +143,16 @@ function refreshLanguageChip() {
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
+}
+
+function startWordsTour(force) {
+	if (!globalThis.UiTour) return;
+	const run = force ? UiTour.start : UiTour.maybeStartOnce;
+	run({
+		storageKey: "words_v1",
+		lang: uiLang,
+		steps: UiTour.getSteps(uiLang, "words"),
+	});
 }
 
 function normalizeDictionaryQuery(text) {
@@ -654,6 +675,10 @@ function applyUiText() {
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");
 	if (sortModeSelect.options[2]) sortModeSelect.options[2].textContent = t("sort_freq");
+	if (helpBtn && globalThis.UiTour) {
+		helpBtn.title = UiTour.getLabel(uiLang, "replay");
+		helpBtn.setAttribute("aria-label", UiTour.getLabel(uiLang, "replay"));
+	}
 }
 
 function normalizeDictionaryEntries(wordData) {
@@ -896,6 +921,10 @@ function updateWordsList() {
 				empty.className = "empty";
 				empty.textContent = t("empty_words");
 				wordsList.appendChild(empty);
+			}
+			if (!wordsTourAttempted) {
+				wordsTourAttempted = true;
+				window.setTimeout(() => startWordsTour(false), 220);
 			}
 			updateSearchLayout(renderedCount > 0, !!searchKeyword);
 			renderDictionarySearchResults(renderedCount > 0);

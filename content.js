@@ -14,6 +14,8 @@ const previewTranslateQueue = [];
 const previewTranslateInflight = new Set();
 const previewTranslateCache = new Map();
 let contentUiLang = "en";
+let contentTourAttempted = false;
+let contentSelectionTourAttempted = false;
 const SKIP_TEXT_TAGS = new Set([
 	"SCRIPT",
 	"STYLE",
@@ -52,6 +54,26 @@ function contentT(key) {
 		mark_confirm_suffix: "\" as learned?",
 	};
 	return fallback[key] || key;
+}
+
+function startContentTour(force) {
+	if (!globalThis.UiTour) return;
+	const run = force ? UiTour.start : UiTour.maybeStartOnce;
+	run({
+		storageKey: "content_v1",
+		lang: contentUiLang,
+		steps: UiTour.getSteps(contentUiLang, "content"),
+	});
+}
+
+function startContentSelectionTour(force) {
+	if (!globalThis.UiTour) return;
+	const run = force ? UiTour.start : UiTour.maybeStartOnce;
+	run({
+		storageKey: "content_selection_v1",
+		lang: contentUiLang,
+		steps: UiTour.getSteps(contentUiLang, "contentSelection"),
+	});
 }
 
 function isContextInvalidatedError(error) {
@@ -957,6 +979,10 @@ function highlightWords() {
 		});
 		enqueueExampleCandidates(exampleCandidates);
 		addClickEventToHighlightedWords();
+		if (!contentTourAttempted && document.querySelector(".plugin-highlight-word")) {
+			contentTourAttempted = true;
+			window.setTimeout(() => startContentTour(false), 260);
+		}
 		}).catch((error) => {
 			if (!isContextInvalidatedError(error)) {
 				console.error("Failed to highlight words:", error);
@@ -1821,6 +1847,10 @@ function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
 			}
 		);
 	});
+	if (!contentSelectionTourAttempted && document.getElementById("translationBox")) {
+		contentSelectionTourAttempted = true;
+		window.setTimeout(() => startContentSelectionTour(false), 220);
+	}
 }
 
 function ensureTranslationUiStyles() {

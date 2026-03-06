@@ -32,6 +32,8 @@ const wordsList = document.getElementById("wordsList");
 const wordStats = document.getElementById("wordStats");
 const languageStats = document.getElementById("languageStats");
 const autoLangHint = document.getElementById("autoLangHint");
+const helpBtn = document.getElementById("helpBtn");
+let popupTourAttempted = false;
 
 document.addEventListener("DOMContentLoaded", function () {
 	WordStorage.getUiLanguage().then((lang) => {
@@ -58,10 +60,29 @@ document.addEventListener("DOMContentLoaded", function () {
 		updateWordsList();
 	});
 
+	if (helpBtn) {
+		helpBtn.addEventListener("click", function () {
+			if (!globalThis.UiTour) return;
+			UiTour.reset("popup_v1").then(() => {
+				window.setTimeout(() => startPopupTour(true), 40);
+			});
+		});
+	}
+
 });
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
+}
+
+function startPopupTour(force) {
+	if (!globalThis.UiTour) return;
+	const run = force ? UiTour.start : UiTour.maybeStartOnce;
+	run({
+		storageKey: "popup_v1",
+		lang: uiLang,
+		steps: UiTour.getSteps(uiLang, "popup"),
+	});
 }
 
 function escapeRegExp(text) {
@@ -495,6 +516,10 @@ function applyUiText() {
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");
 	if (sortModeSelect.options[2]) sortModeSelect.options[2].textContent = t("sort_freq");
+	if (helpBtn && globalThis.UiTour) {
+		helpBtn.title = UiTour.getLabel(uiLang, "replay");
+		helpBtn.setAttribute("aria-label", UiTour.getLabel(uiLang, "replay"));
+	}
 }
 
 function refreshLanguageChip() {
@@ -676,6 +701,10 @@ function updateWordsList() {
 			emptyMessage.className = "empty";
 			emptyMessage.textContent = t("empty_words");
 			wordsList.appendChild(emptyMessage);
+		}
+		if (!popupTourAttempted) {
+			popupTourAttempted = true;
+			window.setTimeout(() => startPopupTour(false), 180);
 		}
 	}).catch((error) => {
 		console.error("Failed to load words:", error);

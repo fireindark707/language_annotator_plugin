@@ -1,0 +1,48 @@
+<svg width="1280" height="800" viewBox="0 0 1280 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="800" fill="#F5EEE5"/>
+  <rect x="36" y="36" width="1208" height="728" rx="28" fill="#FFFAF3" stroke="#DCCABD"/>
+  <text x="70" y="94" fill="#372620" font-size="42" font-weight="700" font-family="Georgia, 'Noto Serif', serif">Review everything in one full vocabulary manager</text>
+  <text x="70" y="130" fill="#7A665C" font-size="20" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">Browse saved words, sort by frequency, inspect examples, and manage dictionary entries.</text>
+
+  <rect x="70" y="178" width="1140" height="84" rx="20" fill="#FFFDF9" stroke="#E2D2C5"/>
+  <rect x="96" y="200" width="150" height="40" rx="18" fill="#BC7057" stroke="#A45C49"/>
+  <text x="132" y="226" fill="#FFF9F3" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Practice</text>
+  <rect x="264" y="200" width="156" height="40" rx="18" fill="#FFF8F1" stroke="#DECFC1"/>
+  <text x="304" y="226" fill="#7B5F53" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Show All</text>
+  <rect x="480" y="200" width="230" height="40" rx="16" fill="#FFFDF9" stroke="#DECFC1"/>
+  <text x="516" y="226" fill="#6F5A50" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Sort by frequency</text>
+  <rect x="734" y="200" width="430" height="40" rx="16" fill="#FFFDF9" stroke="#DECFC1"/>
+  <text x="766" y="226" fill="#A08A7D" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Search word, meaning, dictionary text</text>
+
+  <rect x="70" y="292" width="1140" height="408" rx="24" fill="#FFFDF9" stroke="#E2D2C5"/>
+  <g>
+    <rect x="96" y="320" width="1088" height="102" rx="20" fill="#FFF9F3" stroke="#E3D3C6"/>
+    <text x="126" y="364" fill="#372620" font-size="32" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">kewaspadaan</text>
+    <rect x="372" y="340" width="70" height="26" rx="13" fill="#F4EDE4" stroke="#DDD0C1"/>
+    <text x="387" y="358" fill="#847065" font-size="14" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">3p · 12x</text>
+    <text x="126" y="394" fill="#6E5950" font-size="18" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">[Nomina] 警戒狀態；準備</text>
+    <rect x="850" y="334" width="104" height="34" rx="17" fill="#EDF3EE" stroke="#D7E0DA"/>
+    <text x="878" y="356" fill="#5D736D" font-size="16" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Examples</text>
+    <rect x="966" y="334" width="102" height="34" rx="17" fill="#F8EFE3" stroke="#E5D2BD"/>
+    <text x="997" y="356" fill="#8B6C53" font-size="16" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Dictionary</text>
+    <rect x="1080" y="334" width="74" height="34" rx="17" fill="#EEF4E7" stroke="#D4DFC8"/>
+    <text x="1103" y="356" fill="#60764C" font-size="16" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Learned</text>
+  </g>
+  <g>
+    <rect x="96" y="438" width="1088" height="102" rx="20" fill="#FFF9F3" stroke="#E3D3C6"/>
+    <text x="126" y="482" fill="#372620" font-size="32" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">bermuatan</text>
+    <rect x="326" y="458" width="66" height="26" rx="13" fill="#F4EDE4" stroke="#DDD0C1"/>
+    <text x="341" y="476" fill="#847065" font-size="14" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">1p · 8x</text>
+    <text x="126" y="512" fill="#6E5950" font-size="18" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">[Verba] 含有；載有；運輸</text>
+  </g>
+  <g>
+    <rect x="96" y="556" width="1088" height="102" rx="20" fill="#FFF9F3" stroke="#E3D3C6"/>
+    <text x="126" y="600" fill="#372620" font-size="32" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">mentah</text>
+    <rect x="262" y="576" width="62" height="26" rx="13" fill="#F4EDE4" stroke="#DDD0C1"/>
+    <text x="277" y="594" fill="#847065" font-size="14" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">2p · 5x</text>
+    <text x="126" y="630" fill="#6E5950" font-size="18" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">[Adjektiva] 不成熟；尚未加工完成</text>
+  </g>
+
+  <rect x="70" y="720" width="182" height="38" rx="19" fill="#BC7057" stroke="#A45C49"/>
+  <text x="110" y="744" fill="#FFF9F3" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Core Feature 03</text>
+</svg>

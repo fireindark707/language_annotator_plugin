@@ -1,0 +1,37 @@
+<svg width="1280" height="800" viewBox="0 0 1280 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1280" height="800" fill="#F5EEE5"/>
+  <rect x="170" y="42" width="940" height="716" rx="30" fill="#FFFAF3" stroke="#DCCABD"/>
+  <text x="222" y="98" fill="#372620" font-size="40" font-weight="700" font-family="Georgia, 'Noto Serif', serif">Practice with challenge cards</text>
+  <text x="222" y="132" fill="#7A665C" font-size="18" font-weight="600" font-family="Arial, 'Noto Sans', sans-serif">Word meaning, cloze questions, score tracking, and streak momentum.</text>
+
+  <rect x="222" y="166" width="836" height="90" rx="22" fill="#FFFDF9" stroke="#E2D2C5"/>
+  <rect x="246" y="188" width="164" height="48" rx="18" fill="#FFF7EE" stroke="#DECFC1"/>
+  <text x="292" y="218" fill="#4A352D" font-size="24" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">3 / 10</text>
+  <rect x="428" y="188" width="164" height="48" rx="18" fill="#FFF7EE" stroke="#DECFC1"/>
+  <text x="474" y="218" fill="#4A352D" font-size="24" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">20 pts</text>
+  <rect x="610" y="188" width="164" height="48" rx="18" fill="#FFF7EE" stroke="#DECFC1"/>
+  <text x="657" y="218" fill="#4A352D" font-size="24" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Normal</text>
+  <rect x="792" y="188" width="242" height="48" rx="18" fill="#B4745F" stroke="#9B5C49"/>
+  <text x="878" y="218" fill="#FFF9F3" font-size="24" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Streak 4</text>
+
+  <rect x="222" y="284" width="836" height="326" rx="24" fill="#FFFDF9" stroke="#E2D2C5"/>
+  <text x="262" y="338" fill="#7B665C" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Choose the closest meaning for the word.</text>
+  <rect x="262" y="372" width="250" height="62" rx="16" fill="#FAF4EC" stroke="#E1D3C7"/>
+  <text x="330" y="412" fill="#372620" font-size="30" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">vulgar</text>
+  <rect x="262" y="462" width="368" height="54" rx="16" fill="#EEF4E7" stroke="#D4DFC8"/>
+  <text x="290" y="496" fill="#60764C" font-size="22" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">粗魯；不禮貌</text>
+  <rect x="650" y="462" width="368" height="54" rx="16" fill="#FFF8F1" stroke="#DECFC1"/>
+  <text x="709" y="496" fill="#6B564C" font-size="22" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">提高；增加</text>
+  <rect x="262" y="532" width="368" height="54" rx="16" fill="#FFF8F1" stroke="#DECFC1"/>
+  <text x="339" y="566" fill="#6B564C" font-size="22" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">運輸；載有</text>
+  <rect x="650" y="532" width="368" height="54" rx="16" fill="#FFF8F1" stroke="#DECFC1"/>
+  <text x="738" y="566" fill="#6B564C" font-size="22" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">警戒；準備</text>
+
+  <rect x="222" y="644" width="168" height="42" rx="18" fill="#F1E6DA" stroke="#DBC8B7"/>
+  <text x="263" y="671" fill="#76584E" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Show translation</text>
+  <rect x="902" y="644" width="156" height="42" rx="18" fill="#A55143" stroke="#9B5C49"/>
+  <text x="952" y="671" fill="#FFF9F3" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Next</text>
+
+  <rect x="222" y="716" width="182" height="38" rx="19" fill="#BC7057" stroke="#A45C49"/>
+  <text x="262" y="740" fill="#FFF9F3" font-size="18" font-weight="700" font-family="Arial, 'Noto Sans', sans-serif">Core Feature 04</text>
+</svg>
