@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>ui-tour</title></head>
+<body>
+  <button id="target">Target</button>
+  <pre id="test-output"></pre>
+  <script>
+    function createArea(initial) {
+      const store = Object.assign({}, initial || {});
+      return {
+        get(keys, callback) {
+          const out = {};
+          Object.keys(keys || {}).forEach((key) => { out[key] = key in store ? store[key] : keys[key]; });
+          callback(out);
+        },
+        set(data, callback) { Object.assign(store, data); callback && callback(); },
+        _store: store,
+      };
+    }
+    window.chrome = { runtime: { lastError: null }, storage: { local: createArea({}) } };
+  </script>
+  <script src="../ui-tour.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    runTests([
+      {
+        name: 'start renders overlay and marks tour seen when finished',
+        async run() {
+          UiTour.start({
+            storageKey: 'tour_x',
+            lang: 'en',
+            steps: [{ target: '#target', title: 'Step title', body: 'Body text', placement: 'bottom' }],
+          });
+          assert(document.querySelector('.la-tour-root'), 'expected overlay');
+          document.querySelector('.la-tour-btn-primary').click();
+          await wait(20);
+          assertEqual(chrome.storage.local._store['tourSeen:tour_x'], true);
+        },
+      },
+      {
+        name: 'maybeStartOnce respects seen flag and reset clears it',
+        async run() {
+          await UiTour.maybeStartOnce({
+            storageKey: 'tour_x',
+            lang: 'en',
+            steps: [{ target: '#target', title: 'Again', body: 'Again' }],
+          });
+          assert(!document.querySelector('.la-tour-root'), 'expected no second overlay when already seen');
+          await UiTour.reset('tour_x');
+          assertEqual(chrome.storage.local._store['tourSeen:tour_x'], false);
+          await UiTour.maybeStartOnce({
+            storageKey: 'tour_x',
+            lang: 'en',
+            steps: [{ target: '#target', title: 'Again', body: 'Again' }],
+          });
+          assert(document.querySelector('.la-tour-root'), 'expected overlay after reset');
+        },
+      },
+      {
+        name: 'getLabel and getSteps fall back to english for unsupported locales',
+        run() {
+          assertEqual(UiTour.getLabel('xx', 'next'), 'Next');
+          assert(Array.isArray(UiTour.getSteps('xx', 'popup')), 'expected fallback steps array');
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

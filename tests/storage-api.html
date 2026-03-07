@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>storage-api</title></head>
+<body>
+  <pre id="test-output"></pre>
+  <script>
+    function createArea(initial) {
+      const store = Object.assign({}, initial || {});
+      return {
+        _store: store,
+        get(keys, callback) {
+          const out = {};
+          if (Array.isArray(keys)) {
+            keys.forEach((key) => { out[key] = store[key]; });
+          } else {
+            Object.keys(keys || {}).forEach((key) => { out[key] = key in store ? store[key] : keys[key]; });
+          }
+          callback(out);
+        },
+        set(data, callback) { Object.assign(store, data); callback && callback(); },
+        remove(keys, callback) { [].concat(keys).forEach((key) => { delete store[key]; }); callback && callback(); },
+      };
+    }
+    window.__LA_TEST_HOOKS__ = {};
+    window.chrome = {
+      runtime: { lastError: null },
+      storage: {
+        local: createArea({ words: { local: { meaning: 'L' } } }),
+        sync: createArea({}),
+      },
+    };
+    Object.defineProperty(window.navigator, 'language', { configurable: true, value: 'fr-FR' });
+  </script>
+  <script src="../lib/storage-merge-utils.js"></script>
+  <script src="../storage.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const S = window.WordStorage;
+    runTests([
+      {
+        name: 'exportData returns all persisted fields',
+        async run() {
+          await S.saveSourceLang('id');
+          await S.saveAutoTranslateOnSelect(false);
+          await S.saveDictionaryLookupEnabled(true);
+          await S.saveUiLanguage('fr');
+          await S.saveExcludedDomains(['Example.com', '']);
+          const data = await S.exportData();
+          assertEqual(data.sourceLang, 'id');
+          assertEqual(data.autoTranslateOnSelect, false);
+          assertEqual(data.dictionaryLookupEnabled, true);
+          assertEqual(data.uiLanguage, 'fr');
+          assertEqual(data.excludedDomains[0], 'example.com');
+          assert(data.words.local, 'expected words in export');
+        },
+      },
+      {
+        name: 'importData writes words and settings through public api',
+        async run() {
+          await S.importData({
+            words: { imported: { meaning: 'I' } },
+            sourceLang: 'en',
+            autoTranslateOnSelect: true,
+            dictionaryLookupEnabled: false,
+            uiLanguage: 'pt',
+            excludedDomains: ['Foo.COM'],
+          });
+          const words = await S.getWords();
+          assert(words.imported, 'expected imported words');
+          assertEqual(await S.getSourceLang(), 'en');
+          assertEqual(await S.getAutoTranslateOnSelect(), true);
+          assertEqual(await S.getDictionaryLookupEnabled(), false);
+          assertEqual(await S.getUiLanguage(), 'pt');
+          assertEqual((await S.getExcludedDomains())[0], 'foo.com');
+        },
+      },
+      {
+        name: 'getUiLanguage falls back to browser language mapping',
+        async run() {
+          delete chrome.storage.local._store.uiLanguage;
+          delete chrome.storage.sync._store.uiLanguage;
+          const lang = await S.getUiLanguage();
+          assertEqual(lang, 'fr');
+        },
+      },
+      {
+        name: 'saveExcludedDomains normalizes lowercase and trims empties',
+        async run() {
+          await S.saveExcludedDomains([' https://WWW.Google.com/path ', '', 'Chat.OpenAI.com']);
+          const domains = await S.getExcludedDomains();
+          assertEqual(domains[0], 'https://www.google.com/path');
+          assertEqual(domains[1], 'chat.openai.com');
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

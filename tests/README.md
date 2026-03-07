@@ -8,6 +8,10 @@ Current coverage mapped to README features:
   - sync shard splitting
   - sync compaction
   - merge logic for examples / word records
+- `storage-api.html`
+  - export/import public API
+  - UI language fallback
+  - excluded domain normalization
 - `runtime-dependencies-smoke.html`
   - shared globals required by entry scripts are present
   - required methods exist before hard dependency cleanup
@@ -15,6 +19,10 @@ Current coverage mapped to README features:
   - runtime translation requests
   - Google Translate request composition
   - translation task queue concurrency
+- `ui-tour.html`
+  - first-run tour rendering
+  - seen-state persistence / reset
+  - locale fallback
 - `words-logic.html`
   - dictionary query normalization
   - dictionary / lemma language support
@@ -46,7 +54,7 @@ Current coverage mapped to README features:
   - add-word translation prefill
   - add-word dictionary metadata prefill
   - user-edited protection
-- `content-translation.html`
+- `content-lookup-ui.html`
   - instant translation box
   - translation-box dictionary rendering
   - hover preview card
@@ -59,11 +67,26 @@ Current coverage mapped to README features:
 - `content-bootstrap.html`
   - content.js bootstrap with required globals
   - content.js delegation into translation/page-processing modules
+- `options-ui.html`
+  - settings hydration
+  - autosave flows
+  - excluded-domain editing
+  - sync / export / import / help actions
 - `popup-dependencies-smoke.html`
   - popup shared example/translation dependencies are present
+- `popup-ui.html`
+  - popup rendering
+  - toolbar navigation
+  - audio / examples actions
+  - learned / delete flows
 - `simplemma-smoke.html`
   - bundled simplemma integration
   - remote lemma dictionaries
+- `practice-ui.html`
+  - low-word onboarding
+  - question answer flow
+  - summary learned-word apply
+  - cloze translate action
 - `dictionary-url-smoke.html`
   - remote dictionary assets are actual JSON, not Git LFS pointer text
 

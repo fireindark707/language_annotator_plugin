@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>practice-ui</title></head>
+<body>
+  <div id="title"></div><div id="subtitle"></div><button id="closeBtn"></button><button id="helpBtn"></button>
+  <div id="progressChip"></div><div id="scoreChip"></div><div id="streakChip"></div><div id="challengeChip"></div><div id="progressBar"></div>
+  <div id="cardActions"></div>
+  <div id="card"><div id="prompt"></div><div id="stimulus"></div><div id="options"></div><div id="feedback"></div><button id="clozeTranslateBtn"></button><div id="clozeTranslateText"></div><button id="nextBtn"></button><button id="markLearnedBtn"></button></div>
+  <div id="summary" style="display:none"><div id="summaryTitle"></div><div id="summaryBadge"></div><div id="summaryBigScore"></div><div id="summaryComment"></div><div id="summaryAccuracyLabel"></div><div id="summaryCorrectLabel"></div><div id="summaryBestStreakLabel"></div><div id="summaryAccuracy"></div><div id="summaryCorrect"></div><div id="summaryBestStreak"></div><div id="summaryText"></div><div id="summaryCelebrate"></div><div id="summaryReviewed" hidden><div id="summaryReviewedTitle"></div><div id="summaryReviewedDesc"></div><div id="summaryReviewedList"></div><button id="applyLearnedWordsBtn"></button></div><button id="nextRoundBtn"></button></div>
+  <div id="megaOverlay"></div><div id="megaText"></div><div id="answerFlash"></div><div id="celebrate"></div>
+  <pre id="test-output"></pre>
+  <script>
+    const tourCalls = [];
+    const savedSnapshots = [];
+    let wordsState = {};
+    function setWordState(mode) {
+      wordsState = mode === 'small'
+        ? { a: { meaning: 'A', learned: false }, b: { meaning: 'B', learned: false }, c: { meaning: 'C', learned: false } }
+        : {
+            alpha: { meaning: 'A', learned: false, examples: [{ text: 'alpha example' }] },
+            beta: { meaning: 'B', learned: false, examples: [{ text: 'beta example' }] },
+            gamma: { meaning: 'C', learned: false, examples: [{ text: 'gamma example' }] },
+            delta: { meaning: 'D', learned: false, examples: [{ text: 'delta example' }] },
+          };
+    }
+    setWordState('small');
+    window.UiI18n = { t(lang, key) { return key; }, langAttr(lang) { return lang || 'en'; }, dir() { return 'ltr'; } };
+    window.UiTour = {
+      maybeStartOnce(opts) { tourCalls.push({ type: 'maybe', scope: opts.storageKey }); },
+      start(opts) { tourCalls.push({ type: 'start', scope: opts.storageKey }); },
+      reset(key) { tourCalls.push({ type: 'reset', key }); return Promise.resolve(); },
+      getSteps() { return [{ target: '#card', title: 'x', body: 'y' }]; },
+      getLabel() { return 'replay'; },
+    };
+    window.WordStorage = {
+      getUiLanguage() { return Promise.resolve('en'); },
+      getWords() { return Promise.resolve(JSON.parse(JSON.stringify(wordsState))); },
+      saveWords(words) { wordsState = JSON.parse(JSON.stringify(words)); savedSnapshots.push(wordsState); return Promise.resolve(); },
+      getSourceLang() { return Promise.resolve('en'); },
+    };
+    window.chrome = { runtime: { lastError: null, sendMessage(message, callback) { callback({ translation: 'translated stimulus' }); } } };
+    window.speechSynthesis = { speak() {}, getVoices() { return []; } };
+    window.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; };
+  </script>
+  <script src="../lib/practice-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="../practice.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    runTests([
+      {
+        name: 'init with too few words shows onboarding reminder and tour',
+        async run() {
+          await wait(260);
+          assert(document.getElementById('feedback').textContent.includes('practice_need_words'), 'expected need words message');
+          assert(tourCalls.some((x) => x.scope === 'practice_need_words_v1'), 'expected need-words tour');
+        },
+      },
+      {
+        name: 'init with enough words renders question and correct answer flow',
+        async run() {
+          setWordState('enough');
+          tourCalls.length = 0;
+          await init();
+          await wait(40);
+          assert(document.querySelectorAll('#options .option').length === 4, 'expected four choices');
+          const q = deck[qIndex];
+          const correctBtn = Array.from(document.querySelectorAll('#options .option')).find((btn) => btn.textContent.replace(/^[A-D]\.\s*/, '') === q.answer);
+          correctBtn.click();
+          await wait(30);
+          assert(document.getElementById('nextBtn').style.display !== 'none', 'expected next button visible');
+          assert(document.getElementById('markLearnedBtn').style.display !== 'none', 'expected mark learned visible');
+          assertEqual(score, 10);
+        },
+      },
+      {
+        name: 'summary learned-word apply persists user-confirmed learned state',
+        async run() {
+          selectedLearnedWords = new Set(['alpha']);
+          reviewedWordsThisRound = ['alpha'];
+          renderSummaryReviewedWords();
+          applySummaryLearnedWords();
+          await wait(30);
+          assert(savedSnapshots.some((snapshot) => snapshot.alpha && snapshot.alpha.learned === true), 'expected learned word saved');
+          assert(document.getElementById('applyLearnedWordsBtn').textContent.includes('saved'), 'expected apply button updated');
+        },
+      },
+      {
+        name: 'cloze translate button loads translated stimulus',
+        async run() {
+          deck = [{ mode: 'cloze', word: 'alpha', stimulus: 'alpha example', answer: 'alpha', choices: ['alpha', 'beta', 'gamma', 'delta'] }];
+          qIndex = 0;
+          renderQuestion();
+          document.getElementById('clozeTranslateBtn').click();
+          await wait(30);
+          assertEqual(document.getElementById('clozeTranslateText').textContent, 'translated stimulus');
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

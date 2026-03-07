@@ -64,7 +64,7 @@
   <script src="../lib/example-utils.js"></script>
   <script src="../lib/storage-merge-utils.js"></script>
   <script src="../lib/content-addword.js"></script>
-  <script src="../lib/content-translation.js"></script>
+  <script src="../lib/content-lookup-ui.js"></script>
   <script src="../lib/content-page-processing.js"></script>
   <script>
     window.ContentPageProcessing.highlightWords = ((original) => function (...args) {
@@ -72,10 +72,10 @@
       return original.apply(this, args);
     })(window.ContentPageProcessing.highlightWords);
 
-    window.ContentTranslation.showTranslation = ((original) => function (...args) {
+    window.ContentLookupUi.showTranslation = ((original) => function (...args) {
       window.__contentBootstrapCounters.showTranslation += 1;
       return original.apply(this, args);
-    })(window.ContentTranslation.showTranslation);
+    })(window.ContentLookupUi.showTranslation);
   </script>
   <script src="../content.js"></script>
   <script src="./lib/test-harness.js"></script>

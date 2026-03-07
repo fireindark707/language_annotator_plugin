@@ -18,7 +18,7 @@ const DictionaryUtilsRef = requireContentDependency("DictionaryUtils");
 const LemmaUtilsRef = requireContentDependency("LemmaUtils");
 const ExampleUtilsRef = requireContentDependency("ExampleUtils");
 const ContentAddWordRef = requireContentDependency("ContentAddWord");
-const ContentTranslationRef = requireContentDependency("ContentTranslation");
+const ContentLookupUiRef = requireContentDependency("ContentLookupUi");
 const ContentPageProcessingRef = requireContentDependency("ContentPageProcessing");
 const TranslationUtilsRef = requireContentDependency("TranslationUtils");
 const SKIP_TEXT_TAGS = new Set([
@@ -163,11 +163,11 @@ function markLearned(word) {
 }
 
 function hideWordPreview(delay) {
-	ContentTranslationRef.hideWordPreview(delay);
+	ContentLookupUiRef.hideWordPreview(delay);
 }
 
 function showWordPreview(anchor, meaning, examples) {
-	ContentTranslationRef.showWordPreview(anchor, meaning, examples, {
+	ContentLookupUiRef.showWordPreview(anchor, meaning, examples, {
 		document,
 		WordStorage,
 		chromeRuntime: chrome.runtime,
@@ -1097,11 +1097,11 @@ function translateText(text) {
 }
 
 function showTranslation(translation) {
-	return ContentTranslationRef.showTranslation(translation, { document });
+	return ContentLookupUiRef.showTranslation(translation, { document });
 }
 
 function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
-	return ContentTranslationRef.appendDictionaryToTranslationBox(dictResponse, sourceLang, {
+	return ContentLookupUiRef.appendDictionaryToTranslationBox(dictResponse, sourceLang, {
 		document,
 		DictionaryUtilsRef,
 		TranslationUtilsRef,

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>popup-ui</title></head>
+<body>
+  <div id="popupTitle"></div>
+  <div id="popupSubtitle"></div>
+  <a id="settingsLink"></a>
+  <button id="fullscreenBtn"></button>
+  <button id="practiceBtn"></button>
+  <select id="sortMode"><option value="recent_desc"></option><option value="alpha_asc"></option><option value="freq_desc"></option></select>
+  <div id="wordsList"></div>
+  <div id="wordStats"></div>
+  <div id="languageStats"></div>
+  <div id="autoLangHint"></div>
+  <button id="helpBtn"></button>
+  <pre id="test-output"></pre>
+  <script>
+    const tabCalls = [];
+    const toastCalls = [];
+    const speechCalls = [];
+    const tourCalls = [];
+    const wordsState = {
+      vulgar: { meaning: 'rude', createdAt: 5, learned: false, examples: [{ text: 'a vulgar joke', translation: '粗俗的笑話', sourceUrl: 'https://a.com/x', capturedAt: 1 }], pageCount: 1, encounterCount: 2 },
+      kind: { meaning: 'kind', createdAt: 1, learned: true, examples: [], pageCount: 0, encounterCount: 0 },
+    };
+    window.chrome = {
+      runtime: { getURL(path) { return path; }, lastError: null },
+      tabs: { create(payload) { tabCalls.push(payload); } },
+    };
+    window.UiI18n = { t(lang, key) { return key; }, langAttr(lang) { return lang || 'en'; }, dir() { return 'ltr'; } };
+    window.UiToast = { show(message, type) { toastCalls.push({ message, type }); } };
+    window.UiTour = {
+      maybeStartOnce(opts) { tourCalls.push({ type: 'maybe', scope: opts.storageKey }); },
+      start(opts) { tourCalls.push({ type: 'start', scope: opts.storageKey }); },
+      reset(key) { tourCalls.push({ type: 'reset', key }); return Promise.resolve(); },
+      getSteps() { return [{ target: '#practiceBtn', title: 'x', body: 'y' }]; },
+      getLabel(lang, key) { return key; },
+    };
+    window.WordStorage = {
+      getUiLanguage() { return Promise.resolve('en'); },
+      getSourceLang() { return Promise.resolve('id'); },
+      getWords() { return Promise.resolve(JSON.parse(JSON.stringify(wordsState))); },
+      saveWords(words) {
+        Object.keys(wordsState).forEach((key) => delete wordsState[key]);
+        Object.assign(wordsState, JSON.parse(JSON.stringify(words)));
+        return Promise.resolve();
+      },
+    };
+    const speechStub = {
+      getVoices() { return [{ lang: 'id' }]; },
+      speak(utterance) { speechCalls.push(utterance.lang + ':' + utterance.text); },
+    };
+    Object.defineProperty(window, 'speechSynthesis', { configurable: true, value: speechStub });
+    globalThis.speechSynthesis = speechStub;
+    window.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; this.lang = ''; };
+    window.IntersectionObserver = class {
+      constructor(callback) { this.callback = callback; }
+      observe(el) { this.callback([{ isIntersecting: true, target: el }], this); }
+      unobserve() {}
+      disconnect() {}
+    };
+  </script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="../popup.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    runTests([
+      {
+        name: 'initial popup render shows only unlearned words and starts tour',
+        async run() {
+          await wait(220);
+          assert(document.getElementById('wordStats').textContent.includes('words：2'), 'expected total stats');
+          const items = document.querySelectorAll('.word-item');
+          assertEqual(items.length, 1);
+          assert(items[0].textContent.includes('vulgar'), 'expected unlearned word');
+          assert(tourCalls.some((x) => x.type === 'maybe' && x.scope === 'popup_v1'), 'expected popup tour');
+        },
+      },
+      {
+        name: 'toolbar navigation buttons open tabs',
+        run() {
+          document.getElementById('fullscreenBtn').click();
+          document.getElementById('practiceBtn').click();
+          assertEqual(tabCalls.length, 2);
+          assert(tabCalls[0].url.includes('words.html'), 'expected fullscreen target');
+          assert(tabCalls[1].url.includes('practice.html'), 'expected practice target');
+        },
+      },
+      {
+        name: 'audio and example expand actions work',
+        async run() {
+          document.querySelector('.action-audio').click();
+          await wait(80);
+          assertEqual(speechCalls.length > 0, true, 'expected speech synthesis call');
+          document.querySelector('.action-example').click();
+          await wait(20);
+          assert(document.querySelector('.example-wrap').style.display !== 'none', 'expected examples expanded');
+          assert(document.querySelector('.example-list').textContent.includes('粗俗的笑話'), 'expected rendered example translation');
+        },
+      },
+      {
+        name: 'toggle learned removes word from popup list and delete removes word',
+        async run() {
+          document.querySelector('.action-learned').click();
+          await wait(260);
+          assert(document.getElementById('wordsList').textContent.includes('empty_words'), 'expected empty state after learned');
+          wordsState.vulgar.learned = false;
+          await updateWordsList();
+          await wait(20);
+          document.querySelector('.action-delete').click();
+          await wait(260);
+          assert(!wordsState.vulgar, 'expected word deleted from store');
+          assert(toastCalls.some((x) => x.message === 'deleted'), 'expected delete toast');
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

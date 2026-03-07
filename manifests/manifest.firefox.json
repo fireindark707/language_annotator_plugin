@@ -22,7 +22,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["lib/dictionary-utils.js", "lib/lemma-utils.js", "lib/translation-utils.js", "lib/example-utils.js", "lib/storage-merge-utils.js", "lib/content-addword.js", "lib/content-translation.js", "lib/content-page-processing.js", "storage.js", "ui-i18n.js", "ui-tour.js", "content.js"]
+      "js": ["lib/dictionary-utils.js", "lib/lemma-utils.js", "lib/translation-utils.js", "lib/example-utils.js", "lib/storage-merge-utils.js", "lib/content-addword.js", "lib/content-lookup-ui.js", "lib/content-page-processing.js", "storage.js", "ui-i18n.js", "ui-tour.js", "content.js"]
     }
   ],
   "browser_action": {

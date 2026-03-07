@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>content-translation</title>
+  <title>content-lookup-ui</title>
 </head>
 <body>
   <pre id="test-output"></pre>
   <script src="../lib/dictionary-utils.js"></script>
   <script src="../lib/translation-utils.js"></script>
-  <script src="../lib/content-translation.js"></script>
+  <script src="../lib/content-lookup-ui.js"></script>
   <script src="./lib/test-harness.js"></script>
   <script>
     const { assert, assertEqual, runTests } = window.TestHarness;
-    const U = window.ContentTranslation;
+    const U = window.ContentLookupUi;
 
     function createRuntime(handlers) {
       return {

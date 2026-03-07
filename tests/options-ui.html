@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>options-ui</title></head>
+<body>
+  <h1 id="optionsTitle"></h1>
+  <p id="optionsDesc"></p>
+  <h2 id="generalSettingsTitle"></h2>
+  <span id="currentLangLabel"></span>
+  <span id="sourceLangLabel"></span>
+  <span id="uiLangLabel"></span>
+  <span id="autoTranslateLabel"></span>
+  <span id="autoTranslateDesc"></span>
+  <div id="dictionaryLookupRow"><span id="dictionaryLookupLabel"></span><span id="dictionaryLookupDesc"></span><input id="dictionaryLookupEnabled" type="checkbox"></div>
+  <span id="importExportLabel"></span>
+  <span id="excludedDomainsLabel"></span>
+  <span id="excludedDomainsDesc"></span>
+  <select id="sourceLang"><option value="auto">auto</option><option value="en">English</option><option value="id">Indonesian</option><option value="zh">Chinese</option></select>
+  <select id="uiLanguage"><option value="en">English</option><option value="zh-TW">繁中</option></select>
+  <input id="autoTranslateOnSelect" type="checkbox">
+  <div id="currentLang"></div>
+  <button id="save"></button>
+  <div id="saveStatus"></div>
+  <button id="syncBtn"></button>
+  <button id="helpBtn"></button>
+  <button id="exportBtn"></button>
+  <button id="importBtn"></button>
+  <input id="importFile" type="file">
+  <input id="excludedDomainInput">
+  <button id="addExcludedDomainBtn"></button>
+  <div id="excludedDomainList"></div>
+  <pre id="test-output"></pre>
+  <script>
+    const toastCalls = [];
+    const tourCalls = [];
+    const saveCalls = [];
+    let importedItems = null;
+    let anchorClicks = 0;
+    window.DictionaryUtils = {
+      supportsDictionaryBySourceLang(lang) {
+        return ["en", "id", "zh"].includes((lang || "").split("-")[0]);
+      },
+    };
+    window.UiI18n = {
+      t(lang, key) { return key; },
+      langAttr(lang) { return lang || 'en'; },
+      dir(lang) { return (lang || '').startsWith('ar') ? 'rtl' : 'ltr'; },
+    };
+    window.UiToast = { show(message, type) { toastCalls.push({ message, type }); } };
+    window.UiTour = {
+      maybeStartOnce(opts) { tourCalls.push({ type: 'maybe', scope: opts.storageKey, lang: opts.lang }); },
+      start(opts) { tourCalls.push({ type: 'start', scope: opts.storageKey, lang: opts.lang }); },
+      reset(key) { tourCalls.push({ type: 'reset', key }); return Promise.resolve(); },
+      getSteps(lang, scope) { return [{ target: '#sourceLang', title: scope, body: lang }]; },
+      getLabel(lang, key) { return `${lang}:${key}`; },
+    };
+    window.WordStorage = {
+      getSourceLang() { return Promise.resolve('id'); },
+      getAutoTranslateOnSelect() { return Promise.resolve(true); },
+      getDictionaryLookupEnabled() { return Promise.resolve(true); },
+      getUiLanguage() { return Promise.resolve('en'); },
+      getExcludedDomains() { return Promise.resolve(['google.com']); },
+      saveSourceLang(value) { saveCalls.push(['source', value]); return Promise.resolve(); },
+      saveAutoTranslateOnSelect(value) { saveCalls.push(['auto', value]); return Promise.resolve(); },
+      saveDictionaryLookupEnabled(value) { saveCalls.push(['dict', value]); return Promise.resolve(); },
+      saveUiLanguage(value) { saveCalls.push(['ui', value]); return Promise.resolve(); },
+      saveExcludedDomains(value) { saveCalls.push(['excluded', value.slice()]); return Promise.resolve(); },
+      syncFromCloud() { saveCalls.push(['sync']); return Promise.resolve({}); },
+      exportData() { return Promise.resolve({ words: { test: { meaning: 'x' } } }); },
+      importData(items) { importedItems = items; return Promise.resolve(); },
+    };
+    window.chrome = { runtime: { lastError: null } };
+    window.FileReader = function FileReader() {};
+    window.FileReader.prototype.readAsText = function readAsText() {
+      this.onload({ target: { result: JSON.stringify({ words: { imported: { meaning: 'ok' } } }) } });
+    };
+    HTMLAnchorElement.prototype.click = function click() { anchorClicks += 1; };
+  </script>
+  <script src="../options.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    runTests([
+      {
+        name: 'initial load hydrates controls and starts options tour',
+        async run() {
+          await wait(260);
+          assertEqual(document.getElementById('sourceLang').value, 'id');
+          assertEqual(document.getElementById('uiLanguage').value, 'en');
+          assertEqual(document.getElementById('currentLang').textContent, 'Indonesian');
+          assertEqual(document.getElementById('dictionaryLookupRow').style.display, '');
+          assert(document.getElementById('helpBtn').getAttribute('aria-label').includes('replay'), 'expected replay aria');
+          assert(tourCalls.some((x) => x.type === 'maybe' && x.scope === 'options_v1'), 'expected initial tour');
+        },
+      },
+      {
+        name: 'changing source language autosaves and hides unsupported dictionary row',
+        async run() {
+          const source = document.getElementById('sourceLang');
+          source.value = 'auto';
+          source.dispatchEvent(new Event('change', { bubbles: true }));
+          await wait(240);
+          assertEqual(document.getElementById('dictionaryLookupRow').style.display, 'none');
+          assert(saveCalls.some((x) => x[0] === 'source' && x[1] === 'auto'), 'expected source saved');
+          assert(saveCalls.some((x) => x[0] === 'excluded'), 'expected autosave full settings');
+        },
+      },
+      {
+        name: 'excluded domain add normalizes and saves',
+        async run() {
+          const input = document.getElementById('excludedDomainInput');
+          input.value = 'https://WWW.Example.com/path';
+          document.getElementById('addExcludedDomainBtn').click();
+          await wait(240);
+          assert(document.getElementById('excludedDomainList').textContent.includes('example.com'), 'expected normalized domain chip');
+          const excludedSave = saveCalls.filter((x) => x[0] === 'excluded').pop();
+          assert(excludedSave[1].includes('example.com'), 'expected saved normalized domain');
+        },
+      },
+      {
+        name: 'sync export import and help wiring work',
+        async run() {
+          document.getElementById('syncBtn').click();
+          await wait(20);
+          assert(toastCalls.some((x) => x.message === 'synced' && x.type === 'success'), 'expected sync success toast');
+          document.getElementById('exportBtn').click();
+          await wait(20);
+          assertEqual(anchorClicks > 0, true, 'expected export link click');
+          const fileInput = document.getElementById('importFile');
+          Object.defineProperty(fileInput, 'files', { configurable: true, value: [{ type: 'application/json' }] });
+          fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+          await wait(20);
+          assert(importedItems && importedItems.words && importedItems.words.imported, 'expected import data delivered');
+          document.getElementById('helpBtn').click();
+          await wait(60);
+          assert(tourCalls.some((x) => x.type === 'reset' && x.key === 'options_v1'), 'expected help reset');
+          assert(tourCalls.some((x) => x.type === 'start' && x.scope === 'options_v1'), 'expected help start');
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>
