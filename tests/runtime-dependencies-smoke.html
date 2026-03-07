@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Runtime Dependencies Smoke</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="lib/test-harness.js"></script>
+  <script>
+    const { assert, runTests } = TestHarness;
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = src;
+        script.onload = () => resolve(src);
+        script.onerror = () => reject(new Error(`Failed to load ${src}`));
+        document.body.appendChild(script);
+      });
+    }
+
+    async function main() {
+      let loadError = null;
+      try {
+        await loadScript("../lib/dictionary-utils.js");
+        await loadScript("../lib/lemma-utils.js");
+        await loadScript("../lib/example-utils.js");
+        await loadScript("../lib/storage-merge-utils.js");
+        await loadScript("../lib/practice-utils.js");
+        await loadScript("../lib/translation-utils.js");
+      } catch (error) {
+        loadError = error;
+      }
+
+      runTests([
+        {
+          name: "shared dependency chain loads cleanly",
+          async run() {
+            if (loadError) throw loadError;
+          },
+        },
+        {
+          name: "required shared globals are present",
+          run() {
+          assert(!!globalThis.DictionaryUtils, "DictionaryUtils should exist");
+          assert(!!globalThis.LemmaUtils, "LemmaUtils should exist");
+          assert(!!globalThis.ExampleUtils, "ExampleUtils should exist");
+          assert(!!globalThis.StorageMergeUtils, "StorageMergeUtils should exist");
+          assert(!!globalThis.PracticeUtils, "PracticeUtils should exist");
+          assert(!!globalThis.TranslationUtils, "TranslationUtils should exist");
+          },
+        },
+        {
+          name: "required methods used by entry scripts exist",
+          run() {
+          assert(typeof globalThis.DictionaryUtils.normalizeDictionaryQuery === "function", "normalizeDictionaryQuery");
+          assert(typeof globalThis.DictionaryUtils.getEffectiveDictionarySections === "function", "getEffectiveDictionarySections");
+          assert(typeof globalThis.LemmaUtils.normalizeLemmaSourceLang === "function", "normalizeLemmaSourceLang");
+          assert(typeof globalThis.ExampleUtils.normalizeExampleEntry === "function", "normalizeExampleEntry");
+          assert(typeof globalThis.StorageMergeUtils.mergeWordRecord === "function", "mergeWordRecord");
+          assert(typeof globalThis.PracticeUtils.getQuestionPool === "function", "getQuestionPool");
+          assert(typeof globalThis.TranslationUtils.requestRuntimeTranslation === "function", "requestRuntimeTranslation");
+          assert(typeof globalThis.TranslationUtils.createTaskQueue === "function", "createTaskQueue");
+          },
+        },
+      ]);
+    }
+
+    main();
+  </script>
+</body>
+</html>

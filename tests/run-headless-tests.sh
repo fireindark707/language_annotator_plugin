@@ -11,6 +11,7 @@ fi
 
 TEST_FILES=(
   "$ROOT_DIR/tests/storage-core.html"
+  "$ROOT_DIR/tests/runtime-dependencies-smoke.html"
   "$ROOT_DIR/tests/translation-utils.html"
   "$ROOT_DIR/tests/example-utils.html"
   "$ROOT_DIR/tests/content-dictionary-utils.html"

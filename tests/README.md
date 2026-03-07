@@ -8,6 +8,9 @@ Current coverage mapped to README features:
   - sync shard splitting
   - sync compaction
   - merge logic for examples / word records
+- `runtime-dependencies-smoke.html`
+  - shared globals required by entry scripts are present
+  - required methods exist before hard dependency cleanup
 - `translation-utils.html`
   - runtime translation requests
   - Google Translate request composition
