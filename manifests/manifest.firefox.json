@@ -12,10 +12,11 @@
     "https://translate.googleapis.com/*",
     "https://kateglo.lostfocus.org/*",
     "https://freedictionaryapi.com/*",
-    "https://jotoba.de/*"
+    "https://jotoba.de/*",
+    "https://media.githubusercontent.com/*"
   ],
   "background": {
-    "scripts": ["storage.js", "background.js"],
+    "scripts": ["packages/simplemma.bundle.js", "storage.js", "background.js"],
     "persistent": false
   },
   "content_scripts": [

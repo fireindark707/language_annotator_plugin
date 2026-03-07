@@ -9,7 +9,8 @@
     "https://translate.googleapis.com/*",
     "https://kateglo.lostfocus.org/*",
     "https://freedictionaryapi.com/*",
-    "https://jotoba.de/*"
+    "https://jotoba.de/*",
+    "https://media.githubusercontent.com/*"
   ],
   "background": {
     "service_worker": "background.js"

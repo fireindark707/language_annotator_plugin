@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>simplemma smoke</title>
+</head>
+<body>
+  <pre id="test-output">running</pre>
+  <script src="file:///home/phoenix000/文件/projects/language_annotator_plugin/tests/lib/test-harness.js"></script>
+  <script src="file:///home/phoenix000/文件/projects/language_annotator_plugin/packages/simplemma.bundle.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    const DICT_BASE = 'https://media.githubusercontent.com/media/fireindark707/simplelemma_js/main/src/data/';
+
+    runTests([
+      {
+        name: 'simplemma bundle exposes expected API',
+        async run() {
+          assert(!!window.simplemma, 'window.simplemma missing');
+          assert(Array.isArray(window.simplemma.SUPPORTED_LANGUAGES), 'SUPPORTED_LANGUAGES missing');
+          assert(typeof window.simplemma.FetchDictionaryFactory === 'function', 'FetchDictionaryFactory missing');
+          assert(typeof window.simplemma.Lemmatizer === 'function', 'Lemmatizer missing');
+        },
+      },
+      {
+        name: 'dictionary URL returns usable JSON through factory',
+        async run() {
+          const factory = new simplemma.FetchDictionaryFactory(DICT_BASE);
+          const dict = await factory.getDictionaryAsync('en');
+          assert(!!dict, 'dictionary not loaded');
+          assert(typeof dict === 'object', 'dictionary is not object');
+          assert(dict.running === 'run' || dict.children === 'child' || dict.cars === 'car', 'expected lemma entries missing');
+        },
+      },
+      {
+        name: 'lemmatizer resolves known English and Indonesian forms',
+        async run() {
+          const factory = new simplemma.FetchDictionaryFactory(DICT_BASE);
+          const strategy = new simplemma.DefaultStrategy({ dictionaryFactory: factory });
+          const lemmatizer = new simplemma.Lemmatizer({ lemmatizationStrategy: strategy });
+          assertEqual(await lemmatizer.lemmatizeAsync('running', 'en'), 'run', 'running -> run');
+          assertEqual(await lemmatizer.lemmatizeAsync('cars', 'en'), 'car', 'cars -> car');
+          assertEqual(await lemmatizer.lemmatizeAsync('berjalan', 'id'), 'jalan', 'berjalan -> jalan');
+          assertEqual(await lemmatizer.lemmatizeAsync('makanan', 'id'), 'makan', 'makanan -> makan');
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

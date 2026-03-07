@@ -592,7 +592,22 @@ function updateWordsList() {
 
 			const meaningSpan = document.createElement("div");
 			meaningSpan.className = "word-meaning";
-			meaningSpan.textContent = words[word].meaning || "";
+			const meaningText = words[word].meaning || "";
+
+			const lemmaValue = typeof words[word].lemma === "string" ? words[word].lemma.trim() : "";
+			let lemmaSpan = null;
+			if (lemmaValue && lemmaValue.toLowerCase() !== word.toLowerCase()) {
+				lemmaSpan = document.createElement("span");
+				lemmaSpan.className = "word-lemma";
+				lemmaSpan.textContent = `${t("lemma_label")}: ${lemmaValue}`;
+			}
+			if (lemmaSpan) {
+				meaningSpan.appendChild(lemmaSpan);
+				if (meaningText) {
+					meaningSpan.appendChild(document.createTextNode(" "));
+				}
+			}
+			meaningSpan.appendChild(document.createTextNode(meaningText));
 
 			const toggleLearnedButton = document.createElement("button");
 			toggleLearnedButton.textContent = "✓";

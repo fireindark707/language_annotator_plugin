@@ -119,6 +119,23 @@
 				learned: !!data.learned,
 				createdAt: typeof data.createdAt === "number" ? data.createdAt : 0,
 			};
+			if (typeof data.lemma === "string" && data.lemma.trim()) {
+				next.lemma = data.lemma.trim();
+			}
+			if (data.dictionary && typeof data.dictionary === "object") {
+				const dict = {};
+				if (typeof data.dictionary.pos === "string" && data.dictionary.pos) dict.pos = data.dictionary.pos;
+				if (typeof data.dictionary.definitionOriginal === "string" && data.dictionary.definitionOriginal) dict.definitionOriginal = data.dictionary.definitionOriginal;
+				if (typeof data.dictionary.definitionTranslated === "string" && data.dictionary.definitionTranslated) dict.definitionTranslated = data.dictionary.definitionTranslated;
+				if (typeof data.dictionary.source === "string" && data.dictionary.source) dict.source = data.dictionary.source;
+				if (typeof data.dictionary.lookupLemma === "string" && data.dictionary.lookupLemma) dict.lookupLemma = data.dictionary.lookupLemma;
+				if (typeof data.dictionary.queryText === "string" && data.dictionary.queryText) dict.queryText = data.dictionary.queryText;
+				if (data.dictionary.usedLemma) dict.usedLemma = true;
+				if (Array.isArray(data.dictionary.entries)) dict.entries = data.dictionary.entries;
+				if (typeof data.dictionary.selectedIndex === "number") dict.selectedIndex = data.dictionary.selectedIndex;
+				if (typeof data.dictionary.updatedAt === "number") dict.updatedAt = data.dictionary.updatedAt;
+				if (Object.keys(dict).length > 0) next.dictionary = dict;
+			}
 			if (typeof data.encounterCount === "number") {
 				next.encounterCount = data.encounterCount;
 			}
@@ -224,7 +241,16 @@
 					typeof local.createdAt === "number" && local.createdAt > 0 ? local.createdAt : Number.MAX_SAFE_INTEGER,
 					typeof cloud.createdAt === "number" && cloud.createdAt > 0 ? cloud.createdAt : Number.MAX_SAFE_INTEGER
 				),
-			dictionary: local.dictionary || cloud.dictionary || null,
+			lemma:
+				(typeof local.lemma === "string" && local.lemma.trim())
+					? local.lemma.trim()
+					: ((typeof cloud.lemma === "string" && cloud.lemma.trim()) ? cloud.lemma.trim() : ""),
+			dictionary: (function () {
+				const localDict = local.dictionary && typeof local.dictionary === "object" ? local.dictionary : null;
+				const cloudDict = cloud.dictionary && typeof cloud.dictionary === "object" ? cloud.dictionary : null;
+				if (!localDict && !cloudDict) return null;
+				return Object.assign({}, cloudDict || {}, localDict || {});
+			}()),
 			examples: mergedExamples,
 			encounterCount: mergedEncounter,
 			pageCount: mergedPageCount,

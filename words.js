@@ -5,6 +5,13 @@ let searchKeyword = "";
 const MAX_EXAMPLES_PER_WORD = 20;
 const MAX_TRANSLATE_CONCURRENCY = 2;
 const SEARCH_DEBOUNCE_MS = 350;
+const LEMMA_BACKFILL_CONCURRENCY = 3;
+const SIMPLEMMA_SUPPORTED_LANGS = new Set([
+	"ast", "bg", "ca", "cs", "cy", "da", "de", "el", "en", "enm", "eo", "es", "et", "fa",
+	"fi", "fr", "ga", "gd", "gl", "gv", "hbs", "hi", "hu", "hy", "id", "is", "it", "ka",
+	"la", "lb", "lt", "lv", "mk", "ms", "nb", "nl", "nn", "pl", "pt", "ro", "ru", "se",
+	"sk", "sl", "sq", "sv", "sw", "tl", "tr", "uk"
+]);
 
 let cachedSourceLangPromise = null;
 let activeTranslateJobs = 0;
@@ -13,6 +20,9 @@ const translateInflight = new Set();
 const translationMemoryCache = new Map();
 const exampleObservers = new WeakMap();
 const wordWriteLocks = new Map();
+const lemmaCache = new Map();
+let lemmaBackfillStarted = false;
+let lemmaBackfillPromise = null;
 function getEncounterCount(wordData) {
 	const count = wordData && typeof wordData.encounterCount === "number" ? wordData.encounterCount : 0;
 	const examples = Array.isArray(wordData && wordData.examples) ? wordData.examples.length : 0;
@@ -85,11 +95,13 @@ document.addEventListener("DOMContentLoaded", function () {
 		applyUiText();
 		refreshLanguageChip();
 		updateWordsList();
+		backfillMissingLemmas();
 	}).catch(() => {
 		uiLang = "zh-TW";
 		applyUiText();
 		refreshLanguageChip();
 		updateWordsList();
+		backfillMissingLemmas();
 	});
 
 	toggleViewBtn.addEventListener("click", function () {
@@ -177,6 +189,125 @@ function supportsDictionaryBySourceLang(sourceLang) {
 	return supported.has(base);
 }
 
+function getDictionarySourceLabel(source) {
+	const normalized = (source || "").toLowerCase();
+	if (normalized === "kateglo") return "Kateglo";
+	if (normalized === "dictionaryapi") return "Free Dictionary";
+	if (normalized === "jotoba") return "Jotoba";
+	if (normalized === "wiktionary") return "Wiktionary";
+	return "Dictionary";
+}
+
+function normalizeLemmaSourceLang(sourceLang) {
+	const base = (((sourceLang || "").split("-")[0]) || "").toLowerCase();
+	if (!base || base === "auto") return "";
+	if (base === "fil") return "tl";
+	return base;
+}
+
+function supportsLemmaBySourceLang(sourceLang) {
+	const lang = normalizeLemmaSourceLang(sourceLang);
+	return !!lang && SIMPLEMMA_SUPPORTED_LANGS.has(lang);
+}
+
+function resolveLemma(text, sourceLang) {
+	const query = normalizeDictionaryQuery(text);
+	const lang = normalizeLemmaSourceLang(sourceLang);
+	if (!query || !lang || !supportsLemmaBySourceLang(lang)) {
+		return Promise.resolve({ query, lemma: "", effectiveQuery: query, lang });
+	}
+	const cacheKey = `${lang}__${query.toLowerCase()}`;
+	if (lemmaCache.has(cacheKey)) return Promise.resolve(lemmaCache.get(cacheKey));
+	return new Promise((resolve) => {
+		chrome.runtime.sendMessage(
+			{ action: "getLemma", text: query, sourceLang: lang },
+			(response) => {
+				const lemma = response && response.found && typeof response.lemma === "string"
+					? response.lemma.trim()
+					: "";
+				const payload = {
+					query,
+					lemma,
+					effectiveQuery: lemma || query,
+					lang,
+				};
+				lemmaCache.set(cacheKey, payload);
+				resolve(payload);
+			}
+		);
+	});
+}
+
+function createLimiter(limit) {
+	let active = 0;
+	const queue = [];
+	const runNext = () => {
+		if (active >= limit || queue.length === 0) return;
+		const job = queue.shift();
+		active += 1;
+		Promise.resolve()
+			.then(job.fn)
+			.then(job.resolve, job.reject)
+			.finally(() => {
+				active -= 1;
+				runNext();
+			});
+	};
+	return function schedule(fn) {
+		return new Promise((resolve, reject) => {
+			queue.push({ fn, resolve, reject });
+			runNext();
+		});
+	};
+}
+
+function backfillMissingLemmas() {
+	if (lemmaBackfillStarted) return lemmaBackfillPromise || Promise.resolve(0);
+	lemmaBackfillStarted = true;
+	lemmaBackfillPromise = Promise.all([
+		WordStorage.getSourceLang(),
+		WordStorage.getWords(),
+	]).then(async ([sourceLang, words]) => {
+		if (!supportsLemmaBySourceLang(sourceLang)) return 0;
+		const wordList = Object.keys(words || {});
+		const missing = wordList.filter((word) => {
+			const data = words[word] || {};
+			return !(typeof data.lemma === "string" && data.lemma.trim());
+		});
+		if (missing.length === 0) return 0;
+
+		const schedule = createLimiter(LEMMA_BACKFILL_CONCURRENCY);
+		const updates = await Promise.all(
+			missing.map((word) => schedule(async () => {
+				const result = await resolveLemma(word, sourceLang);
+				const lemma = (result && typeof result.lemma === "string" ? result.lemma : "").trim();
+				if (!lemma) return null;
+				return { word, lemma };
+			}))
+		);
+
+		let changed = 0;
+		updates.filter(Boolean).forEach(({ word, lemma }) => {
+			const current = words[word] || {};
+			if ((current.lemma || "").trim() === lemma) return;
+			words[word] = Object.assign({}, current, { lemma });
+			changed += 1;
+		});
+
+		if (changed > 0) {
+			await WordStorage.saveWords(words);
+		}
+		return changed;
+	}).then((changed) => {
+		if (changed > 0) updateWordsList();
+		return changed;
+	}).catch((error) => {
+		console.error("Failed to backfill lemmas in words view:", error);
+		return 0;
+	});
+	return lemmaBackfillPromise;
+}
+
 function updateSearchLayout(hasLocalResults, hasKeyword) {
 	if (!hasKeyword) {
 		localResultBlock.style.display = "block";
@@ -227,42 +358,83 @@ function renderDictionarySearchResults(hasLocalResults) {
 					dictWordsList.innerHTML = `<div class="empty">${t("dict_no_result")}</div>`;
 					return;
 				}
-				const entries = response.entries.slice(0, 5);
-				if (entries.length === 0) {
+				const sections = Array.isArray(response.sections) ? response.sections : [];
+				const effectiveSections = sections.length > 0
+					? sections
+					: [{
+						mode: response.usedLemma ? "lemma" : "surface",
+						query: response.usedLemma ? (response.lemma || "") : (response.query || query),
+						source: response.source || "dictionary",
+						entries: Array.isArray(response.entries) ? response.entries : [],
+					}];
+				const hasAnyEntries = effectiveSections.some((section) => Array.isArray(section.entries) && section.entries.length > 0);
+				if (!hasAnyEntries) {
 					dictWordsList.innerHTML = `<div class="empty">${t("dict_no_result")}</div>`;
 					return;
 				}
 				const wrap = document.createElement("div");
-				entries.forEach((item) => {
-					const row = document.createElement("div");
-					row.className = "word-item";
-					const pos = item && item.pos ? `[${item.pos}] ` : "";
-					const text = item && item.definition ? item.definition : "";
-					const title = document.createElement("div");
-					title.textContent = `${pos}${text}`;
-					row.appendChild(title);
-
-					const trans = document.createElement("div");
-					trans.className = "example-translation";
-					trans.textContent = "…";
-					row.appendChild(trans);
-
-					chrome.runtime.sendMessage(
-						{
-							action: "translate",
-							text: text,
-							sourceLang: sourceLang || "auto",
-						},
-						(transResp) => {
-							if (!row.isConnected) return;
-							if (chrome.runtime.lastError || !transResp || !transResp.translation) {
-								trans.textContent = "";
-								return;
-							}
-							trans.textContent = transResp.translation;
+				effectiveSections.forEach((section, sectionIndex) => {
+					const sectionWrap = document.createElement("div");
+					sectionWrap.className = "dict-search-section";
+					if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
+					const sectionTitle = document.createElement("div");
+					sectionTitle.className = "dict-section-title";
+					const sectionLabel = section.mode === "lemma"
+						? `${t("lemma_label")}: ${section.query}`
+						: `${t("dict_selected_form")}: ${section.query}`;
+					sectionTitle.textContent = `${sectionLabel} · ${getDictionarySourceLabel(section.source)}`;
+					sectionWrap.appendChild(sectionTitle);
+					const items = Array.isArray(section.entries) ? section.entries.slice(0, 5) : [];
+					if (items.length === 0) {
+						const empty = document.createElement("div");
+						empty.className = "empty";
+						empty.textContent = t("no_dict_entries");
+						sectionWrap.appendChild(empty);
+						wrap.appendChild(sectionWrap);
+						return;
+					}
+					items.forEach((item) => {
+						const row = document.createElement("div");
+						row.className = "dict-search-item";
+						const body = document.createElement("div");
+						body.className = "dict-search-body";
+						const pos = item && item.pos ? `[${item.pos}]` : "";
+						const text = item && item.definition ? item.definition : "";
+						const title = document.createElement("div");
+						title.className = "dict-search-original";
+						title.textContent = text;
+						if (pos) {
+							const posEl = document.createElement("div");
+							posEl.className = "dict-pos";
+							posEl.textContent = pos;
+							body.appendChild(posEl);
 						}
-					);
-					wrap.appendChild(row);
+						body.appendChild(title);
+
+						const trans = document.createElement("div");
+						trans.className = "dict-search-translation";
+						trans.textContent = "…";
+						body.appendChild(trans);
+						row.appendChild(body);
+
+						chrome.runtime.sendMessage(
+							{
+								action: "translate",
+								text: text,
+								sourceLang: sourceLang || "auto",
+							},
+							(transResp) => {
+								if (!row.isConnected) return;
+								if (chrome.runtime.lastError || !transResp || !transResp.translation) {
+									trans.textContent = "";
+									return;
+								}
+								trans.textContent = transResp.translation;
+							}
+						);
+						sectionWrap.appendChild(row);
+					});
+					wrap.appendChild(sectionWrap);
 				});
 				dictWordsList.innerHTML = "";
 				dictWordsList.appendChild(wrap);
@@ -776,7 +948,22 @@ function updateWordsList() {
 
 				const meaningSpan = document.createElement("div");
 				meaningSpan.className = "word-meaning";
-				meaningSpan.textContent = words[word].meaning || "";
+				const meaningText = words[word].meaning || "";
+
+				const lemmaValue = typeof words[word].lemma === "string" ? words[word].lemma.trim() : "";
+				let lemmaSpan = null;
+				if (lemmaValue) {
+					lemmaSpan = document.createElement("span");
+					lemmaSpan.className = "word-lemma";
+					lemmaSpan.textContent = `${t("lemma_label")}: ${lemmaValue}`;
+				}
+				if (lemmaSpan) {
+					meaningSpan.appendChild(lemmaSpan);
+					if (meaningText) {
+						meaningSpan.appendChild(document.createTextNode(" "));
+					}
+				}
+				meaningSpan.appendChild(document.createTextNode(meaningText));
 
 				const actionWrap = document.createElement("div");
 				actionWrap.className = "word-actions";
@@ -846,6 +1033,15 @@ function updateWordsList() {
 
 			function renderDictionary() {
 				dictWrap.innerHTML = "";
+				const dictMeta = words[word] && words[word].dictionary && typeof words[word].dictionary === "object"
+					? words[word].dictionary
+					: null;
+				if (dictMeta && dictMeta.usedLemma && dictMeta.lookupLemma) {
+					const note = document.createElement("div");
+					note.className = "dict-lemma-note";
+					note.textContent = `${t("dict_via_lemma")}: ${dictMeta.lookupLemma}`;
+					dictWrap.appendChild(note);
+				}
 				const list = document.createElement("ol");
 				list.className = "dict-list";
 				if (dictionaryEntries.length === 0) {

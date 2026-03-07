@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>dictionary url smoke</title>
+</head>
+<body>
+  <pre id="test-output">running</pre>
+  <script src="file:///home/phoenix000/文件/projects/language_annotator_plugin/tests/lib/test-harness.js"></script>
+  <script>
+    const { assert, runTests } = window.TestHarness;
+    const URLS = [
+      'https://media.githubusercontent.com/media/fireindark707/simplelemma_js/main/src/data/en.json',
+      'https://media.githubusercontent.com/media/fireindark707/simplelemma_js/main/src/data/id.json'
+    ];
+
+    runTests(URLS.map((url) => ({
+      name: `fetch dictionary payload: ${url.split('/').pop()}`,
+      async run() {
+        const response = await fetch(url);
+        assert(response.ok, `HTTP ${response.status}`);
+        const text = await response.text();
+        assert(text.trim().startsWith('{'), 'payload is not JSON object');
+        assert(!text.includes('version https://git-lfs.github.com/spec/v1'), 'received git-lfs pointer instead of dictionary payload');
+      }
+    })));
+  </script>
+</body>
+</html>

@@ -13,9 +13,16 @@ let previewTranslateActive = 0;
 const previewTranslateQueue = [];
 const previewTranslateInflight = new Set();
 const previewTranslateCache = new Map();
+const lemmaCache = new Map();
 let contentUiLang = "en";
 let contentTourAttempted = false;
 let contentSelectionTourAttempted = false;
+const SIMPLEMMA_SUPPORTED_LANGS = new Set([
+	"ast", "bg", "ca", "cs", "cy", "da", "de", "el", "en", "enm", "eo", "es", "et", "fa",
+	"fi", "fr", "ga", "gd", "gl", "gv", "hbs", "hi", "hu", "hy", "id", "is", "it", "ka",
+	"la", "lb", "lt", "lv", "mk", "ms", "nb", "nl", "nn", "pl", "pt", "ro", "ru", "se",
+	"sk", "sl", "sq", "sv", "sw", "tl", "tr", "uk"
+]);
 const SKIP_TEXT_TAGS = new Set([
 	"SCRIPT",
 	"STYLE",
@@ -43,6 +50,13 @@ function contentT(key) {
 	const fallback = {
 		add_word_title: "Add Word",
 		add_word_hint: "Please enter the meaning of this word",
+		dict_selected_form: "Selected form",
+		lemma_label: "Lemma",
+		dict_via_lemma: "Dictionary result matched via lemma",
+		lemma_available: "Lemma version available",
+		use_lemma: "Use lemma",
+		use_original: "Use original",
+		using_lemma: "Using lemma",
 		loading_translation: "Fetching translation...",
 		cancel: "Cancel",
 		save: "Save",
@@ -478,6 +492,46 @@ function normalizeDictionaryQuery(text) {
 	return cleaned.split(/\s+/)[0] || "";
 }
 
+function normalizeLemmaSourceLang(sourceLang) {
+	const base = (((sourceLang || "").split("-")[0]) || "").toLowerCase();
+	if (!base || base === "auto") return "";
+	if (base === "fil") return "tl";
+	return base;
+}
+
+function supportsLemmaBySourceLang(sourceLang) {
+	const lang = normalizeLemmaSourceLang(sourceLang);
+	return !!lang && SIMPLEMMA_SUPPORTED_LANGS.has(lang);
+}
+
+function resolveLemma(text, sourceLang) {
+	const query = normalizeDictionaryQuery(text);
+	const lang = normalizeLemmaSourceLang(sourceLang);
+	if (!query || !lang || !supportsLemmaBySourceLang(lang)) {
+		return Promise.resolve({ query, lemma: "", effectiveQuery: query, lang });
+	}
+	const cacheKey = `${lang}__${query.toLowerCase()}`;
+	if (lemmaCache.has(cacheKey)) return Promise.resolve(lemmaCache.get(cacheKey));
+	return new Promise((resolve) => {
+		chrome.runtime.sendMessage(
+			{ action: "getLemma", text: query, sourceLang: lang },
+			(response) => {
+				const lemma = response && response.found && typeof response.lemma === "string"
+					? response.lemma.trim()
+					: "";
+				const payload = {
+					query,
+					lemma,
+					effectiveQuery: lemma || query,
+					lang,
+				};
+				lemmaCache.set(cacheKey, payload);
+				resolve(payload);
+			}
+		);
+	});
+}
+
 function getBrowserBaseLang() {
 	const lang = (typeof navigator !== "undefined" && navigator.language ? navigator.language : "en").toLowerCase();
 	const base = (lang.split("-")[0] || "en");
@@ -551,6 +605,70 @@ function getDictionarySourceLabel(source) {
 	if (normalized === "jotoba") return "Jotoba";
 	if (normalized === "wiktionary") return "Wiktionary";
 	return "Dictionary";
+}
+
+function getDictionarySectionLabel(mode, query) {
+	if (mode === "lemma") {
+		return `${contentT("lemma_label")}: ${query}`;
+	}
+	return `${contentT("dict_selected_form")}: ${query}`;
+}
+
+function mapDictionarySections(dictResponse, sourceLang) {
+	const sections = Array.isArray(dictResponse && dictResponse.sections)
+		? dictResponse.sections
+		: [];
+	const effectiveSections = sections.length > 0
+		? sections
+		: [{
+			mode: dictResponse && dictResponse.usedLemma ? "lemma" : "surface",
+			query: dictResponse && dictResponse.usedLemma ? (dictResponse.lemma || "") : (dictResponse && dictResponse.query ? dictResponse.query : ""),
+			lemma: dictResponse && dictResponse.lemma ? dictResponse.lemma : "",
+			source: dictResponse && dictResponse.source ? dictResponse.source : "dictionary",
+			found: !!(dictResponse && dictResponse.found),
+			entries: Array.isArray(dictResponse && dictResponse.entries) ? dictResponse.entries : [],
+		}];
+
+	return Promise.all(effectiveSections.map((section) => {
+		const rawEntries = Array.isArray(section.entries)
+			? section.entries.filter((item) => item && item.definition).slice(0, 3)
+			: [];
+		if (rawEntries.length === 0) {
+			return Promise.resolve({
+				mode: section.mode || "surface",
+				query: section.query || "",
+				lemma: section.lemma || "",
+				source: section.source || "dictionary",
+				entries: [],
+			});
+		}
+		return Promise.all(rawEntries.map((entry) => new Promise((resolve) => {
+			chrome.runtime.sendMessage(
+				{
+					action: "translate",
+					text: entry.definition,
+					sourceLang: sourceLang || "auto",
+				},
+				(defResp) => {
+					const translated =
+						!chrome.runtime.lastError && defResp && defResp.translation
+							? defResp.translation
+							: "";
+					resolve({
+						pos: entry.pos || "",
+						definitionOriginal: entry.definition || "",
+						definitionTranslated: translated,
+					});
+				}
+			);
+		}))).then((mappedEntries) => ({
+			mode: section.mode || "surface",
+			query: section.query || "",
+			lemma: section.lemma || "",
+			source: section.source || "dictionary",
+			entries: mappedEntries.filter(Boolean),
+		}));
+	}));
 }
 
 function isLowInformationExample(sentence, word) {
@@ -1101,10 +1219,26 @@ function showAddWordModal(word) {
 	hint.className = "la-addword-hint";
 	hint.textContent = contentT("add_word_hint");
 
+	const lemmaNotice = document.createElement("div");
+	lemmaNotice.className = "la-addword-lemma";
+	lemmaNotice.style.display = "none";
+
+	const lemmaText = document.createElement("div");
+	lemmaText.className = "la-addword-lemma-text";
+
+	const lemmaBtn = document.createElement("button");
+	lemmaBtn.type = "button";
+	lemmaBtn.className = "la-addword-lemma-btn";
+	applyModalButtonStyle(lemmaBtn, "lemma");
+
+	lemmaNotice.appendChild(lemmaText);
+	lemmaNotice.appendChild(lemmaBtn);
+
 	const input = document.createElement("textarea");
 	input.className = "la-addword-input";
 	input.placeholder = contentT("loading_translation");
 	input.rows = 3;
+	applyModalTextareaStyle(input);
 	let userEdited = false;
 
 	const dictPreview = document.createElement("div");
@@ -1127,26 +1261,56 @@ function showAddWordModal(word) {
 	const cancelBtn = document.createElement("button");
 	cancelBtn.className = "la-addword-btn la-addword-cancel";
 	cancelBtn.textContent = contentT("cancel");
+	applyModalButtonStyle(cancelBtn, "cancel");
 
 	const saveBtn = document.createElement("button");
 	saveBtn.className = "la-addword-btn la-addword-save";
 	saveBtn.textContent = contentT("save");
+	applyModalButtonStyle(saveBtn, "save");
 
 	footer.appendChild(cancelBtn);
 	footer.appendChild(saveBtn);
 	modal.appendChild(title);
 	modal.appendChild(wordLine);
 	modal.appendChild(hint);
+	modal.appendChild(lemmaNotice);
 	modal.appendChild(input);
 	modal.appendChild(dictPreview);
 	modal.appendChild(footer);
 	overlay.appendChild(modal);
 	document.body.appendChild(overlay);
 	addWordModal = overlay;
+	overlay.dataset.targetWord = normalizedWord;
 	input.focus();
 	input.addEventListener("input", () => {
 		userEdited = true;
 	});
+
+	function getTargetWord() {
+		return (overlay.dataset.targetWord || normalizedWord).trim().toLowerCase();
+	}
+
+	function updateWordLine() {
+		const targetWord = getTargetWord();
+		wordLine.textContent = targetWord;
+		if (targetWord !== normalizedWord) {
+			hint.textContent = `${contentT("add_word_hint")} (${contentT("using_lemma")}: ${targetWord})`;
+			return;
+		}
+		hint.textContent = contentT("add_word_hint");
+	}
+
+	function setLemmaMode(useLemma, lemmaValue) {
+		const normalizedLemma = (lemmaValue || "").trim().toLowerCase();
+		if (!normalizedLemma || normalizedLemma === normalizedWord) {
+			overlay.dataset.targetWord = normalizedWord;
+			updateWordLine();
+			return;
+		}
+		overlay.dataset.targetWord = useLemma ? normalizedLemma : normalizedWord;
+		updateWordLine();
+		lemmaBtn.textContent = useLemma ? contentT("use_original") : contentT("use_lemma");
+	}
 
 	function closeModal() {
 		overlay.remove();
@@ -1159,12 +1323,13 @@ function showAddWordModal(word) {
 		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "enter") saveWord();
 	}
 
-	async function saveWord() {
+async function saveWord() {
 		const meaning = input.value.trim();
 		if (!meaning) return;
 		try {
 			const words = await WordStorage.getWords();
-			const existing = words[normalizedWord];
+			const targetWord = getTargetWord();
+			const existing = words[targetWord] || words[normalizedWord];
 			let dictEntries = [];
 			try {
 				dictEntries = JSON.parse(overlay.dataset.dictEntries || "[]");
@@ -1188,15 +1353,19 @@ function showAddWordModal(word) {
 						definitionOriginal: dictDefinitionOriginal,
 						definitionTranslated: dictDefinitionTranslated,
 						source: dictSource || "dictionary",
+						usedLemma: overlay.dataset.dictUsedLemma === "1",
+						lookupLemma: (overlay.dataset.dictLookupLemma || "").trim(),
+						queryText: (overlay.dataset.dictQueryText || "").trim(),
 						entries: dictEntries,
 						selectedIndex: Math.min(selectedIndex, Math.max(dictEntries.length - 1, 0)),
 						updatedAt: Date.now(),
 					}
 					: (existing && existing.dictionary ? existing.dictionary : null);
-			words[normalizedWord] = {
+			words[targetWord] = {
 				meaning: meaning,
 				learned: false,
 				createdAt: existing && existing.createdAt ? existing.createdAt : Date.now(),
+				lemma: (overlay.dataset.lemma || "").trim() || (existing && typeof existing.lemma === "string" ? existing.lemma : ""),
 				dictionary: dictionary,
 			};
 			await WordStorage.saveWords(words);
@@ -1214,65 +1383,111 @@ function showAddWordModal(word) {
 	document.addEventListener("keydown", onKeyDown, true);
 	prefillMeaningFromTranslation(
 		normalizedWord,
+		wordLine,
 		input,
 		() => userEdited,
 		overlay,
 		(dictPayload) => {
-			const entries = dictPayload && Array.isArray(dictPayload.entries)
-				? dictPayload.entries.filter((item) => item && item.definitionOriginal)
+			const sections = dictPayload && Array.isArray(dictPayload.sections)
+				? dictPayload.sections
 				: [];
-			if (entries.length === 0) {
+			const hasAnyEntries = sections.some((section) => Array.isArray(section.entries) && section.entries.length > 0);
+			if (!hasAnyEntries) {
 				dictPreview.style.display = "none";
 				return;
 			}
 			dictPreview.style.display = "block";
-			dictTitle.textContent = getDictionarySourceLabel(dictPayload && dictPayload.source);
+			dictTitle.textContent = contentT("dictionary");
+			const availableLemma = String((dictPayload && dictPayload.lemma) || overlay.dataset.lemma || "").trim().toLowerCase();
+			if (availableLemma && availableLemma !== normalizedWord) {
+				lemmaNotice.style.display = "";
+				lemmaText.textContent = `${contentT("lemma_available")}: ${availableLemma}`;
+				lemmaBtn.textContent = contentT("use_lemma");
+				lemmaBtn.onclick = () => {
+					const usingLemma = getTargetWord() === availableLemma;
+					setLemmaMode(!usingLemma, availableLemma);
+				};
+			} else {
+				lemmaNotice.style.display = "none";
+				lemmaBtn.onclick = null;
+				setLemmaMode(false, "");
+			}
 			dictList.innerHTML = "";
-			entries.forEach((item, index) => {
-				const row = document.createElement("div");
-				row.className = "la-addword-dict-item";
-				if (index === 0) row.classList.add("is-selected");
+			sections.forEach((section, sectionIndex) => {
+				const sectionWrap = document.createElement("div");
+				sectionWrap.className = "la-addword-dict-section";
+				if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
 
-				const pos = document.createElement("div");
-				pos.className = "la-addword-dict-pos";
-				pos.textContent = item.pos ? `[${item.pos}]` : "";
+				const sectionTitle = document.createElement("div");
+				sectionTitle.className = "la-addword-dict-section-title";
+				sectionTitle.textContent = `${getDictionarySectionLabel(section.mode, section.query)} · ${getDictionarySourceLabel(section.source)}`;
+				sectionWrap.appendChild(sectionTitle);
 
-				const original = document.createElement("div");
-				original.className = "la-addword-dict-original";
-				original.textContent = item.definitionOriginal;
+				if (!Array.isArray(section.entries) || section.entries.length === 0) {
+					const empty = document.createElement("div");
+					empty.className = "la-addword-dict-original";
+					empty.textContent = contentT("no_dict_entries");
+					sectionWrap.appendChild(empty);
+					dictList.appendChild(sectionWrap);
+					return;
+				}
 
-				const translated = document.createElement("div");
-				translated.className = "la-addword-dict-translated";
-				translated.textContent = item.definitionTranslated || "";
+				section.entries.forEach((item, index) => {
+					const row = document.createElement("div");
+					row.className = "la-addword-dict-item";
+					if (sectionIndex === 0 && index === 0) row.classList.add("is-selected");
 
-				const applyBtn = document.createElement("button");
-				applyBtn.type = "button";
-				applyBtn.className = "la-addword-dict-apply";
-				applyBtn.textContent = contentT("apply");
-				applyBtn.addEventListener("click", () => {
-					const composed = item.definitionTranslated || item.definitionOriginal || "";
-					const text = item.pos ? `[${item.pos}] ${composed}` : composed;
-					if (text.trim()) input.value = text.trim();
-					userEdited = true;
-					overlay.dataset.dictPos = item.pos || "";
-					overlay.dataset.dictDefinitionOriginal = item.definitionOriginal || "";
-					overlay.dataset.dictDefinitionTranslated = item.definitionTranslated || "";
-					overlay.dataset.dictSource = dictPayload.source || "kateglo";
-					overlay.dataset.dictSelectedIndex = String(index);
-					dictList.querySelectorAll(".la-addword-dict-item").forEach((node) => {
-						node.classList.remove("is-selected");
+					const bodyWrap = document.createElement("div");
+					bodyWrap.className = "la-addword-dict-body";
+
+					const pos = document.createElement("div");
+					pos.className = "la-addword-dict-pos";
+					pos.textContent = item.pos ? `[${item.pos}]` : "";
+
+					const original = document.createElement("div");
+					original.className = "la-addword-dict-original";
+					original.textContent = item.definitionOriginal;
+
+					const translated = document.createElement("div");
+					translated.className = "la-addword-dict-translated";
+					translated.textContent = item.definitionTranslated || "";
+
+					const applyBtn = document.createElement("button");
+					applyBtn.type = "button";
+					applyBtn.className = "la-addword-dict-apply";
+					applyBtn.textContent = contentT("apply");
+					applyModalButtonStyle(applyBtn, "apply");
+					applyBtn.addEventListener("click", () => {
+						const composed = item.definitionTranslated || item.definitionOriginal || "";
+						const text = item.pos ? `[${item.pos}] ${composed}` : composed;
+						if (text.trim()) input.value = text.trim();
+						userEdited = true;
+						overlay.dataset.dictPos = item.pos || "";
+						overlay.dataset.dictDefinitionOriginal = item.definitionOriginal || "";
+						overlay.dataset.dictDefinitionTranslated = item.definitionTranslated || "";
+						overlay.dataset.dictSource = section.source || "dictionary";
+						overlay.dataset.dictUsedLemma = section.mode === "lemma" ? "1" : "";
+						overlay.dataset.dictLookupLemma = section.mode === "lemma" ? (section.query || "") : "";
+						overlay.dataset.dictQueryText = section.query || "";
+						overlay.dataset.dictSelectedIndex = String(index);
+						dictList.querySelectorAll(".la-addword-dict-item").forEach((node) => {
+							node.classList.remove("is-selected");
+						});
+						row.classList.add("is-selected");
 					});
-					row.classList.add("is-selected");
-				});
 
-				row.appendChild(pos);
-				row.appendChild(original);
-				row.appendChild(translated);
-				row.appendChild(applyBtn);
-				dictList.appendChild(row);
+					bodyWrap.appendChild(pos);
+					bodyWrap.appendChild(original);
+					bodyWrap.appendChild(translated);
+					row.appendChild(bodyWrap);
+					row.appendChild(applyBtn);
+					sectionWrap.appendChild(row);
+				});
+				dictList.appendChild(sectionWrap);
 			});
 		}
 	);
+	updateWordLine();
 }
 
 function ensureAddWordModalStyle() {
@@ -1308,6 +1523,18 @@ function ensureAddWordModalStyle() {
 			font-weight: 800;
 			font-family: "Noto Serif TC", "Hiragino Mincho ProN", "Yu Mincho", serif;
 		}
+		.la-addword-modal button,
+		.la-addword-modal textarea,
+		.la-confirm-modal button {
+			all: unset;
+			box-sizing: border-box;
+			font-family: "Noto Sans TC", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+			line-height: 1.4;
+			letter-spacing: normal;
+			text-transform: none;
+			-webkit-appearance: none;
+			appearance: none;
+		}
 		.la-addword-word {
 			margin-top: 8px;
 			font-size: 14px;
@@ -1319,7 +1546,40 @@ function ensureAddWordModalStyle() {
 			font-size: 12px;
 			color: #7b655b;
 		}
+		.la-addword-lemma {
+			margin-top: 8px;
+			padding: 8px 10px;
+			border: 1px dashed #dcc8b8;
+			border-radius: 12px 10px 14px 10px;
+			background: #fff8f1;
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 10px;
+		}
+		.la-addword-lemma-text {
+			font-size: 12px;
+			line-height: 1.45;
+			color: #7a6258;
+		}
+		.la-addword-modal .la-addword-lemma-btn {
+			display: inline-flex !important;
+			align-items: center !important;
+			justify-content: center !important;
+			min-height: 32px !important;
+			border: 1px solid #dcc8b8 !important;
+			border-radius: 10px 9px 11px 8px !important;
+			padding: 5px 9px !important;
+			font-size: 11px !important;
+			font-weight: 700 !important;
+			cursor: pointer !important;
+			background-color: #fffdf9 !important;
+			color: #8a5f50 !important;
+			flex: 0 0 auto !important;
+			text-decoration: none !important;
+		}
 		.la-addword-input {
+			display: block;
 			width: 100%;
 			margin-top: 8px;
 			border: 1px solid #dccabd;
@@ -1357,61 +1617,103 @@ function ensureAddWordModalStyle() {
 			gap: 8px;
 			margin-top: 6px;
 		}
+		.la-addword-dict-section {
+			display: grid;
+			gap: 8px;
+		}
+		.la-addword-dict-section.is-secondary {
+			padding-top: 8px;
+			border-top: 1px dashed #e2d3c6;
+		}
+		.la-addword-dict-section-title {
+			font-size: 11px;
+			font-weight: 800;
+			color: #8b6c53;
+		}
 		.la-addword-dict-item {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
+			align-items: end;
+			column-gap: 10px;
 			border: 1px solid #ded0c3;
 			border-radius: 12px 10px 14px 10px;
 			background: #fffaf5;
-			padding: 7px 8px;
+			padding: 6px 8px;
 		}
 		.la-addword-dict-item.is-selected {
 			border-color: #a55143;
 			box-shadow: 0 0 0 2px rgba(165, 81, 67, 0.12);
 		}
+		.la-addword-dict-body {
+			min-width: 0;
+		}
 		.la-addword-dict-pos {
-			font-size: 11px;
+			font-size: 10px;
 			color: #8c7567;
 		}
 		.la-addword-dict-original {
-			margin-top: 3px;
+			margin-top: 2px;
 			font-size: 12px;
 			line-height: 1.45;
 			color: #5a473d;
 		}
 		.la-addword-dict-translated {
-			margin-top: 4px;
+			margin-top: 3px;
 			font-size: 12px;
 			line-height: 1.45;
 			color: #6d5d56;
 			border-left: 2px solid #ddd0c2;
 			padding-left: 6px;
 		}
-		.la-addword-dict-apply {
-			margin-top: 6px;
-			border: 0;
-			border-radius: 10px 9px 11px 8px;
-			padding: 4px 8px;
-			font-size: 11px;
-			font-weight: 700;
-			cursor: pointer;
-			background: #b26b54;
-			color: #fffaf3;
+		.la-addword-modal .la-addword-dict-apply {
+			display: inline-flex !important;
+			align-items: center !important;
+			justify-content: center !important;
+			align-self: end !important;
+			margin-top: 0 !important;
+			margin-bottom: 1px !important;
+			min-height: 32px !important;
+			min-width: 52px !important;
+			border: 0 !important;
+			border-radius: 10px 9px 11px 8px !important;
+			padding: 4px 8px !important;
+			font-size: 11px !important;
+			font-weight: 700 !important;
+			cursor: pointer !important;
+			background-color: #b26b54 !important;
+			color: #fffaf3 !important;
+			text-decoration: none !important;
 		}
-		.la-addword-btn {
-			border: 1px solid #d8c7b8;
-			border-radius: 12px 10px 14px 10px;
-			padding: 8px 12px;
-			font-size: 13px;
-			font-weight: 700;
-			cursor: pointer;
+		@media (max-width: 460px) {
+			.la-addword-dict-item {
+				grid-template-columns: 1fr;
+				row-gap: 8px;
+			}
+			.la-addword-modal .la-addword-dict-apply {
+				justify-self: start !important;
+			}
 		}
-		.la-addword-cancel {
-			background: #f4eadf;
-			color: #7a6155;
+		.la-addword-modal .la-addword-btn {
+			display: inline-flex !important;
+			align-items: center !important;
+			justify-content: center !important;
+			min-height: 40px !important;
+			border: 1px solid #d8c7b8 !important;
+			border-radius: 12px 10px 14px 10px !important;
+			padding: 8px 12px !important;
+			font-size: 13px !important;
+			font-weight: 700 !important;
+			cursor: pointer !important;
+			text-decoration: none !important;
 		}
-		.la-addword-save {
-			background: #a55143;
-			border-color: #9a5b49;
-			color: #fffaf3;
+		.la-addword-modal .la-addword-cancel {
+			background-color: #f4eadf !important;
+			color: #7a6155 !important;
+		}
+		.la-addword-modal .la-addword-save {
+			background-color: #a55143 !important;
+			border-color: #9a5b49 !important;
+			color: #fffaf3 !important;
 		}
 		.la-confirm-overlay {
 			position: fixed;
@@ -1453,22 +1755,27 @@ function ensureAddWordModalStyle() {
 			justify-content: flex-end;
 			gap: 8px;
 		}
-		.la-confirm-btn {
-			border: 1px solid #d8c7b8;
-			border-radius: 12px 10px 14px 10px;
-			padding: 8px 12px;
-			font-size: 13px;
-			font-weight: 700;
-			cursor: pointer;
+		.la-confirm-modal .la-confirm-btn {
+			display: inline-flex !important;
+			align-items: center !important;
+			justify-content: center !important;
+			min-height: 40px !important;
+			border: 1px solid #d8c7b8 !important;
+			border-radius: 12px 10px 14px 10px !important;
+			padding: 8px 12px !important;
+			font-size: 13px !important;
+			font-weight: 700 !important;
+			cursor: pointer !important;
+			text-decoration: none !important;
 		}
-		.la-confirm-cancel {
-			background: #f4eadf;
-			color: #7a6155;
+		.la-confirm-modal .la-confirm-cancel {
+			background-color: #f4eadf !important;
+			color: #7a6155 !important;
 		}
-		.la-confirm-ok {
-			background: #a55143;
-			border-color: #9a5b49;
-			color: #fffaf3;
+		.la-confirm-modal .la-confirm-ok {
+			background-color: #a55143 !important;
+			border-color: #9a5b49 !important;
+			color: #fffaf3 !important;
 		}
 		@keyframes laFadeIn {
 			from { opacity: 0; }
@@ -1480,6 +1787,115 @@ function ensureAddWordModalStyle() {
 		}
 	`;
 	document.head.appendChild(style);
+}
+
+function applyModalControlBaseStyle(element) {
+	element.style.setProperty("box-sizing", "border-box", "important");
+	element.style.setProperty("font-family", '"Noto Sans TC", "Hiragino Sans", "Yu Gothic UI", sans-serif', "important");
+	element.style.setProperty("line-height", "1.4", "important");
+	element.style.setProperty("letter-spacing", "normal", "important");
+	element.style.setProperty("text-transform", "none", "important");
+	element.style.setProperty("text-decoration", "none", "important");
+	element.style.setProperty("appearance", "none", "important");
+	element.style.setProperty("-webkit-appearance", "none", "important");
+	element.style.setProperty("background-image", "none", "important");
+	element.style.setProperty("box-shadow", "none", "important");
+	element.style.setProperty("outline", "none", "important");
+}
+
+function applyModalButtonStyle(button, variant) {
+	applyModalControlBaseStyle(button);
+	button.type = button.type || "button";
+	button.style.setProperty("display", "inline-flex", "important");
+	button.style.setProperty("align-items", "center", "important");
+	button.style.setProperty("justify-content", "center", "important");
+	button.style.setProperty("vertical-align", "middle", "important");
+	button.style.setProperty("cursor", "pointer", "important");
+	button.style.setProperty("user-select", "none", "important");
+	button.style.setProperty("white-space", "nowrap", "important");
+	button.style.setProperty("font-weight", "700", "important");
+	button.style.setProperty("margin", "0", "important");
+
+	const presetMap = {
+		lemma: {
+			minHeight: "32px",
+			padding: "5px 9px",
+			fontSize: "11px",
+			border: "1px solid #dcc8b8",
+			borderRadius: "10px 9px 11px 8px",
+			backgroundColor: "#fffdf9",
+			color: "#8a5f50"
+		},
+		apply: {
+			minHeight: "32px",
+			padding: "4px 8px",
+			fontSize: "11px",
+			border: "0 solid transparent",
+			borderRadius: "10px 9px 11px 8px",
+			backgroundColor: "#b26b54",
+			color: "#fffaf3",
+			marginTop: "6px"
+		},
+		cancel: {
+			minHeight: "40px",
+			padding: "8px 12px",
+			fontSize: "13px",
+			border: "1px solid #d8c7b8",
+			borderRadius: "12px 10px 14px 10px",
+			backgroundColor: "#f4eadf",
+			color: "#7a6155"
+		},
+		save: {
+			minHeight: "40px",
+			padding: "8px 12px",
+			fontSize: "13px",
+			border: "1px solid #9a5b49",
+			borderRadius: "12px 10px 14px 10px",
+			backgroundColor: "#a55143",
+			color: "#fffaf3"
+		},
+		confirmCancel: {
+			minHeight: "40px",
+			padding: "8px 12px",
+			fontSize: "13px",
+			border: "1px solid #d8c7b8",
+			borderRadius: "12px 10px 14px 10px",
+			backgroundColor: "#f4eadf",
+			color: "#7a6155"
+		},
+		confirmOk: {
+			minHeight: "40px",
+			padding: "8px 12px",
+			fontSize: "13px",
+			border: "1px solid #9a5b49",
+			borderRadius: "12px 10px 14px 10px",
+			backgroundColor: "#a55143",
+			color: "#fffaf3"
+		}
+	};
+
+	const preset = presetMap[variant];
+	if (!preset) return;
+	for (const [key, value] of Object.entries(preset)) {
+		const cssProperty = key.replace(/[A-Z]/g, (match) => `-${match.toLowerCase()}`);
+		button.style.setProperty(cssProperty, value, "important");
+	}
+}
+
+function applyModalTextareaStyle(textarea) {
+	applyModalControlBaseStyle(textarea);
+	textarea.style.setProperty("display", "block", "important");
+	textarea.style.setProperty("width", "100%", "important");
+	textarea.style.setProperty("margin-top", "8px", "important");
+	textarea.style.setProperty("border", "1px solid #dccabd", "important");
+	textarea.style.setProperty("border-radius", "14px 12px 16px 11px", "important");
+	textarea.style.setProperty("padding", "10px", "important");
+	textarea.style.setProperty("font-size", "14px", "important");
+	textarea.style.setProperty("background-color", "#fffdf9", "important");
+	textarea.style.setProperty("color", "#34251f", "important");
+	textarea.style.setProperty("resize", "vertical", "important");
+	textarea.style.setProperty("white-space", "pre-wrap", "important");
+	textarea.style.setProperty("min-height", "92px", "important");
 }
 
 function showConfirmModal(message) {
@@ -1507,10 +1923,12 @@ function showConfirmModal(message) {
 		const cancelBtn = document.createElement("button");
 		cancelBtn.className = "la-confirm-btn la-confirm-cancel";
 		cancelBtn.textContent = contentT("cancel");
+		applyModalButtonStyle(cancelBtn, "confirmCancel");
 
 		const okBtn = document.createElement("button");
 		okBtn.className = "la-confirm-btn la-confirm-ok";
 		okBtn.textContent = contentT("confirm");
+		applyModalButtonStyle(okBtn, "confirmOk");
 
 		footer.appendChild(cancelBtn);
 		footer.appendChild(okBtn);
@@ -1543,11 +1961,19 @@ function showConfirmModal(message) {
 	});
 }
 
-function prefillMeaningFromTranslation(word, inputEl, isUserEdited, modalOverlay, onDictionaryReady) {
+function prefillMeaningFromTranslation(word, wordLineEl, inputEl, isUserEdited, modalOverlay, onDictionaryReady) {
 	Promise.all([
 		WordStorage.getSourceLang(),
 		WordStorage.getDictionaryLookupEnabled().catch(() => true),
-	]).then(([sourceLang, dictionaryEnabled]) => {
+	]).then(async ([sourceLang, dictionaryEnabled]) => {
+		const lemmaInfo = await resolveLemma(word, sourceLang || "auto").catch(() => ({
+			query: normalizeDictionaryQuery(word),
+			lemma: "",
+			effectiveQuery: normalizeDictionaryQuery(word),
+		}));
+		if (modalOverlay.isConnected) {
+			modalOverlay.dataset.lemma = lemmaInfo.lemma || "";
+		}
 		chrome.runtime.sendMessage(
 			{ action: "translate", text: word, sourceLang: sourceLang || "auto" },
 			(response) => {
@@ -1568,55 +1994,34 @@ function prefillMeaningFromTranslation(word, inputEl, isUserEdited, modalOverlay
 		if (!(dictionaryEnabled && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery))) return;
 		chrome.runtime.sendMessage(
 			{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
-			(dictResponse) => {
+			async (dictResponse) => {
 				if (!modalOverlay.isConnected) return;
 				if (chrome.runtime.lastError || !dictResponse || !dictResponse.found) return;
-				const rawEntries = Array.isArray(dictResponse.entries)
-					? dictResponse.entries.filter((item) => item && item.definition).slice(0, 3)
-					: [];
-				if (rawEntries.length === 0) return;
-				const mappedEntries = new Array(rawEntries.length);
-				let pending = rawEntries.length;
-				const source = dictResponse.source || "kateglo";
-
-				rawEntries.forEach((entry, index) => {
-					chrome.runtime.sendMessage(
-						{
-							action: "translate",
-							text: entry.definition,
-							sourceLang: sourceLang || "auto",
-						},
-						(defResp) => {
-							if (!modalOverlay.isConnected) return;
-							const translated =
-								!chrome.runtime.lastError && defResp && defResp.translation
-									? defResp.translation
-									: "";
-							mappedEntries[index] = {
-								pos: entry.pos || "",
-								definitionOriginal: entry.definition || "",
-								definitionTranslated: translated,
-							};
-							pending -= 1;
-							if (pending > 0) return;
-
-							const first = mappedEntries[0];
-							if (!first) return;
-							modalOverlay.dataset.dictPos = first.pos || "";
-							modalOverlay.dataset.dictDefinitionOriginal = first.definitionOriginal || "";
-							modalOverlay.dataset.dictDefinitionTranslated = first.definitionTranslated || "";
-							modalOverlay.dataset.dictSource = source;
-							modalOverlay.dataset.dictEntries = JSON.stringify(mappedEntries.filter(Boolean));
-							modalOverlay.dataset.dictSelectedIndex = "0";
-							if (typeof onDictionaryReady === "function") {
-								onDictionaryReady({
-									source: source,
-									entries: mappedEntries.filter(Boolean),
-								});
-							}
-						}
-					);
-				});
+				const mappedSections = await mapDictionarySections(dictResponse, sourceLang || "auto");
+				if (!modalOverlay.isConnected) return;
+				const nonEmptySections = mappedSections.filter((section) => Array.isArray(section.entries) && section.entries.length > 0);
+				if (nonEmptySections.length === 0) return;
+				const firstSection = nonEmptySections[0];
+				const first = firstSection.entries[0];
+				if (!first) return;
+				modalOverlay.dataset.dictPos = first.pos || "";
+				modalOverlay.dataset.dictDefinitionOriginal = first.definitionOriginal || "";
+				modalOverlay.dataset.dictDefinitionTranslated = first.definitionTranslated || "";
+				modalOverlay.dataset.dictSource = firstSection.source || "dictionary";
+				modalOverlay.dataset.dictEntries = JSON.stringify(firstSection.entries);
+				modalOverlay.dataset.dictSelectedIndex = "0";
+				modalOverlay.dataset.dictUsedLemma = firstSection.mode === "lemma" ? "1" : "";
+				modalOverlay.dataset.dictLookupLemma = firstSection.mode === "lemma" ? (firstSection.query || "") : "";
+				modalOverlay.dataset.dictQueryText = firstSection.query || dictQuery;
+				if (typeof onDictionaryReady === "function") {
+					onDictionaryReady({
+						source: dictResponse.source || firstSection.source || "dictionary",
+						usedLemma: !!dictResponse.usedLemma,
+						lemma: dictResponse.lemma || "",
+						query: dictResponse.query || dictQuery,
+						sections: mappedSections,
+					});
+				}
 			}
 		);
 	}).catch(() => {
@@ -1645,12 +2050,12 @@ function translateText(text) {
 		WordStorage.getSourceLang(),
 		WordStorage.getDictionaryLookupEnabled().catch(() => true),
 	]).then(([sourceLang, dictionaryEnabled]) => {
+		const isSingleWord = !/\s/.test((text || "").trim());
 		chrome.runtime.sendMessage(
 			{ action: "translate", text: text, sourceLang: sourceLang },
 			function (response) {
 				const translation = response && response.translation ? response.translation : "";
 				showTranslation(translation);
-				const isSingleWord = !/\s/.test((text || "").trim());
 				const dictQuery = normalizeDictionaryQuery(text);
 				if (!(dictionaryEnabled && isSingleWord && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery))) return;
 				chrome.runtime.sendMessage(
@@ -1811,41 +2216,80 @@ function showTranslation(translation) {
 
 function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
 	const dictWrap = document.getElementById("translationDictionary");
-	if (!dictWrap || !dictResponse || !Array.isArray(dictResponse.entries)) return;
+	if (!dictWrap || !dictResponse) return;
+	const sections = Array.isArray(dictResponse.sections)
+		? dictResponse.sections
+		: [];
+	const effectiveSections = sections.length > 0
+		? sections
+		: [{
+			mode: dictResponse.usedLemma ? "lemma" : "surface",
+			query: dictResponse.usedLemma ? (dictResponse.lemma || "") : (dictResponse.query || ""),
+			lemma: dictResponse.lemma || "",
+			source: dictResponse.source || "dictionary",
+			found: !!dictResponse.found,
+			entries: Array.isArray(dictResponse.entries) ? dictResponse.entries : [],
+		}];
 	dictWrap.innerHTML = "";
 	dictWrap.style.display = "block";
 	const title = document.createElement("div");
-	title.textContent = getDictionarySourceLabel(dictResponse.source);
+	title.textContent = contentT("dictionary");
 	title.style.fontWeight = "700";
-	title.style.marginBottom = "4px";
+	title.style.marginBottom = "6px";
 	title.style.color = "#856a5f";
 	dictWrap.appendChild(title);
+	effectiveSections.forEach((section, sectionIndex) => {
+		const sectionWrap = document.createElement("div");
+		sectionWrap.style.marginTop = sectionIndex === 0 ? "0" : "8px";
+		if (sectionIndex > 0) {
+			sectionWrap.style.paddingTop = "8px";
+			sectionWrap.style.borderTop = "1px dashed #e1d4c7";
+		}
+		const sectionTitle = document.createElement("div");
+		sectionTitle.textContent = `${getDictionarySectionLabel(section.mode, section.query)} · ${getDictionarySourceLabel(section.source)}`;
+		sectionTitle.style.fontSize = "11px";
+		sectionTitle.style.fontWeight = "700";
+		sectionTitle.style.marginBottom = "4px";
+		sectionTitle.style.color = "#8c6c59";
+		sectionWrap.appendChild(sectionTitle);
 
-	const entries = dictResponse.entries.slice(0, 3);
-	entries.forEach((item) => {
-		const row = document.createElement("div");
-		row.style.marginTop = "5px";
-		const pos = document.createElement("div");
-		pos.style.fontSize = "11px";
-		pos.style.color = "#8b7368";
-		pos.textContent = item.pos ? `[${item.pos}]` : "";
-		const def = document.createElement("div");
-		def.textContent = "…";
-		row.appendChild(pos);
-		row.appendChild(def);
-		dictWrap.appendChild(row);
-		chrome.runtime.sendMessage(
-			{
-				action: "translate",
-				text: item.definition || "",
-				sourceLang: sourceLang || "auto",
-			},
-			(transResp) => {
-				if (chrome.runtime.lastError || !transResp) return;
-				const translated = transResp.translation || "";
-				def.textContent = translated || (item.definition || "");
-			}
-		);
+		const entries = Array.isArray(section.entries) ? section.entries.slice(0, 3) : [];
+		if (entries.length === 0) {
+			const empty = document.createElement("div");
+			empty.textContent = contentT("no_dict_entries");
+			empty.style.fontSize = "11px";
+			empty.style.color = "#9a8478";
+			sectionWrap.appendChild(empty);
+			dictWrap.appendChild(sectionWrap);
+			return;
+		}
+
+		entries.forEach((item) => {
+			const row = document.createElement("div");
+			row.style.marginTop = "5px";
+			const pos = document.createElement("div");
+			pos.style.fontSize = "11px";
+			pos.style.color = "#8b7368";
+			pos.textContent = item.pos ? `[${item.pos}]` : "";
+			const def = document.createElement("div");
+			def.textContent = "…";
+			row.appendChild(pos);
+			row.appendChild(def);
+			sectionWrap.appendChild(row);
+			chrome.runtime.sendMessage(
+				{
+					action: "translate",
+					text: item.definition || "",
+					sourceLang: sourceLang || "auto",
+				},
+				(transResp) => {
+					if (chrome.runtime.lastError || !transResp) return;
+					const translated = transResp.translation || "";
+					def.textContent = translated || (item.definition || "");
+				}
+			);
+		});
+		dictWrap.appendChild(sectionWrap);
 	});
 	if (!contentSelectionTourAttempted && document.getElementById("translationBox")) {
 		contentSelectionTourAttempted = true;

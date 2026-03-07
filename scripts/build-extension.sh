@@ -43,6 +43,7 @@ ZIP_PATH="$DIST_DIR/language-annotator-${TARGET}-v${VERSION}.zip"
     -x ".git/*" \
     -x ".vscode/*" \
     -x "dist/*" \
+    -x "tests/*" \
     -x "manifests/*" \
     -x "scripts/*" \
     -x "*.pem" \
