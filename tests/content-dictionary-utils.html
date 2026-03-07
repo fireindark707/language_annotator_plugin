@@ -15,6 +15,24 @@
 
     runTests([
       {
+        name: "dictionary query helpers normalize language, query and stored entries",
+        run() {
+          assertEqual(U.normalizeDictionaryQuery('  "running!" now  '), "running");
+          assertEqual(U.shouldLookupDictionaryQuery("a"), false);
+          assertEqual(U.shouldLookupDictionaryQuery("berjalan"), true);
+          assertEqual(U.normalizeDictionaryLang("fil-PH"), "tl");
+          const entries = U.normalizeStoredDictionaryEntries({
+            dictionary: {
+              pos: "verb",
+              definitionOriginal: "to run",
+              definitionTranslated: "跑",
+            },
+          });
+          assertEqual(entries.length, 1);
+          assertEqual(entries[0].definitionTranslated, "跑");
+        },
+      },
+      {
         name: "getEffectiveDictionarySections falls back to legacy response shape",
         run() {
           const sections = U.getEffectiveDictionarySections({
@@ -132,6 +150,14 @@
           assert(appliedPayload, "expected onApply payload");
           assertEqual(appliedPayload.section.query, "mobilnya");
           assertEqual(appliedPayload.item.definitionTranslated, "車輛");
+        },
+      },
+      {
+        name: "buildDictionaryLookup chooses expected source strategy",
+        run() {
+          assertEqual(U.buildDictionaryLookup("mobil", "id").sourceName, "kateglo");
+          assertEqual(U.buildDictionaryLookup("walk", "en").sourceName, "dictionaryapi");
+          assertEqual(U.buildDictionaryLookup("食べる", "ja").sourceName, "jotoba");
         },
       },
     ]);

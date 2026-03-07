@@ -3,6 +3,8 @@ function getSelectedLabel(selectEl) {
 	return option ? option.textContent : "-";
 }
 
+const DictionaryUtilsRef = globalThis.DictionaryUtils || {};
+
 document.addEventListener("DOMContentLoaded", function () {
 	const sourceLangSelect = document.getElementById("sourceLang");
 	const uiLanguageSelect = document.getElementById("uiLanguage");
@@ -42,21 +44,10 @@ document.addEventListener("DOMContentLoaded", function () {
 		currentLang.textContent = getSelectedLabel(sourceLangSelect);
 	}
 
-	function supportsDictionaryBySourceLang(sourceLang) {
-		const normalized = (sourceLang || "").toLowerCase();
-		if (!normalized || normalized === "auto") return false;
-		const base = normalized.split("-")[0];
-		const supported = new Set([
-			"ar", "bn", "cs", "de", "el", "en", "es", "fa", "fil", "fr",
-			"he", "hi", "hu", "id", "it", "ja", "jv", "km", "ko", "lo",
-			"ms", "my", "nl", "pl", "pt", "ro", "ru", "su", "sv", "sw",
-			"ta", "te", "th", "tl", "tr", "ur", "vi", "zh",
-		]);
-		return supported.has(base);
-	}
-
 	function renderDictionaryLookupVisibility() {
-		const shouldShow = supportsDictionaryBySourceLang(sourceLangSelect.value);
+		const shouldShow = typeof DictionaryUtilsRef.supportsDictionaryBySourceLang === "function"
+			? DictionaryUtilsRef.supportsDictionaryBySourceLang(sourceLangSelect.value)
+			: false;
 		dictionaryLookupRow.style.display = shouldShow ? "" : "none";
 	}
 

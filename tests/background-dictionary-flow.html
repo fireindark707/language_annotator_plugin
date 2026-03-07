@@ -29,6 +29,7 @@
       Lemmatizer: function () { this.lemmatizeAsync = async (text) => text; },
     };
   </script>
+  <script src="../lib/dictionary-utils.js"></script>
   <script src="../background.js"></script>
   <script src="./lib/test-harness.js"></script>
   <script>
@@ -38,21 +39,31 @@
       {
         name: "buildDictionaryLookup routes to the expected primary source name",
         run() {
-          lookupKateglo = () => Promise.resolve({ found: false, source: "kateglo", entries: [] });
-          lookupFreeDictionaryByLang = () => Promise.resolve({ found: false, source: "dictionaryapi", entries: [] });
-          lookupEnglishFreeDictionary = () => Promise.resolve({ found: false, source: "dictionaryapi", entries: [] });
-          lookupJotobaJapaneseDictionary = () => Promise.resolve({ found: false, source: "jotoba", entries: [] });
+          const originalLookupKateglo = DictionaryUtils.lookupKateglo;
+          const originalLookupFree = DictionaryUtils.lookupFreeDictionaryByLang;
+          const originalLookupEnglish = DictionaryUtils.lookupEnglishFreeDictionary;
+          const originalLookupJotoba = DictionaryUtils.lookupJotobaJapaneseDictionary;
+          DictionaryUtils.lookupKateglo = () => Promise.resolve({ found: false, source: "kateglo", entries: [] });
+          DictionaryUtils.lookupFreeDictionaryByLang = () => Promise.resolve({ found: false, source: "dictionaryapi", entries: [] });
+          DictionaryUtils.lookupEnglishFreeDictionary = () => Promise.resolve({ found: false, source: "dictionaryapi", entries: [] });
+          DictionaryUtils.lookupJotobaJapaneseDictionary = () => Promise.resolve({ found: false, source: "jotoba", entries: [] });
 
-          assertEqual(buildDictionaryLookup("mobil", "id").sourceName, "kateglo");
-          assertEqual(buildDictionaryLookup("walk", "en").sourceName, "dictionaryapi");
-          assertEqual(buildDictionaryLookup("食べる", "ja").sourceName, "jotoba");
-          assertEqual(buildDictionaryLookup("andar", "es").sourceName, "dictionaryapi");
+          assertEqual(DictionaryUtils.buildDictionaryLookup("mobil", "id").sourceName, "kateglo");
+          assertEqual(DictionaryUtils.buildDictionaryLookup("walk", "en").sourceName, "dictionaryapi");
+          assertEqual(DictionaryUtils.buildDictionaryLookup("食べる", "ja").sourceName, "jotoba");
+          assertEqual(DictionaryUtils.buildDictionaryLookup("andar", "es").sourceName, "dictionaryapi");
+
+          DictionaryUtils.lookupKateglo = originalLookupKateglo;
+          DictionaryUtils.lookupFreeDictionaryByLang = originalLookupFree;
+          DictionaryUtils.lookupEnglishFreeDictionary = originalLookupEnglish;
+          DictionaryUtils.lookupJotobaJapaneseDictionary = originalLookupJotoba;
         },
       },
       {
         name: "lookupDictionaryWithLemmaFallback returns both surface and lemma sections when both exist",
         async run() {
-          buildDictionaryLookup = (text) => ({
+          const originalBuilder = DictionaryUtils.buildDictionaryLookup;
+          DictionaryUtils.buildDictionaryLookup = (text) => ({
             sourceName: "dictionaryapi",
             lookupPromise: Promise.resolve(
               text === "running"
@@ -69,12 +80,14 @@
           assertEqual(result.sections[0].mode, "surface");
           assertEqual(result.sections[1].mode, "lemma");
           assertEqual(result.sections[1].query, "run");
+          DictionaryUtils.buildDictionaryLookup = originalBuilder;
         },
       },
       {
         name: "lookupDictionaryWithLemmaFallback promotes lemma result when surface lookup misses",
         async run() {
-          buildDictionaryLookup = (text) => ({
+          const originalBuilder = DictionaryUtils.buildDictionaryLookup;
+          DictionaryUtils.buildDictionaryLookup = (text) => ({
             sourceName: "dictionaryapi",
             lookupPromise: Promise.resolve(
               text === "running"
@@ -90,12 +103,14 @@
           assertEqual(result.entries[0].definition, "lemma form");
           assertEqual(result.sections[0].found, false);
           assertEqual(result.sections[1].found, true);
+          DictionaryUtils.buildDictionaryLookup = originalBuilder;
         },
       },
       {
         name: "lookupDictionaryWithLemmaFallback keeps only surface section when lemma is empty or unchanged",
         async run() {
-          buildDictionaryLookup = () => ({
+          const originalBuilder = DictionaryUtils.buildDictionaryLookup;
+          DictionaryUtils.buildDictionaryLookup = () => ({
             sourceName: "dictionaryapi",
             lookupPromise: Promise.resolve({ found: true, source: "dictionaryapi", entries: [{ definition: "surface only" }] }),
           });
@@ -105,6 +120,7 @@
           assertEqual(result.sections.length, 1);
           assertEqual(result.sections[0].mode, "surface");
           assertEqual(result.usedLemma, false);
+          DictionaryUtils.buildDictionaryLookup = originalBuilder;
         },
       },
     ]);

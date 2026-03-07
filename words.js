@@ -164,17 +164,9 @@ function startWordsTour(force) {
 	});
 }
 
-const normalizeDictionaryQuery = DictionaryUtilsRef.normalizeDictionaryQuery || function (text) {
-	const cleaned = (text || "").trim();
-	return cleaned.split(/\s+/)[0] || "";
-};
-const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySourceLang || function (sourceLang) {
-	const normalized = (sourceLang || "").toLowerCase();
-	return !!normalized && normalized !== "auto";
-};
-const getDictionarySourceLabel = DictionaryUtilsRef.getDictionarySourceLabel || function () {
-	return "Dictionary";
-};
+const normalizeDictionaryQuery = DictionaryUtilsRef.normalizeDictionaryQuery || (() => "");
+const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySourceLang || (() => false);
+const getDictionarySourceLabel = DictionaryUtilsRef.getDictionarySourceLabel || (() => "Dictionary");
 const normalizeLemmaSourceLang = LemmaUtilsRef.normalizeLemmaSourceLang || function (sourceLang) {
 	const base = (((sourceLang || "").split("-")[0]) || "").toLowerCase();
 	return base === "auto" ? "" : base;
@@ -331,15 +323,9 @@ function renderDictionarySearchResults(hasLocalResults) {
 					dictWordsList.innerHTML = `<div class="empty">${t("dict_no_result")}</div>`;
 					return;
 				}
-				const sections = Array.isArray(response.sections) ? response.sections : [];
-				const effectiveSections = sections.length > 0
-					? sections
-					: [{
-						mode: response.usedLemma ? "lemma" : "surface",
-						query: response.usedLemma ? (response.lemma || "") : (response.query || query),
-						source: response.source || "dictionary",
-						entries: Array.isArray(response.entries) ? response.entries : [],
-					}];
+				const effectiveSections = typeof DictionaryUtilsRef.getEffectiveDictionarySections === "function"
+					? DictionaryUtilsRef.getEffectiveDictionarySections(response)
+					: [];
 				const hasAnyEntries = effectiveSections.some((section) => Array.isArray(section.entries) && section.entries.length > 0);
 				if (!hasAnyEntries) {
 					dictWordsList.innerHTML = `<div class="empty">${t("dict_no_result")}</div>`;
@@ -352,9 +338,9 @@ function renderDictionarySearchResults(hasLocalResults) {
 					if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
 					const sectionTitle = document.createElement("div");
 					sectionTitle.className = "dict-section-title";
-					const sectionLabel = section.mode === "lemma"
-						? `${t("lemma_label")}: ${section.query}`
-						: `${t("dict_selected_form")}: ${section.query}`;
+					const sectionLabel = typeof DictionaryUtilsRef.getDictionarySectionLabel === "function"
+						? DictionaryUtilsRef.getDictionarySectionLabel(t, section.mode, section.query)
+						: section.query;
 					sectionTitle.textContent = `${sectionLabel} · ${getDictionarySourceLabel(section.source)}`;
 					sectionWrap.appendChild(sectionTitle);
 					const items = Array.isArray(section.entries) ? section.entries.slice(0, 5) : [];
@@ -810,27 +796,7 @@ function applyUiText() {
 	}
 }
 
-function normalizeDictionaryEntries(wordData) {
-	if (!wordData || typeof wordData !== "object" || !wordData.dictionary) return [];
-	const dict = wordData.dictionary;
-	if (Array.isArray(dict.entries)) {
-		return dict.entries
-			.map((item) => ({
-				pos: typeof item.pos === "string" ? item.pos : "",
-				definitionOriginal: typeof item.definitionOriginal === "string" ? item.definitionOriginal : "",
-				definitionTranslated: typeof item.definitionTranslated === "string" ? item.definitionTranslated : "",
-			}))
-			.filter((item) => item.definitionOriginal || item.definitionTranslated);
-	}
-	const fallbackOriginal = typeof dict.definitionOriginal === "string" ? dict.definitionOriginal : "";
-	const fallbackTranslated = typeof dict.definitionTranslated === "string" ? dict.definitionTranslated : "";
-	if (!fallbackOriginal && !fallbackTranslated) return [];
-	return [{
-		pos: typeof dict.pos === "string" ? dict.pos : "",
-		definitionOriginal: fallbackOriginal,
-		definitionTranslated: fallbackTranslated,
-	}];
-}
+const normalizeDictionaryEntries = DictionaryUtilsRef.normalizeStoredDictionaryEntries || (() => []);
 
 function matchWordWithSearch(word, wordData, keyword) {
 	if (!keyword) return true;

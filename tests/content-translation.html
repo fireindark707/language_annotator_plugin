@@ -73,13 +73,9 @@
               return {
                 dictionary: "Dictionary",
                 no_dict_entries: "No entries",
+                dict_selected_form: "Selected form",
+                lemma_label: "Lemma",
               }[key] || key;
-            },
-            getDictionarySectionLabel(mode, query) {
-              return `${mode}:${query}`;
-            },
-            getDictionarySourceLabel(source) {
-              return source;
             },
             chromeRuntime: createRuntime({
               translate: () => ({ translation: "快速移動" }),
@@ -90,7 +86,7 @@
           await new Promise((resolve) => setTimeout(resolve, 0));
           const wrap = document.getElementById("translationDictionary");
           assertEqual(wrap.style.display, "block");
-          assert(wrap.textContent.includes("surface:running"), "expected section title");
+          assert(wrap.textContent.includes("Selected form: running"), "expected section title");
           assert(wrap.textContent.includes("快速移動"), "expected translated definition");
           box.remove();
           textNode.remove();

@@ -217,23 +217,7 @@ function normalizeText(text) {
 	return (text || "").replace(/\s+/g, " ").trim();
 }
 
-function stripOuterPunctuation(text) {
-	if (typeof ExampleUtilsRef.stripOuterPunctuation === "function") {
-		return ExampleUtilsRef.stripOuterPunctuation(text);
-	}
-	return (text || "")
-		.replace(/^[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+/u, "")
-		.replace(/[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+$/u, "");
-}
-
-function normalizeDictionaryQuery(text) {
-	if (typeof DictionaryUtilsRef.normalizeDictionaryQuery === "function") {
-		return DictionaryUtilsRef.normalizeDictionaryQuery(text);
-	}
-	const cleaned = stripOuterPunctuation((text || "").trim());
-	if (!cleaned) return "";
-	return cleaned.split(/\s+/)[0] || "";
-}
+const normalizeDictionaryQuery = DictionaryUtilsRef.normalizeDictionaryQuery || (() => "");
 
 function normalizeLemmaSourceLang(sourceLang) {
 	if (typeof LemmaUtilsRef.normalizeLemmaSourceLang === "function") {
@@ -324,39 +308,8 @@ async function shouldSkipTranslateAndDictionary(text) {
 	return normalizedDetected === normalizedBrowser;
 }
 
-function shouldLookupDictionaryQuery(query) {
-	const q = (query || "").trim();
-	if (!q) return false;
-	if (q.length < 2 || q.length > 32) return false;
-	// At least one letter from any script; reject pure digits/symbols.
-	if (!/[\p{L}]/u.test(q)) return false;
-	return true;
-}
-
-function supportsDictionaryBySourceLang(sourceLang) {
-	if (typeof DictionaryUtilsRef.supportsDictionaryBySourceLang === "function") {
-		return DictionaryUtilsRef.supportsDictionaryBySourceLang(sourceLang);
-	}
-	const normalized = (sourceLang || "").toLowerCase();
-	return !!normalized && normalized !== "auto";
-}
-
-function getDictionarySourceLabel(source) {
-	if (typeof DictionaryUtilsRef.getDictionarySourceLabel === "function") {
-		return DictionaryUtilsRef.getDictionarySourceLabel(source);
-	}
-	return "Dictionary";
-}
-
-function getDictionarySectionLabel(mode, query) {
-	if (typeof DictionaryUtilsRef.getDictionarySectionLabel === "function") {
-		return DictionaryUtilsRef.getDictionarySectionLabel(contentT, mode, query);
-	}
-	if (mode === "lemma") {
-		return `${contentT("lemma_label")}: ${query}`;
-	}
-	return `${contentT("dict_selected_form")}: ${query}`;
-}
+const shouldLookupDictionaryQuery = DictionaryUtilsRef.shouldLookupDictionaryQuery || (() => false);
+const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySourceLang || (() => false);
 
 function getAddWordTargetWord(overlay, normalizedWord) {
 	if (typeof ContentAddWordRef.getTargetWord === "function") {
@@ -765,7 +718,7 @@ async function saveWord() {
 				DictionaryUtilsRef.renderInteractiveDictionarySections(dictList, sections, {
 					document,
 					emptyText: contentT("no_dict_entries"),
-					getSectionTitle: (section) => `${getDictionarySectionLabel(section.mode, section.query)} · ${getDictionarySourceLabel(section.source)}`,
+					getSectionTitle: (section) => `${DictionaryUtilsRef.getDictionarySectionLabel(contentT, section.mode, section.query)} · ${DictionaryUtilsRef.getDictionarySourceLabel(section.source)}`,
 					decorateSection(sectionWrap, section, sectionIndex) {
 						sectionWrap.className = "la-addword-dict-section";
 						if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
@@ -1361,8 +1314,6 @@ function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
 			document,
 			DictionaryUtilsRef,
 			contentT,
-			getDictionarySectionLabel,
-			getDictionarySourceLabel,
 			chromeRuntime: chrome.runtime,
 			startContentSelectionTour,
 			state: {
