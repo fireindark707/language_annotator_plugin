@@ -147,7 +147,7 @@ async function isCurrentDomainExcluded() {
 
 // 标记单词为已学会
 function markLearned(word) {
-	lowerCaseWord = word.toLowerCase();
+	const lowerCaseWord = word.toLowerCase();
 	showConfirmModal(`${contentT("mark_confirm_prefix")}${lowerCaseWord}${contentT("mark_confirm_suffix")}`).then((confirmed) => {
 		if (!confirmed) return;
 		WordStorage.getWords().then((words) => {
@@ -196,37 +196,11 @@ function showWordPreview(anchor, meaning, examples) {
 	}
 }
 
-// 创建高亮显示的span元素
-function createHighlightSpan(word, meaning, examples) {
-	if (typeof ContentPageProcessingRef.createHighlightSpan === "function") {
-		return ContentPageProcessingRef.createHighlightSpan(word, meaning, examples, {
-			document,
-			showWordPreview,
-			hideWordPreview,
-		});
-	}
-	const span = document.createElement("span");
-	span.className = "plugin-highlight-word";
-	span.textContent = word;
-	return span;
-}
-
-function escapeRegExp(text) {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function isCjkText(text) {
 	if (typeof ContentPageProcessingRef.isCjkText === "function") {
 		return ContentPageProcessingRef.isCjkText(text);
 	}
 	return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text || "");
-}
-
-function isWordChar(char) {
-	if (typeof ContentPageProcessingRef.isWordChar === "function") {
-		return ContentPageProcessingRef.isWordChar(char);
-	}
-	return !!char && /[\p{L}\p{N}]/u.test(char);
 }
 
 function isBoundaryMatch(text, start, end, cjkWord) {
@@ -236,69 +210,11 @@ function isBoundaryMatch(text, start, end, cjkWord) {
 	if (cjkWord) return true;
 	const prev = start > 0 ? text[start - 1] : "";
 	const next = end < text.length ? text[end] : "";
-	return !isWordChar(prev) && !isWordChar(next);
-}
-
-function findNextWholeWordIndex(text, lowerText, word, fromIndex) {
-	if (typeof ContentPageProcessingRef.findNextWholeWordIndex === "function") {
-		return ContentPageProcessingRef.findNextWholeWordIndex(text, lowerText, word, fromIndex);
-	}
-	const lowerWord = (word || "").toLowerCase();
-	const cjkWord = isCjkText(word);
-	let searchFrom = fromIndex;
-
-	while (searchFrom < text.length) {
-		const idx = lowerText.indexOf(lowerWord, searchFrom);
-		if (idx === -1) return -1;
-		const end = idx + word.length;
-		if (isBoundaryMatch(text, idx, end, cjkWord)) {
-			return idx;
-		}
-		searchFrom = idx + 1;
-	}
-	return -1;
-}
-
-function containsWord(text, word) {
-	if (typeof ContentPageProcessingRef.containsWord === "function") {
-		return ContentPageProcessingRef.containsWord(text, word);
-	}
-	const trimmed = (word || "").trim();
-	if (!trimmed) return false;
-	const rawText = text || "";
-	const lowerText = rawText.toLowerCase();
-	return findNextWholeWordIndex(rawText, lowerText, trimmed.toLowerCase(), 0) !== -1;
+	return !(/[\p{L}\p{N}]/u.test(prev)) && !(/[\p{L}\p{N}]/u.test(next));
 }
 
 function normalizeText(text) {
 	return (text || "").replace(/\s+/g, " ").trim();
-}
-
-function normalizePageKey(url) {
-	if (typeof ContentPageProcessingRef.normalizePageKey === "function") {
-		return ContentPageProcessingRef.normalizePageKey(url, normalizeText);
-	}
-	if (!url) return "";
-	try {
-		const u = new URL(url);
-		return `${u.origin}${u.pathname}`;
-	} catch (error) {
-		return normalizeText(url);
-	}
-}
-
-function getDerivedPageCountFromExamples(wordData) {
-	if (typeof ContentPageProcessingRef.getDerivedPageCountFromExamples === "function") {
-		return ContentPageProcessingRef.getDerivedPageCountFromExamples(wordData, normalizeText);
-	}
-	const examples = Array.isArray(wordData && wordData.examples) ? wordData.examples : [];
-	const keys = new Set();
-	for (let i = 0; i < examples.length; i += 1) {
-		const entry = examples[i] || {};
-		const key = normalizePageKey(entry.sourceUrl || entry.url || "");
-		if (key) keys.add(key);
-	}
-	return keys.size;
 }
 
 function stripOuterPunctuation(text) {
@@ -615,16 +531,6 @@ function hasContainmentRelation(candidate, pool) {
 	return false;
 }
 
-function getContextTextForNode(node) {
-	const parentElement = node.parentElement;
-	if (!parentElement) return normalizeText(node.nodeValue || "");
-	const container = parentElement.closest("p, li, article, section, blockquote, td");
-	const text = container ? container.textContent : (parentElement.textContent || node.nodeValue);
-	const normalized = normalizeText(text || "");
-	if (normalized.length > 2500) return "";
-	return normalized;
-}
-
 function splitIntoSentences(text) {
 	if (typeof ExampleUtilsRef.splitIntoSentences === "function") {
 		const lang =
@@ -709,7 +615,6 @@ function showAddWordModal(word) {
 		})
 		: null;
 	const overlay = modalUi ? modalUi.overlay : document.createElement("div");
-	const modal = modalUi ? modalUi.modal : document.createElement("div");
 	const wordLine = modalUi ? modalUi.wordLine : document.createElement("div");
 	const hint = modalUi ? modalUi.hint : document.createElement("div");
 	const lemmaNotice = modalUi ? modalUi.lemmaNotice : document.createElement("div");
