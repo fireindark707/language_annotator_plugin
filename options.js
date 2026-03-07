@@ -3,7 +3,7 @@ function getSelectedLabel(selectEl) {
 	return option ? option.textContent : "-";
 }
 
-const DictionaryUtilsRef = globalThis.DictionaryUtils || {};
+const DictionaryUtilsRef = globalThis.DictionaryUtils;
 
 document.addEventListener("DOMContentLoaded", function () {
 	const sourceLangSelect = document.getElementById("sourceLang");
@@ -45,9 +45,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	}
 
 	function renderDictionaryLookupVisibility() {
-		const shouldShow = typeof DictionaryUtilsRef.supportsDictionaryBySourceLang === "function"
-			? DictionaryUtilsRef.supportsDictionaryBySourceLang(sourceLangSelect.value)
-			: false;
+		const shouldShow = DictionaryUtilsRef.supportsDictionaryBySourceLang(sourceLangSelect.value);
 		dictionaryLookupRow.style.display = shouldShow ? "" : "none";
 	}
 

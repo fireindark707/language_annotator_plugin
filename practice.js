@@ -57,8 +57,8 @@ const nextRoundBtn = document.getElementById("nextRoundBtn");
 const celebrateEl = document.getElementById("celebrate");
 let answerFlashTimer = null;
 let practiceTourAttempted = false;
-const PracticeUtilsRef = globalThis.PracticeUtils || {};
-const TranslationUtilsRef = globalThis.TranslationUtils || {};
+const PracticeUtilsRef = globalThis.PracticeUtils;
+const TranslationUtilsRef = globalThis.TranslationUtils;
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
@@ -97,17 +97,11 @@ function isZhUi() {
 }
 
 function shuffle(arr) {
-	if (typeof PracticeUtilsRef.shuffle === "function") {
-		return PracticeUtilsRef.shuffle(arr);
-	}
-	return arr.slice();
+	return PracticeUtilsRef.shuffle(arr);
 }
 
 function chooseDistractors(base, field, answer, count) {
-	if (typeof PracticeUtilsRef.chooseDistractors === "function") {
-		return PracticeUtilsRef.chooseDistractors(base, field, answer, count);
-	}
-	return [];
+	return PracticeUtilsRef.chooseDistractors(base, field, answer, count);
 }
 
 function getMeaningByWord(word) {
@@ -116,10 +110,7 @@ function getMeaningByWord(word) {
 }
 
 function getReviewedWordsUnique() {
-	if (typeof PracticeUtilsRef.getReviewedWordsUnique === "function") {
-		return PracticeUtilsRef.getReviewedWordsUnique(reviewedWordsThisRound);
-	}
-	return Array.from(new Set(reviewedWordsThisRound.filter(Boolean)));
+	return PracticeUtilsRef.getReviewedWordsUnique(reviewedWordsThisRound);
 }
 
 function updateApplyLearnedWordsBtn() {
@@ -214,10 +205,7 @@ function showAnswerFlash(word, meaning, isCorrect) {
 }
 
 function getQuestionPool() {
-	if (typeof PracticeUtilsRef.getQuestionPool === "function") {
-		return PracticeUtilsRef.getQuestionPool(allWords);
-	}
-	return allWords.filter((x) => x && x.word && x.meaning && !x.learned);
+	return PracticeUtilsRef.getQuestionPool(allWords);
 }
 
 function pickQuestionItem() {
@@ -231,18 +219,11 @@ function escapeRegExp(text) {
 }
 
 function normalizeExampleText(example) {
-	if (typeof PracticeUtilsRef.normalizeExampleText === "function") {
-		return PracticeUtilsRef.normalizeExampleText(example);
-	}
-	if (!example) return "";
-	return typeof example === "string" ? example.trim() : "";
+	return PracticeUtilsRef.normalizeExampleText(example);
 }
 
 function buildClozeStimulus(word, examples) {
-	if (typeof PracticeUtilsRef.buildClozeStimulus === "function") {
-		return PracticeUtilsRef.buildClozeStimulus(word, examples);
-	}
-	return "";
+	return PracticeUtilsRef.buildClozeStimulus(word, examples);
 }
 
 function getModePrompt(mode) {

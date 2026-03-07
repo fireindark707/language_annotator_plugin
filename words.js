@@ -6,17 +6,15 @@ const MAX_EXAMPLES_PER_WORD = 20;
 const MAX_TRANSLATE_CONCURRENCY = 2;
 const SEARCH_DEBOUNCE_MS = 350;
 const LEMMA_BACKFILL_CONCURRENCY = 3;
-const DictionaryUtilsRef = globalThis.DictionaryUtils || {};
-const LemmaUtilsRef = globalThis.LemmaUtils || {};
-const ExampleUtilsRef = globalThis.ExampleUtils || {};
-const TranslationUtilsRef = globalThis.TranslationUtils || {};
+const DictionaryUtilsRef = globalThis.DictionaryUtils;
+const LemmaUtilsRef = globalThis.LemmaUtils;
+const ExampleUtilsRef = globalThis.ExampleUtils;
+const TranslationUtilsRef = globalThis.TranslationUtils;
 
 let cachedSourceLangPromise = null;
 const translateInflight = new Set();
 const translationMemoryCache = new Map();
-const enqueueTranslationJob = typeof TranslationUtilsRef.createTaskQueue === "function"
-	? TranslationUtilsRef.createTaskQueue(MAX_TRANSLATE_CONCURRENCY)
-	: null;
+const enqueueTranslationJob = TranslationUtilsRef.createTaskQueue(MAX_TRANSLATE_CONCURRENCY);
 const exampleObservers = new WeakMap();
 const wordWriteLocks = new Map();
 const lemmaCache = new Map();
@@ -166,16 +164,11 @@ function startWordsTour(force) {
 	});
 }
 
-const normalizeDictionaryQuery = DictionaryUtilsRef.normalizeDictionaryQuery || (() => "");
-const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySourceLang || (() => false);
-const getDictionarySourceLabel = DictionaryUtilsRef.getDictionarySourceLabel || (() => "Dictionary");
-const normalizeLemmaSourceLang = LemmaUtilsRef.normalizeLemmaSourceLang || function (sourceLang) {
-	const base = (((sourceLang || "").split("-")[0]) || "").toLowerCase();
-	return base === "auto" ? "" : base;
-};
-const supportsLemmaBySourceLang = LemmaUtilsRef.supportsLemmaBySourceLang || function () {
-	return false;
-};
+const normalizeDictionaryQuery = DictionaryUtilsRef.normalizeDictionaryQuery;
+const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySourceLang;
+const getDictionarySourceLabel = DictionaryUtilsRef.getDictionarySourceLabel;
+const normalizeLemmaSourceLang = LemmaUtilsRef.normalizeLemmaSourceLang;
+const supportsLemmaBySourceLang = LemmaUtilsRef.supportsLemmaBySourceLang;
 
 function resolveLemma(text, sourceLang) {
 	const query = normalizeDictionaryQuery(text);
@@ -325,9 +318,7 @@ function renderDictionarySearchResults(hasLocalResults) {
 					dictWordsList.innerHTML = `<div class="empty">${t("dict_no_result")}</div>`;
 					return;
 				}
-				const effectiveSections = typeof DictionaryUtilsRef.getEffectiveDictionarySections === "function"
-					? DictionaryUtilsRef.getEffectiveDictionarySections(response)
-					: [];
+				const effectiveSections = DictionaryUtilsRef.getEffectiveDictionarySections(response);
 				const hasAnyEntries = effectiveSections.some((section) => Array.isArray(section.entries) && section.entries.length > 0);
 				if (!hasAnyEntries) {
 					dictWordsList.innerHTML = `<div class="empty">${t("dict_no_result")}</div>`;
@@ -340,9 +331,7 @@ function renderDictionarySearchResults(hasLocalResults) {
 					if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
 					const sectionTitle = document.createElement("div");
 					sectionTitle.className = "dict-section-title";
-					const sectionLabel = typeof DictionaryUtilsRef.getDictionarySectionLabel === "function"
-						? DictionaryUtilsRef.getDictionarySectionLabel(t, section.mode, section.query)
-						: section.query;
+					const sectionLabel = DictionaryUtilsRef.getDictionarySectionLabel(t, section.mode, section.query);
 					sectionTitle.textContent = `${sectionLabel} · ${getDictionarySourceLabel(section.source)}`;
 					sectionWrap.appendChild(sectionTitle);
 					const items = Array.isArray(section.entries) ? section.entries.slice(0, 5) : [];
@@ -423,25 +412,15 @@ function isBoundaryMatch(text, start, end, cjkWord) {
 }
 
 function normalizeExampleEntry(entry) {
-	if (typeof ExampleUtilsRef.normalizeExampleEntry === "function") {
-		return ExampleUtilsRef.normalizeExampleEntry(entry) || { text: "", pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
-	}
-	return { text: "", pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
+	return ExampleUtilsRef.normalizeExampleEntry(entry) || { text: "", pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
 }
 
 function normalizeExamples(entries) {
-	if (typeof ExampleUtilsRef.normalizeExampleList === "function") {
-		return ExampleUtilsRef.normalizeExampleList(entries);
-	}
-	if (!Array.isArray(entries)) return [];
-	return entries.map(normalizeExampleEntry).filter((item) => item.text.trim().length > 0);
+	return ExampleUtilsRef.normalizeExampleList(entries);
 }
 
 function sortExamples(entries) {
-	if (typeof ExampleUtilsRef.sortExamples === "function") {
-		return ExampleUtilsRef.sortExamples(entries);
-	}
-	return entries;
+	return ExampleUtilsRef.sortExamples(entries);
 }
 
 function getExampleIdentity(example) {
@@ -460,10 +439,7 @@ function findExampleIndexByIdentity(listItems, target) {
 }
 
 function trimExamples(entries) {
-	if (typeof ExampleUtilsRef.enforceExampleLimit === "function") {
-		return ExampleUtilsRef.enforceExampleLimit(entries.slice(), MAX_EXAMPLES_PER_WORD);
-	}
-	return entries;
+	return ExampleUtilsRef.enforceExampleLimit(entries.slice(), MAX_EXAMPLES_PER_WORD);
 }
 
 function createHighlightedSentenceElement(sentence, word) {
@@ -580,8 +556,7 @@ function requestExampleTranslation(word, example, translationEl) {
 	translateInflight.add(cacheKey);
 	translationEl.textContent = "…";
 
-	const enqueue = enqueueTranslationJob || ((job) => Promise.resolve().then(job));
-	enqueue(async () => {
+	enqueueTranslationJob(async () => {
 		const translated = await translateExampleSentence(example.text);
 		translateInflight.delete(cacheKey);
 		if (!translated) return;
@@ -769,7 +744,7 @@ function applyUiText() {
 	}
 }
 
-const normalizeDictionaryEntries = DictionaryUtilsRef.normalizeStoredDictionaryEntries || (() => []);
+	const normalizeDictionaryEntries = DictionaryUtilsRef.normalizeStoredDictionaryEntries;
 
 function matchWordWithSearch(word, wordData, keyword) {
 	if (!keyword) return true;

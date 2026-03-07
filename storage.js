@@ -12,17 +12,14 @@
 	const SUPPORTED_UI_LANGS = ["zh-TW", "zh-CN", "en", "fr", "pt", "ar", "hi", "ja", "ko", "id", "ru", "es"];
 	const VERSION = 2;
 	const TARGET_SHARD_BYTES = 6000;
-	const StorageMergeUtilsRef = global.StorageMergeUtils || {};
+	const StorageMergeUtilsRef = global.StorageMergeUtils;
 
 	function isContextInvalidatedError(error) {
 		return !!(error && typeof error.message === "string" && error.message.includes("Extension context invalidated"));
 	}
 
 	function estimateBytes(value) {
-		if (typeof StorageMergeUtilsRef.estimateBytes === "function") {
-			return StorageMergeUtilsRef.estimateBytes(value);
-		}
-		return new TextEncoder().encode(JSON.stringify(value)).length;
+		return StorageMergeUtilsRef.estimateBytes(value);
 	}
 
 	function getFromArea(area, keys) {
@@ -62,45 +59,27 @@
 	}
 
 	function splitWordsToShards(words) {
-		if (typeof StorageMergeUtilsRef.splitWordsToShards === "function") {
-			return StorageMergeUtilsRef.splitWordsToShards(words, TARGET_SHARD_BYTES);
-		}
-		return [Object.assign({}, words)];
+		return StorageMergeUtilsRef.splitWordsToShards(words, TARGET_SHARD_BYTES);
 	}
 
 	function normalizeSyncExampleEntry(entry, level) {
-		if (typeof StorageMergeUtilsRef.normalizeSyncExampleEntry === "function") {
-			return StorageMergeUtilsRef.normalizeSyncExampleEntry(entry, level);
-		}
-		return entry;
+		return StorageMergeUtilsRef.normalizeSyncExampleEntry(entry, level);
 	}
 
 	function compactWordsForSync(words, level) {
-		if (typeof StorageMergeUtilsRef.compactWordsForSync === "function") {
-			return StorageMergeUtilsRef.compactWordsForSync(words, level);
-		}
-		return words;
+		return StorageMergeUtilsRef.compactWordsForSync(words, level);
 	}
 
 	function normalizeExampleForMerge(entry) {
-		if (typeof StorageMergeUtilsRef.normalizeExampleForMerge === "function") {
-			return StorageMergeUtilsRef.normalizeExampleForMerge(entry);
-		}
-		return entry;
+		return StorageMergeUtilsRef.normalizeExampleForMerge(entry);
 	}
 
 	function mergeExamples(localExamples, cloudExamples) {
-		if (typeof StorageMergeUtilsRef.mergeExamples === "function") {
-			return StorageMergeUtilsRef.mergeExamples(localExamples, cloudExamples);
-		}
-		return [];
+		return StorageMergeUtilsRef.mergeExamples(localExamples, cloudExamples);
 	}
 
 	function mergeWordRecord(localData, cloudData) {
-		if (typeof StorageMergeUtilsRef.mergeWordRecord === "function") {
-			return StorageMergeUtilsRef.mergeWordRecord(localData, cloudData);
-		}
-		return localData || cloudData || {};
+		return StorageMergeUtilsRef.mergeWordRecord(localData, cloudData);
 	}
 
 	function detectBrowserUiLanguage() {
