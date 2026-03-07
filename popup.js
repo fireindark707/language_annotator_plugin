@@ -1,11 +1,11 @@
 let uiLang = "zh-TW";
 let sortMode = "recent_desc";
 const MAX_EXAMPLES_PER_WORD = 20;
-const MAX_TRANSLATE_CONCURRENCY = 2;
+const ExampleUtilsRef = globalThis.ExampleUtils;
+const TranslationUtilsRef = globalThis.TranslationUtils;
+const enqueueTranslationJob = TranslationUtilsRef.createTaskQueue(2);
 
 let cachedSourceLangPromise = null;
-let activeTranslateJobs = 0;
-const translateQueue = [];
 const translateInflight = new Set();
 const translationMemoryCache = new Map();
 const exampleObservers = new WeakMap();
@@ -85,10 +85,6 @@ function startPopupTour(force) {
 	});
 }
 
-function escapeRegExp(text) {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function isCjkText(text) {
 	return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text || "");
 }
@@ -105,40 +101,15 @@ function isBoundaryMatch(text, start, end, cjkWord) {
 }
 
 function normalizeExampleEntry(entry) {
-	if (typeof entry === "string") {
-		return { text: entry, pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
-	}
-	if (!entry || typeof entry !== "object") {
-		return { text: "", pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
-	}
-	return {
-		text: typeof entry.text === "string" ? entry.text : "",
-		pinned: !!entry.pinned,
-		createdAt: typeof entry.createdAt === "number" ? entry.createdAt : 0,
-		pinnedAt: typeof entry.pinnedAt === "number" ? entry.pinnedAt : 0,
-		translation: typeof entry.translation === "string" ? entry.translation : "",
-		translatedAt: typeof entry.translatedAt === "number" ? entry.translatedAt : 0,
-		sourceUrl: typeof entry.sourceUrl === "string"
-			? entry.sourceUrl
-			: (typeof entry.url === "string" ? entry.url : ""),
-		capturedAt: typeof entry.capturedAt === "number"
-			? entry.capturedAt
-			: (typeof entry.timestamp === "number" ? entry.timestamp : 0),
-	};
+	return ExampleUtilsRef.normalizeExampleEntry(entry) || { text: "", pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
 }
 
 function normalizeExamples(entries) {
-	if (!Array.isArray(entries)) return [];
-	return entries.map(normalizeExampleEntry).filter((item) => item.text.trim().length > 0);
+	return ExampleUtilsRef.normalizeExampleList(entries);
 }
 
 function sortExamples(entries) {
-	return entries.sort((a, b) => {
-		if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-		if (a.pinned && b.pinned && b.pinnedAt !== a.pinnedAt) return b.pinnedAt - a.pinnedAt;
-		if (b.createdAt !== a.createdAt) return b.createdAt - a.createdAt;
-		return a.text.localeCompare(b.text);
-	});
+	return ExampleUtilsRef.sortExamples(entries);
 }
 
 function getExampleIdentity(example) {
@@ -157,11 +128,7 @@ function findExampleIndexByIdentity(listItems, target) {
 }
 
 function trimExamples(entries) {
-	const sorted = sortExamples(entries.slice());
-	const pinned = sorted.filter((item) => item.pinned);
-	const unpinned = sorted.filter((item) => !item.pinned);
-	if (unpinned.length <= MAX_EXAMPLES_PER_WORD) return sorted;
-	return pinned.concat(unpinned.slice(0, MAX_EXAMPLES_PER_WORD));
+	return ExampleUtilsRef.enforceExampleLimit(entries.slice(), MAX_EXAMPLES_PER_WORD);
 }
 
 function createHighlightedSentenceElement(sentence, word) {
@@ -214,37 +181,11 @@ async function translateExampleSentence(sentence) {
 		cachedSourceLangPromise = WordStorage.getSourceLang().catch(() => "auto");
 	}
 	const sourceLang = await cachedSourceLangPromise;
-	return new Promise((resolve) => {
-		chrome.runtime.sendMessage(
-			{ action: "translate", text: sentence, sourceLang: sourceLang },
-			(response) => {
-				if (chrome.runtime.lastError || !response || !response.translation) {
-					resolve("");
-					return;
-				}
-				resolve(response.translation);
-			}
-		);
+	return TranslationUtilsRef.requestRuntimeTranslation({
+		chromeRuntime: chrome.runtime,
+		text: sentence,
+		sourceLang: sourceLang || "auto",
 	});
-}
-
-function queueTranslateJob(job) {
-	translateQueue.push(job);
-	runTranslateQueue();
-}
-
-function runTranslateQueue() {
-	while (activeTranslateJobs < MAX_TRANSLATE_CONCURRENCY && translateQueue.length > 0) {
-		const job = translateQueue.shift();
-		activeTranslateJobs += 1;
-		Promise.resolve()
-			.then(job)
-			.catch(() => {})
-			.finally(() => {
-				activeTranslateJobs -= 1;
-				runTranslateQueue();
-			});
-	}
 }
 
 function getExampleCacheKey(word, exampleText) {
@@ -338,7 +279,7 @@ function requestExampleTranslation(word, example, translationEl) {
 	translateInflight.add(cacheKey);
 	translationEl.textContent = "…";
 
-	queueTranslateJob(async () => {
+	enqueueTranslationJob(async () => {
 		const translated = await translateExampleSentence(example.text);
 		translateInflight.delete(cacheKey);
 		if (!translated) return;

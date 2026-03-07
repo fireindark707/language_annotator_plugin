@@ -98,21 +98,6 @@ function getExampleText(entry) {
 	return "";
 }
 
-function queuePreviewTranslation(sentence, targetEl) {
-	ContentTranslationRef.queuePreviewTranslation(sentence, targetEl, {
-		WordStorage,
-		chromeRuntime: chrome.runtime,
-	});
-}
-
-function createPreviewHighlightedSentence(sentence, word) {
-	return ContentTranslationRef.createPreviewHighlightedSentence(sentence, word, {
-		document,
-		isCjkText,
-		isBoundaryMatch,
-	});
-}
-
 function isExtensionUiElement(element) {
 	if (!element || element.nodeType !== Node.ELEMENT_NODE) return false;
 	if (element.id === "translationBox") return true;

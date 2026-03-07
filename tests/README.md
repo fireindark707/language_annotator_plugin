@@ -59,6 +59,8 @@ Current coverage mapped to README features:
 - `content-bootstrap.html`
   - content.js bootstrap with required globals
   - content.js delegation into translation/page-processing modules
+- `popup-dependencies-smoke.html`
+  - popup shared example/translation dependencies are present
 - `simplemma-smoke.html`
   - bundled simplemma integration
   - remote lemma dictionaries

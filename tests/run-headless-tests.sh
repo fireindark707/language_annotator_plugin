@@ -19,6 +19,7 @@ TEST_FILES=(
   "$ROOT_DIR/tests/content-translation.html"
   "$ROOT_DIR/tests/content-page-processing.html"
   "$ROOT_DIR/tests/content-bootstrap.html"
+  "$ROOT_DIR/tests/popup-dependencies-smoke.html"
   "$ROOT_DIR/tests/words-logic.html"
   "$ROOT_DIR/tests/practice-logic.html"
   "$ROOT_DIR/tests/background-dictionary-flow.html"

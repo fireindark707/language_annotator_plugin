@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>popup-dependencies-smoke</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    runTests([
+      {
+        name: "popup shared utilities are present",
+        run() {
+          assert(!!window.ExampleUtils, "ExampleUtils should exist");
+          assert(!!window.TranslationUtils, "TranslationUtils should exist");
+          assertEqual(typeof window.ExampleUtils.normalizeExampleList, "function");
+          assertEqual(typeof window.ExampleUtils.enforceExampleLimit, "function");
+          assertEqual(typeof window.TranslationUtils.requestRuntimeTranslation, "function");
+          assertEqual(typeof window.TranslationUtils.createTaskQueue, "function");
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>
