@@ -531,10 +531,6 @@ function updateWordsList() {
 			countSpan.title = countTooltip;
 			countSpan.setAttribute("aria-label", countTooltip);
 
-			const meaningSpan = document.createElement("div");
-			meaningSpan.className = "word-meaning";
-			const meaningText = words[word].meaning || "";
-
 			const lemmaValue = typeof words[word].lemma === "string" ? words[word].lemma.trim() : "";
 			let lemmaSpan = null;
 			if (lemmaValue && lemmaValue.toLowerCase() !== word.toLowerCase()) {
@@ -542,12 +538,9 @@ function updateWordsList() {
 				lemmaSpan.className = "word-lemma";
 				lemmaSpan.textContent = `${t("lemma_label")}: ${lemmaValue}`;
 			}
-			if (lemmaSpan) {
-				meaningSpan.appendChild(lemmaSpan);
-				if (meaningText) {
-					meaningSpan.appendChild(document.createTextNode(" "));
-				}
-			}
+			const meaningSpan = document.createElement("div");
+			meaningSpan.className = "word-meaning";
+			const meaningText = words[word].meaning || "";
 			meaningSpan.appendChild(document.createTextNode(meaningText));
 
 			const toggleLearnedButton = document.createElement("button");
@@ -638,6 +631,9 @@ function updateWordsList() {
 			});
 
 			wordLabelRow.appendChild(wordSpan);
+			if (lemmaSpan) {
+				wordLabelRow.appendChild(lemmaSpan);
+			}
 			wordLabelRow.appendChild(countSpan);
 			wordMain.appendChild(wordLabelRow);
 			wordMain.appendChild(meaningSpan);

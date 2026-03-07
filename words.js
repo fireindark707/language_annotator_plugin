@@ -817,10 +817,6 @@ function updateWordsList() {
 				countSpan.title = countTooltip;
 				countSpan.setAttribute("aria-label", countTooltip);
 
-				const meaningSpan = document.createElement("div");
-				meaningSpan.className = "word-meaning";
-				const meaningText = words[word].meaning || "";
-
 				const lemmaValue = typeof words[word].lemma === "string" ? words[word].lemma.trim() : "";
 				let lemmaSpan = null;
 				if (lemmaValue) {
@@ -828,12 +824,9 @@ function updateWordsList() {
 					lemmaSpan.className = "word-lemma";
 					lemmaSpan.textContent = `${t("lemma_label")}: ${lemmaValue}`;
 				}
-				if (lemmaSpan) {
-					meaningSpan.appendChild(lemmaSpan);
-					if (meaningText) {
-						meaningSpan.appendChild(document.createTextNode(" "));
-					}
-				}
+				const meaningSpan = document.createElement("div");
+				meaningSpan.className = "word-meaning";
+				const meaningText = words[word].meaning || "";
 				meaningSpan.appendChild(document.createTextNode(meaningText));
 
 				const actionWrap = document.createElement("div");
@@ -894,8 +887,7 @@ function updateWordsList() {
 			dictWrap.style.display = "none";
 			let dictRendered = false;
 
-			function syncDictButtonText() {
-				const expanded = dictWrap.style.display !== "none";
+			function syncDictButtonText(expanded = dictWrap.style.display !== "none") {
 				dictButton.textContent = expanded
 					? `${t("collapse")}${t("dictionary")}(${dictCount})`
 					: `${t("dictionary")}(${dictCount})`;
@@ -958,8 +950,10 @@ function updateWordsList() {
 
 				dictButton.addEventListener("click", function () {
 					const expanded = dictWrap.style.display !== "none";
-					dictWrap.style.display = expanded ? "none" : "block";
-					syncDictButtonText();
+					retriggerEffect(dictButton, "fx-example");
+					retriggerEffect(wordItem, "fx-row-example");
+					toggleAnimatedPanel(dictWrap, !expanded);
+					syncDictButtonText(!expanded);
 				if (!expanded && !dictRendered) {
 					renderDictionary();
 					dictRendered = true;
@@ -972,6 +966,9 @@ function updateWordsList() {
 				actionWrap.appendChild(dictButton);
 				actionWrap.appendChild(deleteButton);
 				wordLine.appendChild(wordSpan);
+				if (lemmaSpan) {
+					wordLine.appendChild(lemmaSpan);
+				}
 				wordLine.appendChild(countSpan);
 				wordMain.appendChild(wordLine);
 				wordMain.appendChild(meaningSpan);

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>ui-toast</title></head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../ui-toast.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    runTests([
+      {
+        name: 'show creates wrap style and toast node',
+        run() {
+          UiToast.show('saved', 'success', 200);
+          assert(document.getElementById('laToastStyle'), 'expected toast style');
+          assert(document.getElementById('laToastWrap'), 'expected toast wrap');
+          const toast = document.querySelector('.la-toast.success');
+          assert(toast, 'expected success toast');
+          assertEqual(toast.textContent, 'saved');
+        },
+      },
+      {
+        name: 'toast auto-removes after duration',
+        async run() {
+          UiToast.show('deleted', 'error', 40);
+          await wait(80);
+          const remaining = Array.from(document.querySelectorAll('.la-toast')).filter((el) => el.textContent === 'deleted');
+          assertEqual(remaining.length, 0);
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

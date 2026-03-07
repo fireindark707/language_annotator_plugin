@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>content-flow</title></head>
+<body>
+  <div id="fixture">running words stay visible</div>
+  <pre id="test-output"></pre>
+  <script>
+    const saveSnapshots = [];
+    const tourCalls = [];
+    const shownToasts = [];
+    let wordsState = { running: { meaning: '奔跑', learned: false, examples: [] } };
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(message, callback) {
+          if (message.action === 'translate') return callback({ translation: '翻譯:' + message.text });
+          if (message.action === 'getLemma') return callback({ found: true, lemma: 'run' });
+          if (message.action === 'lookupDictionary') return callback({ found: true, source: 'dictionaryapi', query: 'running', lemma: 'run', usedLemma: false, sections: [{ mode: 'surface', query: 'running', source: 'dictionaryapi', entries: [{ pos: 'verb', definition: 'move fast' }] }, { mode: 'lemma', query: 'run', source: 'dictionaryapi', entries: [{ pos: 'verb', definition: 'move' }] }], entries: [{ pos: 'verb', definition: 'move fast' }] });
+          callback({});
+        },
+        onMessage: { addListener(fn) { window.__contentListener = fn; } },
+      },
+      i18n: { detectLanguage(_text, callback) { callback({ languages: [{ language: 'en', percentage: 100 }] }); } },
+    };
+    window.WordStorage = {
+      getUiLanguage: () => Promise.resolve('en'),
+      getAutoTranslateOnSelect: () => Promise.resolve(true),
+      getExcludedDomains: () => Promise.resolve([]),
+      getWords: () => Promise.resolve(JSON.parse(JSON.stringify(wordsState))),
+      saveWords: (words) => { wordsState = JSON.parse(JSON.stringify(words)); saveSnapshots.push(wordsState); return Promise.resolve(); },
+      getSourceLang: () => Promise.resolve('en'),
+      getDictionaryLookupEnabled: () => Promise.resolve(true),
+    };
+    window.UiI18n = { t: (_lang, key) => key, langAttr: (lang) => lang || 'en', dir: () => 'ltr' };
+    window.UiToast = { show(message, type) { shownToasts.push({ message, type }); } };
+    window.UiTour = { start(opts) { tourCalls.push(opts.storageKey); }, maybeStartOnce(opts) { tourCalls.push(opts.storageKey); }, getSteps() { return []; }, getLabel() { return 'replay'; } };
+    window.speechSynthesis = { getVoices() { return []; }, speak() {} };
+    window.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; };
+    window.IntersectionObserver = class { constructor(cb) { this.cb = cb; } observe(el) { this.cb([{ isIntersecting: true, target: el }], this); } unobserve() {} disconnect() {} };
+  </script>
+  <script src="../lib/dictionary-utils.js"></script>
+  <script src="../lib/lemma-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/storage-merge-utils.js"></script>
+  <script src="../lib/content-addword.js"></script>
+  <script src="../lib/content-lookup-ui.js"></script>
+  <script src="../lib/content-page-processing.js"></script>
+  <script src="../content.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    runTests([
+      {
+        name: 'selection flow shows translation box with dictionary sections',
+        async run() {
+          const selection = window.getSelection();
+          const textNode = document.createTextNode('running');
+          document.body.appendChild(textNode);
+          const range = document.createRange();
+          range.selectNodeContents(textNode);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+          await wait(120);
+          assert(document.getElementById('translationBox'), 'expected translation box');
+          assert(document.getElementById('translationDictionary').textContent.includes('dict_selected_form'), 'expected dictionary section label');
+          textNode.remove();
+          selection.removeAllRanges();
+        },
+      },
+      {
+        name: 'runtime message opens add-word modal and save persists selected word',
+        async run() {
+          window.__contentListener({ action: 'openAddWordModal', word: 'running' }, null, function () {});
+          await wait(80);
+          const overlay = document.querySelector('.la-addword-overlay');
+          assert(overlay, 'expected add-word modal');
+          const input = overlay.querySelector('textarea');
+          await wait(60);
+          assert(input.value.includes('翻譯:running') || input.value.length > 0, 'expected prefilled meaning');
+          overlay.querySelector('.la-addword-save').click();
+          await wait(50);
+          assert(saveSnapshots.length > 0, 'expected words saved');
+          assert(wordsState.running, 'expected saved word record');
+        },
+      },
+      {
+        name: 'highlightWords delegates to page processing and wraps stored word',
+        async run() {
+          wordsState = { running: { meaning: '奔跑', learned: false, examples: [] } };
+          document.getElementById('fixture').textContent = 'running words stay visible';
+          await window.highlightWords();
+          await wait(30);
+          assert(document.querySelector('.plugin-highlight-word'), 'expected highlighted word');
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

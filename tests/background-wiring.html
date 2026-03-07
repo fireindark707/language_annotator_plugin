@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>background-wiring</title></head>
+<body>
+  <pre id="test-output"></pre>
+  <script>
+    const createdMenus = [];
+    const sentMessages = [];
+    const installedListeners = [];
+    const startupListeners = [];
+    const clickListeners = [];
+    const translationCalls = [];
+    const initCalls = [];
+    window.navigator.language = 'en-US';
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        onInstalled: { addListener(fn) { installedListeners.push(fn); } },
+        onStartup: { addListener(fn) { startupListeners.push(fn); } },
+        onMessage: { addListener(fn) { window.__bgMessageListener = fn; } },
+      },
+      contextMenus: {
+        create(payload) { createdMenus.push(payload); },
+        onClicked: { addListener(fn) { clickListeners.push(fn); } },
+      },
+      tabs: {
+        sendMessage(tabId, payload, callback) { sentMessages.push({ tabId, payload }); callback && callback(); },
+      },
+    };
+    window.importScripts = function importScripts() {};
+    window.DictionaryUtils = {
+      fetchJsonSafe() {},
+      buildDictionaryLookup(query, sourceLang) {
+        return {
+          sourceName: sourceLang === 'ja' ? 'jotoba' : 'dictionaryapi',
+          lookupPromise: Promise.resolve({ found: true, source: sourceLang === 'ja' ? 'jotoba' : 'dictionaryapi', entries: [{ definition: query }] }),
+        };
+      },
+    };
+    window.TranslationUtils = {
+      translateWithGoogle(text, sourceLang, targetLang) {
+        translationCalls.push({ text, sourceLang, targetLang });
+        return Promise.resolve('translated:' + text);
+      },
+    };
+    window.WordStorage = { init() { initCalls.push('init'); return Promise.resolve(); } };
+    window.simplemma = {
+      SUPPORTED_LANGUAGES: ['en', 'id', 'tl'],
+      FetchDictionaryFactory: function FetchDictionaryFactory() {},
+      DefaultStrategy: function DefaultStrategy() {},
+      Lemmatizer: function Lemmatizer() { this.lemmatizeAsync = (text) => Promise.resolve(text === 'running' ? 'run' : text); },
+    };
+  </script>
+  <script src="../background.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    runTests([
+      {
+        name: 'onInstalled wiring creates context menu and initializes storage',
+        async run() {
+          installedListeners[0]();
+          await wait(0);
+          assertEqual(createdMenus[0].id, 'addWord');
+          assert(initCalls.length >= 1, 'expected storage init');
+        },
+      },
+      {
+        name: 'context menu click sends add-word modal message to tab',
+        run() {
+          clickListeners[0]({ menuItemId: 'addWord', selectionText: '  running ' }, { id: 9 });
+          assertEqual(sentMessages[0].tabId, 9);
+          assertEqual(sentMessages[0].payload.action, 'openAddWordModal');
+          assertEqual(sentMessages[0].payload.word, 'running');
+        },
+      },
+      {
+        name: 'message listener handles translate, getLemma, and lookupDictionary',
+        async run() {
+          const translateRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'translate', text: 'hello', sourceLang: 'en', targetLang: 'zh-TW' }, null, resolve));
+          assertEqual(translateRes.translation, 'translated:hello');
+          const lemmaRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'getLemma', text: 'running', sourceLang: 'en' }, null, resolve));
+          assertEqual(lemmaRes.lemma, 'run');
+          const dictRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'lookupDictionary', text: 'running', sourceLang: 'en' }, null, resolve));
+          assert(dictRes.found, 'expected dictionary result');
+          assertEqual(Array.isArray(dictRes.sections), true);
+          assertEqual(translationCalls.length > 0, true);
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

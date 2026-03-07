@@ -23,6 +23,13 @@ Current coverage mapped to README features:
   - first-run tour rendering
   - seen-state persistence / reset
   - locale fallback
+- `ui-i18n.html`
+  - required key coverage across all supported UI languages
+  - lang/dir mapping
+  - english fallback
+- `ui-toast.html`
+  - toast style/wrap creation
+  - toast auto-removal
 - `words-logic.html`
   - dictionary query normalization
   - dictionary / lemma language support
@@ -44,6 +51,10 @@ Current coverage mapped to README features:
   - dictionary source routing
   - surface + lemma dual-query composition
   - lemma fallback behavior
+- `background-wiring.html`
+  - onInstalled / onStartup wiring
+  - context-menu click handling
+  - runtime message wiring for translate / lemma / dictionary
 - `content-dictionary-utils.html`
   - content dictionary section mapping
   - passive/interactive dictionary rendering
@@ -67,6 +78,11 @@ Current coverage mapped to README features:
 - `content-bootstrap.html`
   - content.js bootstrap with required globals
   - content.js delegation into translation/page-processing modules
+- `content-flow.html`
+  - selection -> translation box flow
+  - translation box dictionary sections
+  - add-word modal open/save flow
+  - highlight flow on a real fixture node
 - `options-ui.html`
   - settings hydration
   - autosave flows

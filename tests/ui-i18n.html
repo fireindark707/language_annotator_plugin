@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>ui-i18n</title></head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../ui-i18n.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const languages = ['zh-TW','zh-CN','en','fr','pt','ar','hi','ja','ko','id','ru','es'];
+    const requiredKeys = ['popup_title','settings','sync_now','practice_mode','lemma_label','dict_selected_form','practice_show_translation'];
+    runTests([
+      {
+        name: 'all supported UI languages expose required core keys',
+        run() {
+          languages.forEach((lang) => {
+            requiredKeys.forEach((key) => {
+              const value = UiI18n.t(lang, key);
+              assert(value && value !== key, `missing ${lang}:${key}`);
+            });
+          });
+        },
+      },
+      {
+        name: 'langAttr and dir map correctly',
+        run() {
+          assertEqual(UiI18n.langAttr('zh-TW'), 'zh-Hant');
+          assertEqual(UiI18n.langAttr('zh-CN'), 'zh-Hans');
+          assertEqual(UiI18n.dir('ar'), 'rtl');
+          assertEqual(UiI18n.dir('en'), 'ltr');
+        },
+      },
+      {
+        name: 'unsupported locale falls back to english',
+        run() {
+          assertEqual(UiI18n.t('xx', 'settings'), UiI18n.t('en', 'settings'));
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>
