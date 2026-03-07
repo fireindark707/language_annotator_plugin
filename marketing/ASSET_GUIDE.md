@@ -2,6 +2,18 @@
 
 These SVG assets are sized for Chrome Web Store listing use and can be edited in Figma/Illustrator/Inkscape.
 
+They are draft marketing assets, not final store-ready artwork.
+
+Recommended current messaging focus for store visuals:
+
+- contextual word highlighting,
+- instant translation on text selection,
+- automatic example sentence collection,
+- dictionary-enhanced add-word flow,
+- fullscreen vocabulary manager,
+- practice mode,
+- guided onboarding for first-time users.
+
 ## Files
 
 - `promo-small-440x280.svg`
@@ -18,6 +30,12 @@ These SVG assets are sized for Chrome Web Store listing use and can be edited in
   - Fullscreen vocabulary management
 - `screenshot-04-practice-mode-1280x800.svg`
   - Practice mode
+
+Suggested update for future asset refresh:
+
+- align visuals with the current warm paper-style UI,
+- show the new onboarding/tutorial system,
+- use real product screenshots as the base instead of abstract mockups.
 
 ## Notes
 

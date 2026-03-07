@@ -8,6 +8,8 @@ let streak = 0;
 let bestStreak = 0;
 let overtimeActive = false;
 let answered = false;
+let reviewedWordsThisRound = [];
+let selectedLearnedWords = new Set();
 
 const MAX_QUESTIONS = 10;
 const CHOICE_COUNT = 4;
@@ -43,6 +45,11 @@ const summaryCorrectEl = document.getElementById("summaryCorrect");
 const summaryBestStreakEl = document.getElementById("summaryBestStreak");
 const summaryTextEl = document.getElementById("summaryText");
 const summaryCelebrateEl = document.getElementById("summaryCelebrate");
+const summaryReviewedEl = document.getElementById("summaryReviewed");
+const summaryReviewedTitleEl = document.getElementById("summaryReviewedTitle");
+const summaryReviewedDescEl = document.getElementById("summaryReviewedDesc");
+const summaryReviewedListEl = document.getElementById("summaryReviewedList");
+const applyLearnedWordsBtn = document.getElementById("applyLearnedWordsBtn");
 const megaOverlayEl = document.getElementById("megaOverlay");
 const megaTextEl = document.getElementById("megaText");
 const answerFlashEl = document.getElementById("answerFlash");
@@ -106,6 +113,84 @@ function getMeaningByWord(word) {
 	return item && item.meaning ? item.meaning : "";
 }
 
+function getReviewedWordsUnique() {
+	return Array.from(new Set(reviewedWordsThisRound.filter(Boolean)));
+}
+
+function updateApplyLearnedWordsBtn() {
+	if (!applyLearnedWordsBtn) return;
+	const hasSelection = selectedLearnedWords.size > 0;
+	applyLearnedWordsBtn.disabled = !hasSelection;
+	applyLearnedWordsBtn.textContent = hasSelection
+		? tf("practice_apply_learned_count", { count: selectedLearnedWords.size })
+		: t("practice_apply_learned");
+}
+
+function toggleSummaryLearnedWord(word) {
+	if (!word) return;
+	if (selectedLearnedWords.has(word)) {
+		selectedLearnedWords.delete(word);
+	} else {
+		selectedLearnedWords.add(word);
+	}
+	renderSummaryReviewedWords();
+}
+
+function renderSummaryReviewedWords() {
+	if (!summaryReviewedEl || !summaryReviewedListEl) return;
+	const reviewed = getReviewedWordsUnique();
+	if (!reviewed.length) {
+		summaryReviewedEl.hidden = true;
+		summaryReviewedListEl.innerHTML = "";
+		selectedLearnedWords.clear();
+		updateApplyLearnedWordsBtn();
+		return;
+	}
+	summaryReviewedEl.hidden = false;
+	summaryReviewedListEl.innerHTML = "";
+	reviewed.forEach((word) => {
+		const meaning = getMeaningByWord(word) || t("practice_no_meaning");
+		const item = document.createElement("div");
+		item.className = "reviewed-item";
+		if (selectedLearnedWords.has(word)) item.classList.add("is-selected");
+
+		const main = document.createElement("div");
+		main.className = "reviewed-item-main";
+
+		const wordEl = document.createElement("div");
+		wordEl.className = "reviewed-item-word";
+		wordEl.textContent = word;
+
+		const meaningEl = document.createElement("div");
+		meaningEl.className = "reviewed-item-meaning";
+		meaningEl.textContent = meaning;
+
+		main.appendChild(wordEl);
+		main.appendChild(meaningEl);
+
+		const toggleBtn = document.createElement("button");
+		toggleBtn.type = "button";
+		toggleBtn.className = "btn-soft reviewed-toggle";
+		if (selectedLearnedWords.has(word)) {
+			toggleBtn.classList.add("is-selected");
+			toggleBtn.textContent = t("practice_selected");
+		} else {
+			toggleBtn.textContent = t("mark");
+		}
+		toggleBtn.addEventListener("click", () => toggleSummaryLearnedWord(word));
+
+		item.appendChild(main);
+		item.appendChild(toggleBtn);
+		summaryReviewedListEl.appendChild(item);
+	});
+	updateApplyLearnedWordsBtn();
+}
+
+function collectReviewedWord(word) {
+	if (!word) return;
+	reviewedWordsThisRound.push(word);
+}
+
 function showAnswerFlash(word, meaning, isCorrect) {
 	if (!answerFlashEl) return;
 	const w = (word || "").trim();
@@ -124,9 +209,7 @@ function showAnswerFlash(word, meaning, isCorrect) {
 }
 
 function getQuestionPool() {
-	const active = allWords.filter((x) => x && x.word && x.meaning && !x.learned);
-	if (active.length >= CHOICE_COUNT) return active;
-	return allWords.filter((x) => x && x.word && x.meaning);
+	return allWords.filter((x) => x && x.word && x.meaning && !x.learned);
 }
 
 function pickQuestionItem() {
@@ -441,6 +524,7 @@ function renderQuestion() {
 		btn.addEventListener("click", () => {
 			if (answered) return;
 			answered = true;
+			collectReviewedWord(q.word);
 			const isOk = choice === q.answer;
 			if (isOk) {
 				score += 10;
@@ -504,6 +588,38 @@ function markCurrentQuestionLearned() {
 	});
 }
 
+function applySummaryLearnedWords() {
+	if (!selectedLearnedWords.size) return;
+	const wordsToSave = Array.from(selectedLearnedWords);
+	applyLearnedWordsBtn.disabled = true;
+	WordStorage.getWords().then((words) => {
+		let changed = false;
+		wordsToSave.forEach((word) => {
+			if (!words[word]) return;
+			if (!words[word].learned) {
+				words[word].learned = true;
+				changed = true;
+			}
+		});
+		if (!changed) return true;
+		return WordStorage.saveWords(words).then(() => true);
+	}).then((saved) => {
+		if (!saved) {
+			updateApplyLearnedWordsBtn();
+			return;
+		}
+		allWords = allWords.map((item) => (
+			selectedLearnedWords.has(item.word) ? { ...item, learned: true } : item
+		));
+		selectedLearnedWords.clear();
+		renderSummaryReviewedWords();
+		applyLearnedWordsBtn.textContent = t("saved");
+		applyLearnedWordsBtn.disabled = true;
+	}).catch(() => {
+		updateApplyLearnedWordsBtn();
+	});
+}
+
 function finishRound() {
 	cardEl.style.display = "none";
 	summaryEl.style.display = "block";
@@ -517,13 +633,41 @@ function finishRound() {
 	summaryAccuracyEl.textContent = `${pct}%`;
 	summaryCorrectEl.textContent = `${correctCount}/${deck.length}`;
 	summaryBestStreakEl.textContent = `x${bestStreak}`;
+	renderSummaryReviewedWords();
 	progressBar.style.width = "100%";
 	overtimeActive = false;
 	burstSummary();
 }
 
 function startRound() {
-	const picked = shuffle(getQuestionPool()).slice(0, Math.min(MAX_QUESTIONS, allWords.length));
+	const pool = getQuestionPool();
+	reviewedWordsThisRound = [];
+	selectedLearnedWords = new Set();
+	if (pool.length < CHOICE_COUNT) {
+		cardEl.style.display = "";
+		summaryEl.style.display = "none";
+		if (summaryReviewedEl) summaryReviewedEl.hidden = true;
+		promptEl.textContent = "";
+		stimulusEl.textContent = "";
+		optionsEl.innerHTML = "";
+		feedbackEl.className = "feedback bad";
+		feedbackEl.textContent = t("practice_need_words");
+		nextBtn.style.display = "none";
+		markLearnedBtn.style.display = "none";
+		clozeTranslateBtn.style.display = "none";
+		clozeTranslateTextEl.style.display = "none";
+		progressChip.textContent = tf("practice_progress", { current: 0, total: 0 });
+		scoreChip.textContent = tf("practice_score_points", { score: 0 });
+		streakChip.textContent = tf("practice_streak", { streak: 0 });
+		challengeChip.textContent = t("practice_badge_overtime");
+		progressBar.style.width = "0%";
+		if (!practiceTourAttempted) {
+			practiceTourAttempted = true;
+			window.setTimeout(() => startPracticeNeedWordsTour(false), 220);
+		}
+		return;
+	}
+	const picked = shuffle(pool).slice(0, Math.min(MAX_QUESTIONS, pool.length));
 	deck = picked.map((item) => buildQuestion(item));
 	qIndex = 0;
 	score = 0;
@@ -533,6 +677,7 @@ function startRound() {
 	overtimeActive = false;
 	cardEl.style.display = "";
 	summaryEl.style.display = "none";
+	if (summaryReviewedEl) summaryReviewedEl.hidden = true;
 	renderQuestion();
 }
 
@@ -571,6 +716,9 @@ function init() {
 		summaryAccuracyLabelEl.textContent = t("practice_metric_accuracy");
 		summaryCorrectLabelEl.textContent = t("practice_metric_correct");
 		summaryBestStreakLabelEl.textContent = t("practice_metric_best_streak");
+		if (summaryReviewedTitleEl) summaryReviewedTitleEl.textContent = t("practice_reviewed_words");
+		if (summaryReviewedDescEl) summaryReviewedDescEl.textContent = t("practice_reviewed_words_desc");
+		updateApplyLearnedWordsBtn();
 
 		if (allWords.length < CHOICE_COUNT) {
 			promptEl.textContent = "";
@@ -625,6 +773,9 @@ markLearnedBtn.addEventListener("click", markCurrentQuestionLearned);
 nextRoundBtn.addEventListener("click", () => {
 	startRound();
 });
+if (applyLearnedWordsBtn) {
+	applyLearnedWordsBtn.addEventListener("click", applySummaryLearnedWords);
+}
 document.addEventListener("keydown", (event) => {
 	if (summaryEl.style.display !== "none") {
 		if (event.key === "Enter") {

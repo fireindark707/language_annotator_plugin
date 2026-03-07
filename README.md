@@ -1,17 +1,52 @@
 # Language Annotator
 
-[![Version](https://img.shields.io/badge/version-1.4-d91f26)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-1.4.1-d91f26)](./manifest.json)
 [![Chrome](https://img.shields.io/badge/Chrome-Extension-1a73e8?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/language-annotator/pplocadbndpadfenglgleehcfjaciobg)
 [![Firefox](https://img.shields.io/badge/Firefox-Add--on-ff7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/zh-TW/firefox/addon/language-annotator/)
 [![Manifest](https://img.shields.io/badge/manifest-Chrome%20MV3%20%7C%20Firefox%20MV2-6b7280)](./manifests)
 [![License](https://img.shields.io/badge/license-MIT-111827)](./LICENSE)
 
-Language Annotator is a Chrome/Firefox extension for contextual vocabulary learning while browsing.
+Language Annotator is a browser extension for contextual vocabulary learning while you browse real web pages.
 
-It highlights your saved words, translates selected text, lets you quickly add words, and continuously accumulates useful example sentences from real pages.
+It turns everyday reading into an active study loop:
+
+- highlight saved words in the wild,
+- translate selected text instantly,
+- add new words from the page,
+- accumulate example sentences automatically,
+- enrich entries with dictionary data,
+- and review everything again in practice mode.
 
 - [Chrome Web Store](https://chromewebstore.google.com/detail/language-annotator/pplocadbndpadfenglgleehcfjaciobg)
 - [Firefox Add-ons](https://addons.mozilla.org/zh-TW/firefox/addon/language-annotator/)
+
+## Why It Matters
+
+Most vocabulary tools make you leave the page you are reading.
+
+Language Annotator does the opposite:
+
+- it stays inside your normal browsing flow,
+- captures useful context from real articles and posts,
+- and helps you turn repeated encounters into durable memory.
+
+This makes it useful for language learners, migrant workers, bilingual readers, researchers, and anyone building vocabulary through real-world reading instead of isolated word lists.
+
+## What’s New (v1.4.1)
+
+- Guided onboarding system added across the extension:
+  - popup tutorial,
+  - settings tutorial,
+  - fullscreen word manager tutorial,
+  - practice-mode tutorial,
+  - on-page tutorial for highlighted words,
+  - on-page tutorial for selection + dictionary results.
+- Tutorial replay button added to major surfaces.
+- Tutorial copy now covers all supported UI languages:
+  - `zh-TW`, `zh-CN`, `en`, `fr`, `pt`, `ar`, `hi`, `ja`, `ko`, `id`, `ru`, `es`.
+- Practice mode onboarding now handles low-data state:
+  - if fewer than 4 valid learning words exist, users see a focused reminder instead of a broken/empty tutorial.
+- Version sync updated to `1.4.1` across Chrome and Firefox manifests.
 
 ## What’s New (v1.4)
 
@@ -53,6 +88,7 @@ It highlights your saved words, translates selected text, lets you quickly add w
 - Sync across devices via sharded `storage.sync`.
 - Import/export vocabulary data.
 - Editable excluded-domain list.
+- Guided onboarding and replayable product tours.
 
 ## Automatic Example Collection
 
@@ -86,6 +122,38 @@ It highlights your saved words, translates selected text, lets you quickly add w
   - dictionary appears as selectable alternatives,
   - clicking "帶入" replaces input with selected dictionary definition.
 
+## Guided Onboarding
+
+The extension now includes replayable spotlight tutorials for major surfaces:
+
+- `popup.html`
+- `options.html`
+- `words.html`
+- `practice.html`
+- highlighted words on web pages
+- selected-text translation + dictionary overlays
+
+Tutorial goals:
+
+- reduce feature discovery friction,
+- teach the right action in the right context,
+- keep advanced features visible without overwhelming first-time users.
+
+Current tutorial UI-language coverage:
+
+- Traditional Chinese
+- Simplified Chinese
+- English
+- French
+- Portuguese
+- Arabic
+- Hindi
+- Japanese
+- Korean
+- Indonesian
+- Russian
+- Spanish
+
 ## Quick Start
 
 1. Install unpacked extension
@@ -96,7 +164,10 @@ It highlights your saved words, translates selected text, lets you quickly add w
    - UI language,
    - auto-translate on selection,
    - excluded domains.
-3. Browse and use:
+3. Follow the built-in tutorials:
+   - use the `?` button in popup, settings, fullscreen manager, and practice mode,
+   - on pages, hover highlighted words or select text to trigger contextual onboarding.
+4. Browse and use:
    - select text for translation overlay,
    - right-click to add new word,
    - open popup/fullscreen manager to review and manage words/examples.
@@ -154,6 +225,12 @@ Outputs:
 - `dist/language-annotator-chrome-v<version>.zip`
 - `dist/language-annotator-firefox-v<version>.zip`
 
+## Browser Support
+
+- Chrome: supported
+- Firefox: supported
+- Edge: Chromium build is expected to work with the Chrome manifest package; validate third-party API access and core flows before store submission.
+
 ## Troubleshooting
 
 - `Extension context invalidated` in console:
@@ -169,4 +246,4 @@ Outputs:
 
 ## Version
 
-Current manifest version: `1.4`.
+Current manifest version: `1.4.1`.
