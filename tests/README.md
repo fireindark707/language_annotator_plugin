@@ -8,6 +8,10 @@ Current coverage mapped to README features:
   - sync shard splitting
   - sync compaction
   - merge logic for examples / word records
+- `translation-utils.html`
+  - runtime translation requests
+  - Google Translate request composition
+  - translation task queue concurrency
 - `words-logic.html`
   - dictionary query normalization
   - dictionary / lemma language support
@@ -49,6 +53,9 @@ Current coverage mapped to README features:
   - highlight fragment building
   - word-boundary matching
   - example candidate collection
+- `content-bootstrap.html`
+  - content.js bootstrap with required globals
+  - content.js delegation into translation/page-processing modules
 - `simplemma-smoke.html`
   - bundled simplemma integration
   - remote lemma dictionaries

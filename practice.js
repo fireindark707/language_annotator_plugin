@@ -58,6 +58,7 @@ const celebrateEl = document.getElementById("celebrate");
 let answerFlashTimer = null;
 let practiceTourAttempted = false;
 const PracticeUtilsRef = globalThis.PracticeUtils || {};
+const TranslationUtilsRef = globalThis.TranslationUtils || {};
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
@@ -380,18 +381,13 @@ function playWordPronunciation(word) {
 }
 
 function translateText(text) {
-	return WordStorage.getSourceLang().then((sourceLang) => new Promise((resolve) => {
-		chrome.runtime.sendMessage(
-			{ action: "translate", text: text, sourceLang: sourceLang || "auto" },
-			(response) => {
-				if (chrome.runtime.lastError || !response || !response.translation) {
-					resolve("");
-					return;
-				}
-				resolve(response.translation);
-			}
-		);
-	})).catch(() => "");
+	return WordStorage.getSourceLang().then((sourceLang) => (
+		TranslationUtilsRef.requestRuntimeTranslation({
+			chromeRuntime: chrome.runtime,
+			text,
+			sourceLang: sourceLang || "auto",
+		})
+	)).catch(() => "");
 }
 
 function burst() {

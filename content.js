@@ -2,17 +2,25 @@
 let addWordModal = null;
 let confirmModal = null;
 const MAX_EXAMPLES_PER_WORD = 20;
-const EXAMPLE_SIMILARITY_THRESHOLD = 0.88;
 const lemmaCache = new Map();
 let contentUiLang = "en";
 let contentTourAttempted = false;
 let contentSelectionTourAttempted = false;
-const DictionaryUtilsRef = globalThis.DictionaryUtils || {};
-const LemmaUtilsRef = globalThis.LemmaUtils || {};
-const ExampleUtilsRef = globalThis.ExampleUtils || {};
-const ContentAddWordRef = globalThis.ContentAddWord || {};
-const ContentTranslationRef = globalThis.ContentTranslation || {};
-const ContentPageProcessingRef = globalThis.ContentPageProcessing || {};
+function requireContentDependency(name) {
+	const dependency = globalThis[name];
+	if (!dependency) {
+		throw new Error(`${name} must be loaded before content.js`);
+	}
+	return dependency;
+}
+
+const DictionaryUtilsRef = requireContentDependency("DictionaryUtils");
+const LemmaUtilsRef = requireContentDependency("LemmaUtils");
+const ExampleUtilsRef = requireContentDependency("ExampleUtils");
+const ContentAddWordRef = requireContentDependency("ContentAddWord");
+const ContentTranslationRef = requireContentDependency("ContentTranslation");
+const ContentPageProcessingRef = requireContentDependency("ContentPageProcessing");
+const TranslationUtilsRef = requireContentDependency("TranslationUtils");
 const SKIP_TEXT_TAGS = new Set([
 	"SCRIPT",
 	"STYLE",
@@ -91,26 +99,18 @@ function getExampleText(entry) {
 }
 
 function queuePreviewTranslation(sentence, targetEl) {
-	if (typeof ContentTranslationRef.queuePreviewTranslation === "function") {
-		ContentTranslationRef.queuePreviewTranslation(sentence, targetEl, {
-			WordStorage,
-			chromeRuntime: chrome.runtime,
-		});
-		return;
-	}
+	ContentTranslationRef.queuePreviewTranslation(sentence, targetEl, {
+		WordStorage,
+		chromeRuntime: chrome.runtime,
+	});
 }
 
 function createPreviewHighlightedSentence(sentence, word) {
-	if (typeof ContentTranslationRef.createPreviewHighlightedSentence === "function") {
-		return ContentTranslationRef.createPreviewHighlightedSentence(sentence, word, {
-			document,
-			isCjkText,
-			isBoundaryMatch,
-		});
-	}
-	const wrapper = document.createElement("div");
-	wrapper.textContent = sentence || "";
-	return wrapper;
+	return ContentTranslationRef.createPreviewHighlightedSentence(sentence, word, {
+		document,
+		isCjkText,
+		isBoundaryMatch,
+	});
 }
 
 function isExtensionUiElement(element) {
@@ -178,63 +178,38 @@ function markLearned(word) {
 }
 
 function hideWordPreview(delay) {
-	if (typeof ContentTranslationRef.hideWordPreview === "function") {
-		ContentTranslationRef.hideWordPreview(delay);
-	}
+	ContentTranslationRef.hideWordPreview(delay);
 }
 
 function showWordPreview(anchor, meaning, examples) {
-	if (typeof ContentTranslationRef.showWordPreview === "function") {
-		ContentTranslationRef.showWordPreview(anchor, meaning, examples, {
-			document,
-			WordStorage,
-			chromeRuntime: chrome.runtime,
-			getExampleText,
-			isCjkText,
-			isBoundaryMatch,
-		});
-	}
+	ContentTranslationRef.showWordPreview(anchor, meaning, examples, {
+		document,
+		WordStorage,
+		chromeRuntime: chrome.runtime,
+		TranslationUtilsRef,
+		getExampleText,
+		isCjkText,
+		isBoundaryMatch,
+	});
 }
 
 function isCjkText(text) {
-	if (typeof ContentPageProcessingRef.isCjkText === "function") {
-		return ContentPageProcessingRef.isCjkText(text);
-	}
-	return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text || "");
+	return ContentPageProcessingRef.isCjkText(text);
 }
 
 function isBoundaryMatch(text, start, end, cjkWord) {
-	if (typeof ContentPageProcessingRef.isBoundaryMatch === "function") {
-		return ContentPageProcessingRef.isBoundaryMatch(text, start, end, cjkWord);
-	}
-	if (cjkWord) return true;
-	const prev = start > 0 ? text[start - 1] : "";
-	const next = end < text.length ? text[end] : "";
-	return !(/[\p{L}\p{N}]/u.test(prev)) && !(/[\p{L}\p{N}]/u.test(next));
+	return ContentPageProcessingRef.isBoundaryMatch(text, start, end, cjkWord);
 }
 
 function normalizeText(text) {
 	return (text || "").replace(/\s+/g, " ").trim();
 }
 
-const normalizeDictionaryQuery = DictionaryUtilsRef.normalizeDictionaryQuery || (() => "");
-
-function normalizeLemmaSourceLang(sourceLang) {
-	if (typeof LemmaUtilsRef.normalizeLemmaSourceLang === "function") {
-		return LemmaUtilsRef.normalizeLemmaSourceLang(sourceLang);
-	}
-	const base = (((sourceLang || "").split("-")[0]) || "").toLowerCase();
-	if (!base || base === "auto") return "";
-	if (base === "fil") return "tl";
-	return base;
-}
-
-function supportsLemmaBySourceLang(sourceLang) {
-	if (typeof LemmaUtilsRef.supportsLemmaBySourceLang === "function") {
-		return LemmaUtilsRef.supportsLemmaBySourceLang(sourceLang);
-	}
-	return !!normalizeLemmaSourceLang(sourceLang);
-}
+const normalizeDictionaryQuery = DictionaryUtilsRef.normalizeDictionaryQuery;
+const shouldLookupDictionaryQuery = DictionaryUtilsRef.shouldLookupDictionaryQuery;
+const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySourceLang;
+const normalizeLemmaSourceLang = LemmaUtilsRef.normalizeLemmaSourceLang;
+const supportsLemmaBySourceLang = LemmaUtilsRef.supportsLemmaBySourceLang;
 
 function resolveLemma(text, sourceLang) {
 	const query = normalizeDictionaryQuery(text);
@@ -308,190 +283,36 @@ async function shouldSkipTranslateAndDictionary(text) {
 	return normalizedDetected === normalizedBrowser;
 }
 
-const shouldLookupDictionaryQuery = DictionaryUtilsRef.shouldLookupDictionaryQuery || (() => false);
-const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySourceLang || (() => false);
-
-function getAddWordTargetWord(overlay, normalizedWord) {
-	if (typeof ContentAddWordRef.getTargetWord === "function") {
-		return ContentAddWordRef.getTargetWord(overlay, normalizedWord);
-	}
-	return String((overlay && overlay.dataset && overlay.dataset.targetWord) || normalizedWord || "")
-		.trim()
-		.toLowerCase();
-}
-
-function updateAddWordLineState(options) {
-	if (typeof ContentAddWordRef.updateWordLine === "function") {
-		return ContentAddWordRef.updateWordLine(options);
-	}
-	const targetWord = getAddWordTargetWord(options && options.overlay, options && options.normalizedWord);
-	if (options && options.wordLine) options.wordLine.textContent = targetWord;
-	if (options && options.hint) {
-		options.hint.textContent = targetWord && targetWord !== options.normalizedWord
-			? `${contentT("add_word_hint")} (${contentT("using_lemma")}: ${targetWord})`
-			: contentT("add_word_hint");
-	}
-	return targetWord;
-}
-
-function setAddWordLemmaMode(options) {
-	if (typeof ContentAddWordRef.setLemmaMode === "function") {
-		return ContentAddWordRef.setLemmaMode(options);
-	}
-	const overlay = options && options.overlay;
-	const normalizedWord = String((options && options.normalizedWord) || "").trim().toLowerCase();
-	const lemmaValue = String((options && options.lemmaValue) || "").trim().toLowerCase();
-	if (!overlay || !overlay.dataset) return normalizedWord;
-	overlay.dataset.targetWord = options && options.useLemma && lemmaValue && lemmaValue !== normalizedWord
-		? lemmaValue
-		: normalizedWord;
-	return updateAddWordLineState(options);
-}
-
-function applyAddWordDictionarySelection(options) {
-	if (typeof ContentAddWordRef.applyDictionarySelection === "function") {
-		return ContentAddWordRef.applyDictionarySelection(options);
-	}
-	const item = options && options.item;
-	const section = options && options.section;
-	if (!item || !section) return;
-	const composed = item.definitionTranslated || item.definitionOriginal || "";
-	const text = item.pos ? `[${item.pos}] ${composed}` : composed;
-	if (options && options.input && text.trim()) options.input.value = text.trim();
-	if (options && typeof options.onUserEdit === "function") options.onUserEdit();
-	if (options && options.overlay && options.overlay.dataset) {
-		options.overlay.dataset.dictPos = item.pos || "";
-		options.overlay.dataset.dictDefinitionOriginal = item.definitionOriginal || "";
-		options.overlay.dataset.dictDefinitionTranslated = item.definitionTranslated || "";
-		options.overlay.dataset.dictSource = section.source || "dictionary";
-		options.overlay.dataset.dictUsedLemma = section.mode === "lemma" ? "1" : "";
-		options.overlay.dataset.dictLookupLemma = section.mode === "lemma" ? (section.query || "") : "";
-		options.overlay.dataset.dictQueryText = section.query || "";
-		options.overlay.dataset.dictSelectedIndex = String(options && typeof options.index === "number" ? options.index : 0);
-	}
-}
+const getAddWordTargetWord = ContentAddWordRef.getTargetWord;
+const updateAddWordLineState = ContentAddWordRef.updateWordLine;
+const setAddWordLemmaMode = ContentAddWordRef.setLemmaMode;
+const applyAddWordDictionarySelection = ContentAddWordRef.applyDictionarySelection;
 
 function mapDictionarySections(dictResponse, sourceLang) {
-	if (typeof DictionaryUtilsRef.mapDictionarySections === "function") {
-		return DictionaryUtilsRef.mapDictionarySections(dictResponse, sourceLang, {
-			maxEntries: 3,
-			translateEntry(definition, lang) {
-				return new Promise((resolve) => {
-					chrome.runtime.sendMessage(
-						{
-							action: "translate",
-							text: definition,
-							sourceLang: lang || "auto",
-						},
-						(defResp) => {
-							const translated =
-								!chrome.runtime.lastError && defResp && defResp.translation
-									? defResp.translation
-									: "";
-							resolve(translated);
-						}
-					);
-				});
-			},
-		});
-	}
-	return Promise.resolve([]);
+	return DictionaryUtilsRef.mapDictionarySections(dictResponse, sourceLang, {
+		maxEntries: 3,
+		translateEntry(definition, lang) {
+			return TranslationUtilsRef.requestRuntimeTranslation({
+				chromeRuntime: chrome.runtime,
+				text: definition,
+				sourceLang: lang || "auto",
+			});
+		},
+	});
 }
 
-function isLowInformationExample(sentence, word) {
-	if (typeof ExampleUtilsRef.isLowInformationExample === "function") {
-		return ExampleUtilsRef.isLowInformationExample(sentence, word);
-	}
-	return true;
-}
-
-function normalizeExampleEntry(entry) {
-	if (typeof ExampleUtilsRef.normalizeExampleEntry === "function") {
-		return ExampleUtilsRef.normalizeExampleEntry(entry);
-	}
-	return null;
-}
-
-function normalizeExampleList(entries) {
-	if (typeof ExampleUtilsRef.normalizeExampleList === "function") {
-		return ExampleUtilsRef.normalizeExampleList(entries);
-	}
-	return [];
-}
-
-function sortExamples(entries) {
-	if (typeof ExampleUtilsRef.sortExamples === "function") {
-		return ExampleUtilsRef.sortExamples(entries);
-	}
-	return entries;
-}
-
-function enforceExampleLimit(entries, maxLimit) {
-	if (typeof ExampleUtilsRef.enforceExampleLimit === "function") {
-		return ExampleUtilsRef.enforceExampleLimit(entries, maxLimit);
-	}
-	return entries;
-}
-
-function isLikelyGarbageSentence(text) {
-	if (typeof ExampleUtilsRef.isLikelyGarbageSentence === "function") {
-		return ExampleUtilsRef.isLikelyGarbageSentence(text);
-	}
-	return false;
-}
-
-function normalizeForSimilarity(text) {
-	return normalizeText(text)
-		.toLowerCase()
-		.replace(/[^\p{L}\p{N}\s]/gu, " ")
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
-function tokenizeForSimilarity(text) {
-	if (typeof ExampleUtilsRef.tokenizeForSimilarity === "function") {
-		return ExampleUtilsRef.tokenizeForSimilarity(text);
-	}
-	const normalized = normalizeForSimilarity(text);
-	return normalized ? normalized.split(" ") : [];
-}
-
-function sentenceSimilarity(a, b) {
-	if (typeof ExampleUtilsRef.sentenceSimilarity === "function") {
-		return ExampleUtilsRef.sentenceSimilarity(a, b);
-	}
-	return 0;
-}
-
-function getSimilarityThresholdForPair(a, b) {
-	if (typeof ExampleUtilsRef.getSimilarityThresholdForPair === "function") {
-		return ExampleUtilsRef.getSimilarityThresholdForPair(a, b, EXAMPLE_SIMILARITY_THRESHOLD);
-	}
-	return EXAMPLE_SIMILARITY_THRESHOLD;
-}
-
-function isTooSimilarToAny(candidate, pool) {
-	if (typeof ExampleUtilsRef.isTooSimilarToAny === "function") {
-		return ExampleUtilsRef.isTooSimilarToAny(candidate, pool, EXAMPLE_SIMILARITY_THRESHOLD);
-	}
-	return false;
-}
-
-function hasContainmentRelation(candidate, pool) {
-	if (typeof ExampleUtilsRef.hasContainmentRelation === "function") {
-		return ExampleUtilsRef.hasContainmentRelation(candidate, pool);
-	}
-	return false;
-}
+const isLowInformationExample = ExampleUtilsRef.isLowInformationExample;
+const normalizeExampleList = ExampleUtilsRef.normalizeExampleList;
+const sortExamples = ExampleUtilsRef.sortExamples;
+const enforceExampleLimit = ExampleUtilsRef.enforceExampleLimit;
+const isTooSimilarToAny = (candidate, pool) => ExampleUtilsRef.isTooSimilarToAny(candidate, pool, 0.88);
+const hasContainmentRelation = ExampleUtilsRef.hasContainmentRelation;
 
 function splitIntoSentences(text) {
-	if (typeof ExampleUtilsRef.splitIntoSentences === "function") {
-		const lang =
-			document.documentElement.lang ||
-			(typeof navigator !== "undefined" ? navigator.language : "en");
-		return ExampleUtilsRef.splitIntoSentences(text, lang || "en");
-	}
-	return [];
+	const lang =
+		document.documentElement.lang ||
+		(typeof navigator !== "undefined" ? navigator.language : "en");
+	return ExampleUtilsRef.splitIntoSentences(text, lang || "en");
 }
 
 const contentPageProcessingState = {
@@ -541,9 +362,7 @@ function getContentPageProcessingDeps() {
 }
 
 function highlightWords() {
-	if (typeof ContentPageProcessingRef.highlightWords === "function") {
-		return ContentPageProcessingRef.highlightWords(getContentPageProcessingDeps());
-	}
+	return ContentPageProcessingRef.highlightWords(getContentPageProcessingDeps());
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -558,28 +377,26 @@ function showAddWordModal(word) {
 	if (addWordModal) addWordModal.remove();
 
 	const normalizedWord = word.trim().toLowerCase();
-	const modalUi = typeof ContentAddWordRef.createAddWordModal === "function"
-		? ContentAddWordRef.createAddWordModal({
-			document,
-			normalizedWord,
-			t: contentT,
-			applyButtonStyle: applyModalButtonStyle,
-			applyTextareaStyle: applyModalTextareaStyle,
-		})
-		: null;
-	const overlay = modalUi ? modalUi.overlay : document.createElement("div");
-	const wordLine = modalUi ? modalUi.wordLine : document.createElement("div");
-	const hint = modalUi ? modalUi.hint : document.createElement("div");
-	const lemmaNotice = modalUi ? modalUi.lemmaNotice : document.createElement("div");
-	const lemmaText = modalUi ? modalUi.lemmaText : document.createElement("div");
-	const lemmaBtn = modalUi ? modalUi.lemmaBtn : document.createElement("button");
-	const input = modalUi ? modalUi.input : document.createElement("textarea");
+	const modalUi = ContentAddWordRef.createAddWordModal({
+		document,
+		normalizedWord,
+		t: contentT,
+		applyButtonStyle: applyModalButtonStyle,
+		applyTextareaStyle: applyModalTextareaStyle,
+	});
+	const overlay = modalUi.overlay;
+	const wordLine = modalUi.wordLine;
+	const hint = modalUi.hint;
+	const lemmaNotice = modalUi.lemmaNotice;
+	const lemmaText = modalUi.lemmaText;
+	const lemmaBtn = modalUi.lemmaBtn;
+	const input = modalUi.input;
 	let userEdited = false;
-	const dictPreview = modalUi ? modalUi.dictPreview : document.createElement("div");
-	const dictTitle = modalUi ? modalUi.dictTitle : document.createElement("div");
-	const dictList = modalUi ? modalUi.dictList : document.createElement("div");
-	const cancelBtn = modalUi ? modalUi.cancelBtn : document.createElement("button");
-	const saveBtn = modalUi ? modalUi.saveBtn : document.createElement("button");
+	const dictPreview = modalUi.dictPreview;
+	const dictTitle = modalUi.dictTitle;
+	const dictList = modalUi.dictList;
+	const cancelBtn = modalUi.cancelBtn;
+	const saveBtn = modalUi.saveBtn;
 	document.body.appendChild(overlay);
 	addWordModal = overlay;
 	input.focus();
@@ -714,46 +531,42 @@ async function saveWord() {
 				lemmaBtn.onclick = null;
 				setLemmaMode(false, "");
 			}
-			if (typeof DictionaryUtilsRef.renderInteractiveDictionarySections === "function") {
-				DictionaryUtilsRef.renderInteractiveDictionarySections(dictList, sections, {
-					document,
-					emptyText: contentT("no_dict_entries"),
-					getSectionTitle: (section) => `${DictionaryUtilsRef.getDictionarySectionLabel(contentT, section.mode, section.query)} · ${DictionaryUtilsRef.getDictionarySourceLabel(section.source)}`,
-					decorateSection(sectionWrap, section, sectionIndex) {
-						sectionWrap.className = "la-addword-dict-section";
-						if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
-					},
-					decorateSectionTitle(sectionTitle) {
-						sectionTitle.className = "la-addword-dict-section-title";
-					},
-					createApplyButton() {
-						const applyBtn = document.createElement("button");
-						applyBtn.type = "button";
-						applyBtn.className = "la-addword-dict-apply";
-						applyBtn.textContent = contentT("apply");
-						applyModalButtonStyle(applyBtn, "apply");
-						return applyBtn;
-					},
-					onApply({ item, section, index, row }) {
-						applyAddWordDictionarySelection({
-							overlay,
-							item,
-							section,
-							index,
-							input,
-							dictList,
-							row,
-							onUserEdit() {
-								userEdited = true;
-							},
-						});
-					},
-				});
-				const firstRow = dictList.querySelector(".la-addword-dict-item");
-				if (firstRow) firstRow.classList.add("is-selected");
-			} else {
-				dictList.innerHTML = "";
-			}
+			DictionaryUtilsRef.renderInteractiveDictionarySections(dictList, sections, {
+				document,
+				emptyText: contentT("no_dict_entries"),
+				getSectionTitle: (section) => `${DictionaryUtilsRef.getDictionarySectionLabel(contentT, section.mode, section.query)} · ${DictionaryUtilsRef.getDictionarySourceLabel(section.source)}`,
+				decorateSection(sectionWrap, section, sectionIndex) {
+					sectionWrap.className = "la-addword-dict-section";
+					if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
+				},
+				decorateSectionTitle(sectionTitle) {
+					sectionTitle.className = "la-addword-dict-section-title";
+				},
+				createApplyButton() {
+					const applyBtn = document.createElement("button");
+					applyBtn.type = "button";
+					applyBtn.className = "la-addword-dict-apply";
+					applyBtn.textContent = contentT("apply");
+					applyModalButtonStyle(applyBtn, "apply");
+					return applyBtn;
+				},
+				onApply({ item, section, index, row }) {
+					applyAddWordDictionarySelection({
+						overlay,
+						item,
+						section,
+						index,
+						input,
+						dictList,
+						row,
+						onUserEdit() {
+							userEdited = true;
+						},
+					});
+				},
+			});
+			const firstRow = dictList.querySelector(".la-addword-dict-item");
+			if (firstRow) firstRow.classList.add("is-selected");
 		}
 	);
 	updateWordLine();
@@ -1231,28 +1044,25 @@ function showConfirmModal(message) {
 }
 
 function prefillMeaningFromTranslation(word, wordLineEl, inputEl, isUserEdited, modalOverlay, onDictionaryReady) {
-	if (typeof ContentAddWordRef.prefillMeaningFromTranslation === "function") {
-		return ContentAddWordRef.prefillMeaningFromTranslation({
-			word,
-			wordLineEl,
-			inputEl,
-			isUserEdited,
-			modalOverlay,
-			onDictionaryReady,
-			deps: {
-				WordStorage,
-				resolveLemma,
-				normalizeDictionaryQuery,
-				contentT,
-				supportsDictionaryBySourceLang,
-				shouldLookupDictionaryQuery,
-				mapDictionarySections,
-				chromeRuntime: chrome.runtime,
-			},
-		});
-	}
-	inputEl.placeholder = contentT("meaning_placeholder");
-	return Promise.resolve();
+	return ContentAddWordRef.prefillMeaningFromTranslation({
+		word,
+		wordLineEl,
+		inputEl,
+		isUserEdited,
+		modalOverlay,
+		onDictionaryReady,
+		deps: {
+			WordStorage,
+			resolveLemma,
+			normalizeDictionaryQuery,
+			contentT,
+			supportsDictionaryBySourceLang,
+					shouldLookupDictionaryQuery,
+					mapDictionarySections,
+					TranslationUtilsRef,
+					chromeRuntime: chrome.runtime,
+				},
+			});
 }
 
 // 勾选后自动翻译
@@ -1277,22 +1087,22 @@ function translateText(text) {
 		WordStorage.getDictionaryLookupEnabled().catch(() => true),
 	]).then(([sourceLang, dictionaryEnabled]) => {
 		const isSingleWord = !/\s/.test((text || "").trim());
-		chrome.runtime.sendMessage(
-			{ action: "translate", text: text, sourceLang: sourceLang },
-			function (response) {
-				const translation = response && response.translation ? response.translation : "";
-				showTranslation(translation);
-				const dictQuery = normalizeDictionaryQuery(text);
-				if (!(dictionaryEnabled && isSingleWord && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery))) return;
-				chrome.runtime.sendMessage(
-					{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
-					(dictResponse) => {
-						if (chrome.runtime.lastError || !dictResponse || !dictResponse.found) return;
-						appendDictionaryToTranslationBox(dictResponse, sourceLang || "auto");
-					}
-				);
-			}
-		);
+		return TranslationUtilsRef.requestRuntimeTranslation({
+			chromeRuntime: chrome.runtime,
+			text,
+			sourceLang,
+		}).then((translation) => {
+			showTranslation(translation);
+			const dictQuery = normalizeDictionaryQuery(text);
+			if (!(dictionaryEnabled && isSingleWord && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery))) return;
+			chrome.runtime.sendMessage(
+				{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
+				(dictResponse) => {
+					if (chrome.runtime.lastError || !dictResponse || !dictResponse.found) return;
+					appendDictionaryToTranslationBox(dictResponse, sourceLang || "auto");
+				}
+			);
+		});
 		});
 	}).catch((error) => {
 		if (!isContextInvalidatedError(error)) {
@@ -1302,62 +1112,52 @@ function translateText(text) {
 }
 
 function showTranslation(translation) {
-	if (typeof ContentTranslationRef.showTranslation === "function") {
-		return ContentTranslationRef.showTranslation(translation, { document });
-	}
-	return null;
+	return ContentTranslationRef.showTranslation(translation, { document });
 }
 
 function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
-	if (typeof ContentTranslationRef.appendDictionaryToTranslationBox === "function") {
-		return ContentTranslationRef.appendDictionaryToTranslationBox(dictResponse, sourceLang, {
-			document,
-			DictionaryUtilsRef,
-			contentT,
-			chromeRuntime: chrome.runtime,
-			startContentSelectionTour,
-			state: {
-				get contentSelectionTourAttempted() {
-					return contentSelectionTourAttempted;
-				},
-				set contentSelectionTourAttempted(value) {
-					contentSelectionTourAttempted = value;
-				},
+	return ContentTranslationRef.appendDictionaryToTranslationBox(dictResponse, sourceLang, {
+		document,
+		DictionaryUtilsRef,
+		TranslationUtilsRef,
+		contentT,
+		chromeRuntime: chrome.runtime,
+		startContentSelectionTour,
+		state: {
+			get contentSelectionTourAttempted() {
+				return contentSelectionTourAttempted;
 			},
-		});
-	}
+			set contentSelectionTourAttempted(value) {
+				contentSelectionTourAttempted = value;
+			},
+		},
+	});
 }
 
 // 以下为事件监听和初始化代码
 
 function scheduleHighlight(delay) {
-	if (typeof ContentPageProcessingRef.scheduleHighlight === "function") {
-		return ContentPageProcessingRef.scheduleHighlight(delay, {
-			highlightWords,
-		});
-	}
+	return ContentPageProcessingRef.scheduleHighlight(delay, {
+		highlightWords,
+	});
 }
 
 function checkUrlAndHighlight() {
-	if (typeof ContentPageProcessingRef.checkUrlAndHighlight === "function") {
-		return ContentPageProcessingRef.checkUrlAndHighlight({
-			getLocationHref: () => location.href,
-			highlightWords,
-		});
-	}
+	return ContentPageProcessingRef.checkUrlAndHighlight({
+		getLocationHref: () => location.href,
+		highlightWords,
+	});
 }
 
 function setupNavigationWatchers() {
-	if (typeof ContentPageProcessingRef.setupNavigationWatchers === "function") {
-		return ContentPageProcessingRef.setupNavigationWatchers({
-			history,
-			window,
-			document,
-			MutationObserver,
-			getLocationHref: () => location.href,
-			highlightWords,
-		});
-	}
+	return ContentPageProcessingRef.setupNavigationWatchers({
+		history,
+		window,
+		document,
+		MutationObserver,
+		getLocationHref: () => location.href,
+		highlightWords,
+	});
 }
 
 window.addEventListener("load", () => {

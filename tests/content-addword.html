@@ -6,6 +6,7 @@
 </head>
 <body>
   <pre id="test-output"></pre>
+  <script src="../lib/translation-utils.js"></script>
   <script src="../lib/content-addword.js"></script>
   <script src="./lib/test-harness.js"></script>
   <script>
@@ -212,6 +213,7 @@
                   definitionTranslated: "車輛",
                 }],
               }]),
+              TranslationUtilsRef: window.TranslationUtils,
               chromeRuntime: createRuntime({
                 translate: () => ({ translation: "他的車" }),
                 lookupDictionary: () => ({ found: true, source: "kateglo", query: "mobilnya", lemma: "mobil", usedLemma: false }),
@@ -252,6 +254,7 @@
               supportsDictionaryBySourceLang: () => true,
               shouldLookupDictionaryQuery: () => true,
               mapDictionarySections: () => Promise.resolve([]),
+              TranslationUtilsRef: window.TranslationUtils,
               chromeRuntime: createRuntime({
                 translate: () => ({ translation: "translated" }),
                 lookupDictionary: () => ({ found: false }),

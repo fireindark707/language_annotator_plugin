@@ -2,6 +2,7 @@
 if (typeof importScripts === "function") {
 	importScripts("lib/dictionary-utils.js");
 	importScripts("lib/lemma-utils.js");
+	importScripts("lib/translation-utils.js");
 	importScripts("lib/storage-merge-utils.js");
 	importScripts("packages/simplemma.bundle.js");
 	importScripts("storage.js");
@@ -79,16 +80,10 @@ chrome.contextMenus.onClicked.addListener(function (info, tab) {
 });
 
 function translateWithGoogle(text, sourceLang, targetLang) {
-	const sl = sourceLang || "auto";
-	const tl = targetLang || navigator.language || "en";
-	const apiUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&hl=en-US&dt=t&dt=bd&dj=1&source=input&q=${encodeURIComponent(text)}`;
-	return DictionaryUtils.fetchJsonSafe(apiUrl)
-		.then((data) => {
-			if (data && data.sentences && data.sentences.length > 0) {
-				return data.sentences.map((s) => s.trans).join(" ");
-			}
-			return "";
-		});
+	return TranslationUtils.translateWithGoogle(text, sourceLang, targetLang, {
+		fetchJsonSafe: DictionaryUtils.fetchJsonSafe,
+		defaultTargetLang: navigator.language || "en",
+	});
 }
 
 function lookupDictionaryWithLemmaFallback(text, sourceLang) {

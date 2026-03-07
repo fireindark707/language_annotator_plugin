@@ -9,12 +9,14 @@ const LEMMA_BACKFILL_CONCURRENCY = 3;
 const DictionaryUtilsRef = globalThis.DictionaryUtils || {};
 const LemmaUtilsRef = globalThis.LemmaUtils || {};
 const ExampleUtilsRef = globalThis.ExampleUtils || {};
+const TranslationUtilsRef = globalThis.TranslationUtils || {};
 
 let cachedSourceLangPromise = null;
-let activeTranslateJobs = 0;
-const translateQueue = [];
 const translateInflight = new Set();
 const translationMemoryCache = new Map();
+const enqueueTranslationJob = typeof TranslationUtilsRef.createTaskQueue === "function"
+	? TranslationUtilsRef.createTaskQueue(MAX_TRANSLATE_CONCURRENCY)
+	: null;
 const exampleObservers = new WeakMap();
 const wordWriteLocks = new Map();
 const lemmaCache = new Map();
@@ -376,21 +378,17 @@ function renderDictionarySearchResults(hasLocalResults) {
 						body.appendChild(trans);
 						row.appendChild(body);
 
-						chrome.runtime.sendMessage(
-							{
-								action: "translate",
-								text: text,
-								sourceLang: sourceLang || "auto",
-							},
-							(transResp) => {
-								if (!row.isConnected) return;
-								if (chrome.runtime.lastError || !transResp || !transResp.translation) {
-									trans.textContent = "";
-									return;
-								}
-								trans.textContent = transResp.translation;
-							}
-						);
+						TranslationUtilsRef.requestRuntimeTranslation({
+							chromeRuntime: chrome.runtime,
+							text,
+							sourceLang: sourceLang || "auto",
+						}).then((translated) => {
+							if (!row.isConnected) return;
+							trans.textContent = translated || "";
+						}).catch(() => {
+							if (!row.isConnected) return;
+							trans.textContent = "";
+						});
 						sectionWrap.appendChild(row);
 					});
 					wrap.appendChild(sectionWrap);
@@ -518,37 +516,11 @@ async function translateExampleSentence(sentence) {
 		cachedSourceLangPromise = WordStorage.getSourceLang().catch(() => "auto");
 	}
 	const sourceLang = await cachedSourceLangPromise;
-	return new Promise((resolve) => {
-		chrome.runtime.sendMessage(
-			{ action: "translate", text: sentence, sourceLang: sourceLang },
-			(response) => {
-				if (chrome.runtime.lastError || !response || !response.translation) {
-					resolve("");
-					return;
-				}
-				resolve(response.translation);
-			}
-		);
+	return TranslationUtilsRef.requestRuntimeTranslation({
+		chromeRuntime: chrome.runtime,
+		text: sentence,
+		sourceLang,
 	});
-}
-
-function queueTranslateJob(job) {
-	translateQueue.push(job);
-	runTranslateQueue();
-}
-
-function runTranslateQueue() {
-	while (activeTranslateJobs < MAX_TRANSLATE_CONCURRENCY && translateQueue.length > 0) {
-		const job = translateQueue.shift();
-		activeTranslateJobs += 1;
-		Promise.resolve()
-			.then(job)
-			.catch(() => {})
-			.finally(() => {
-				activeTranslateJobs -= 1;
-				runTranslateQueue();
-			});
-	}
 }
 
 function getExampleCacheKey(word, exampleText) {
@@ -608,7 +580,8 @@ function requestExampleTranslation(word, example, translationEl) {
 	translateInflight.add(cacheKey);
 	translationEl.textContent = "…";
 
-	queueTranslateJob(async () => {
+	const enqueue = enqueueTranslationJob || ((job) => Promise.resolve().then(job));
+	enqueue(async () => {
 		const translated = await translateExampleSentence(example.text);
 		translateInflight.delete(cacheKey);
 		if (!translated) return;

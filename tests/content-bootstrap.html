@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>content-bootstrap</title>
+</head>
+<body>
+  <div id="fixture">Running words stay visible.</div>
+  <pre id="test-output"></pre>
+  <script>
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(message, callback) {
+          if (message.action === "translate") {
+            callback({ translation: "translated" });
+            return;
+          }
+          if (message.action === "getLemma") {
+            callback({ found: true, lemma: "run" });
+            return;
+          }
+          if (message.action === "lookupDictionary") {
+            callback({ found: false, entries: [] });
+            return;
+          }
+          callback({});
+        },
+        onMessage: {
+          addListener() {},
+        },
+      },
+      i18n: {
+        detectLanguage(_text, callback) {
+          callback({ languages: [{ language: "id", percentage: 100 }] });
+        },
+      },
+    };
+
+    window.WordStorage = {
+      getUiLanguage: () => Promise.resolve("en"),
+      getAutoTranslateOnSelect: () => Promise.resolve(false),
+      getExcludedDomains: () => Promise.resolve([]),
+      getWords: () => Promise.resolve({}),
+      saveWords: () => Promise.resolve(),
+      getSourceLang: () => Promise.resolve("en"),
+      getDictionaryLookupEnabled: () => Promise.resolve(true),
+    };
+
+    window.UiI18n = { t: (_lang, key) => key };
+    window.UiTour = {
+      start() {},
+      maybeStartOnce() {},
+      getSteps() { return []; },
+    };
+    window.__contentBootstrapCounters = {
+      highlight: 0,
+      showTranslation: 0,
+    };
+  </script>
+  <script src="../lib/dictionary-utils.js"></script>
+  <script src="../lib/lemma-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/storage-merge-utils.js"></script>
+  <script src="../lib/content-addword.js"></script>
+  <script src="../lib/content-translation.js"></script>
+  <script src="../lib/content-page-processing.js"></script>
+  <script>
+    window.ContentPageProcessing.highlightWords = ((original) => function (...args) {
+      window.__contentBootstrapCounters.highlight += 1;
+      return original.apply(this, args);
+    })(window.ContentPageProcessing.highlightWords);
+
+    window.ContentTranslation.showTranslation = ((original) => function (...args) {
+      window.__contentBootstrapCounters.showTranslation += 1;
+      return original.apply(this, args);
+    })(window.ContentTranslation.showTranslation);
+  </script>
+  <script src="../content.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    runTests([
+      {
+        name: "content.js boots with required globals and delegates to loaded modules",
+        async run() {
+          assertEqual(typeof window.highlightWords, "function");
+          assertEqual(typeof window.showTranslation, "function");
+
+          window.highlightWords();
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          assert(window.__contentBootstrapCounters.highlight >= 1, "expected highlight delegation");
+
+          const selection = window.getSelection();
+          const range = document.createRange();
+          const textNode = document.createTextNode("bootstrap");
+          document.body.appendChild(textNode);
+          range.selectNodeContents(textNode);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
+
+          const box = window.showTranslation("preview");
+          assert(box, "expected translation box");
+          assert(window.__contentBootstrapCounters.showTranslation >= 1, "expected translation delegation");
+          box.remove();
+          textNode.remove();
+          selection.removeAllRanges();
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

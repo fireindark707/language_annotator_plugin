@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>translation-utils</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const U = window.TranslationUtils;
+
+    runTests([
+      {
+        name: "requestRuntimeTranslation resolves translation payload",
+        async run() {
+          const chromeRuntime = {
+            lastError: null,
+            sendMessage(message, callback) {
+              assertEqual(message.action, "translate");
+              assertEqual(message.text, "hello");
+              assertEqual(message.sourceLang, "en");
+              callback({ translation: "你好" });
+            },
+          };
+          const translated = await U.requestRuntimeTranslation({
+            chromeRuntime,
+            text: "hello",
+            sourceLang: "en",
+          });
+          assertEqual(translated, "你好");
+        },
+      },
+      {
+        name: "translateWithGoogle composes API url and joins sentence translations",
+        async run() {
+          let capturedUrl = "";
+          const translated = await U.translateWithGoogle("hello world", "en", "zh-TW", {
+            fetchJsonSafe(url) {
+              capturedUrl = url;
+              return Promise.resolve({
+                sentences: [{ trans: "你好" }, { trans: "世界" }],
+              });
+            },
+          });
+          assert(capturedUrl.includes("sl=en"), "expected source lang in url");
+          assert(capturedUrl.includes("tl=zh-TW"), "expected target lang in url");
+          assertEqual(translated, "你好 世界");
+        },
+      },
+      {
+        name: "createTaskQueue respects concurrency and executes all jobs",
+        async run() {
+          const enqueue = U.createTaskQueue(2);
+          let active = 0;
+          let maxActive = 0;
+          const order = [];
+          const jobs = [1, 2, 3, 4].map((id) => new Promise((resolve) => {
+            enqueue(async () => {
+              active += 1;
+              maxActive = Math.max(maxActive, active);
+              order.push(`start-${id}`);
+              await new Promise((done) => setTimeout(done, 5));
+              order.push(`end-${id}`);
+              active -= 1;
+              resolve();
+            });
+          }));
+          await Promise.all(jobs);
+          assertEqual(maxActive, 2);
+          assertEqual(order.length, 8);
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

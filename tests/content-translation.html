@@ -7,6 +7,7 @@
 <body>
   <pre id="test-output"></pre>
   <script src="../lib/dictionary-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
   <script src="../lib/content-translation.js"></script>
   <script src="./lib/test-harness.js"></script>
   <script>
@@ -77,6 +78,7 @@
                 lemma_label: "Lemma",
               }[key] || key;
             },
+            TranslationUtilsRef: window.TranslationUtils,
             chromeRuntime: createRuntime({
               translate: () => ({ translation: "快速移動" }),
             }),
@@ -106,6 +108,7 @@
             chromeRuntime: createRuntime({
               translate: () => ({ translation: "快速奔跑" }),
             }),
+            TranslationUtilsRef: window.TranslationUtils,
             getExampleText(entry) {
               return entry.text;
             },
