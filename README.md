@@ -65,7 +65,7 @@ This makes it useful for language learners, migrant workers, bilingual readers, 
   - Indonesian (`id-*`): Kateglo
   - English (`en-*`): Free Dictionary API
   - Japanese (`ja-*`): Jotoba
-  - Other supported non-`auto` languages: Wiktionary REST API
+  - Other supported non-`auto` languages: Free Dictionary API
 - Add Word dialog now supports:
   - multiple dictionary definitions,
   - one-click "apply this definition",

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>words-logic</title>
+</head>
+<body>
+  <button id="toggleViewBtn"></button>
+  <button id="practiceBtn"></button>
+  <select id="sortMode"></select>
+  <div id="wordsList"></div>
+  <div id="dictWordsList"></div>
+  <div id="localResultBlock"></div>
+  <div id="dictResultBlock"></div>
+  <div id="wordStats"></div>
+  <div id="languageStats"></div>
+  <div id="autoLangHint"></div>
+  <button id="closeBtn"></button>
+  <input id="searchInput" />
+  <button id="helpBtn"></button>
+  <pre id="test-output"></pre>
+  <script>
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        getURL(path) { return path; },
+        sendMessage(message, callback) {
+          if (message.action === "getLemma") {
+            const lemmaMap = { berjalan: "jalan", makanan: "makan" };
+            callback({ found: !!lemmaMap[message.text], lemma: lemmaMap[message.text] || "" });
+            return;
+          }
+          callback({ found: false, entries: [] });
+        },
+      },
+      tabs: { create() {} },
+    };
+    window.UiI18n = { t(lang, key) { return key; } };
+    window.UiTour = { maybeStartOnce() {}, start() {}, reset() { return Promise.resolve(); } };
+    window.UiToast = { show() {} };
+    window.WordStorage = {
+      getUiLanguage() { return Promise.resolve("en"); },
+      getSourceLang() { return Promise.resolve("id"); },
+      getDictionaryLookupEnabled() { return Promise.resolve(true); },
+      getWords() { return Promise.resolve({}); },
+      saveWords() { return Promise.resolve(); },
+    };
+  </script>
+  <script src="../lib/dictionary-utils.js"></script>
+  <script src="../lib/lemma-utils.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/content-dictionary-utils.js"></script>
+  <script src="../words.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    runTests([
+      {
+        name: "normalizeDictionaryQuery strips punctuation and keeps first token",
+        run() {
+          assertEqual(normalizeDictionaryQuery('  "running!" now  '), "running");
+          assertEqual(normalizeDictionaryQuery("...berjalan,"), "berjalan");
+        },
+      },
+      {
+        name: "supportsDictionaryBySourceLang respects manual source language only",
+        run() {
+          assertEqual(supportsDictionaryBySourceLang("auto"), false);
+          assertEqual(supportsDictionaryBySourceLang("id-ID"), true);
+          assertEqual(supportsDictionaryBySourceLang("xx"), false);
+        },
+      },
+      {
+        name: "lemma language normalization maps fil to tl and rejects auto",
+        run() {
+          assertEqual(normalizeLemmaSourceLang("fil-PH"), "tl");
+          assertEqual(normalizeLemmaSourceLang("pt-BR"), "pt");
+          assertEqual(normalizeLemmaSourceLang("auto"), "");
+        },
+      },
+      {
+        name: "supportsLemmaBySourceLang reflects bundled simplemma language set",
+        run() {
+          assertEqual(supportsLemmaBySourceLang("pt-BR"), true);
+          assertEqual(supportsLemmaBySourceLang("fil-PH"), true);
+          assertEqual(supportsLemmaBySourceLang("auto"), false);
+          assertEqual(supportsLemmaBySourceLang("zh-TW"), false);
+        },
+      },
+      {
+        name: "formatWordCount and tooltip match page/encounter semantics",
+        run() {
+          assertEqual(formatWordCount(3, 10), "3p · 10x");
+          assertEqual(formatWordCountTooltip(3, 10), "count_pages: 3 · count_encounters: 10");
+        },
+      },
+      {
+        name: "resolveLemma uses background response and normalizes source language",
+        async run() {
+          const result = await resolveLemma("berjalan", "id-ID");
+          assertEqual(result.query, "berjalan");
+          assertEqual(result.lemma, "jalan");
+          assertEqual(result.effectiveQuery, "jalan");
+          assertEqual(result.lang, "id");
+        },
+      },
+      {
+        name: "backfillMissingLemmas fills only missing lemma fields and saves once",
+        async run() {
+          let saved = null;
+          let updateCalls = 0;
+          WordStorage.getSourceLang = () => Promise.resolve("id");
+          WordStorage.getWords = () => Promise.resolve({
+            berjalan: { meaning: "walk" },
+            rumah: { meaning: "house", lemma: "rumah" },
+          });
+          WordStorage.saveWords = (words) => {
+            saved = JSON.parse(JSON.stringify(words));
+            return Promise.resolve();
+          };
+          updateWordsList = () => { updateCalls += 1; };
+          lemmaBackfillStarted = false;
+          lemmaBackfillPromise = null;
+
+          const changed = await backfillMissingLemmas();
+          assertEqual(changed, 1);
+          assert(saved && saved.berjalan && saved.berjalan.lemma === "jalan", "expected missing lemma to be filled");
+          assertEqual(saved.rumah.lemma, "rumah");
+          assertEqual(updateCalls, 1);
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>content-translation</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../lib/dictionary-utils.js"></script>
+  <script src="../lib/content-translation.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const U = window.ContentTranslation;
+
+    function createRuntime(handlers) {
+      return {
+        lastError: null,
+        sendMessage(message, callback) {
+          if (message.action === "translate") {
+            callback(handlers.translate(message));
+            return;
+          }
+          callback({});
+        },
+      };
+    }
+
+    runTests([
+      {
+        name: "createPreviewHighlightedSentence highlights whole word matches",
+        run() {
+          const node = U.createPreviewHighlightedSentence("the running man", "running", {
+            document,
+            isCjkText: () => false,
+            isBoundaryMatch: (text, start, end) => {
+              const prev = start > 0 ? text[start - 1] : "";
+              const next = end < text.length ? text[end] : "";
+              return !/[A-Za-z0-9]/.test(prev) && !/[A-Za-z0-9]/.test(next);
+            },
+          });
+          assert(node.querySelector("span"), "expected highlighted span");
+          assertEqual(node.textContent, "the running man");
+        },
+      },
+      {
+        name: "showTranslation creates translation box and appendDictionaryToTranslationBox renders sections",
+        async run() {
+          const sel = window.getSelection();
+          const range = document.createRange();
+          const textNode = document.createTextNode("sample");
+          document.body.appendChild(textNode);
+          range.selectNodeContents(textNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+
+          const box = U.showTranslation("翻譯內容", { document });
+          assert(box, "expected translation box");
+          assertEqual(document.getElementById("translationBox").textContent.includes("翻譯內容"), true);
+
+          U.appendDictionaryToTranslationBox({
+            sections: [{
+              mode: "surface",
+              query: "running",
+              source: "dictionaryapi",
+              entries: [{ pos: "verb", definition: "to move quickly" }],
+            }],
+          }, "en", {
+            document,
+            DictionaryUtilsRef: window.DictionaryUtils,
+            contentT(key) {
+              return {
+                dictionary: "Dictionary",
+                no_dict_entries: "No entries",
+              }[key] || key;
+            },
+            getDictionarySectionLabel(mode, query) {
+              return `${mode}:${query}`;
+            },
+            getDictionarySourceLabel(source) {
+              return source;
+            },
+            chromeRuntime: createRuntime({
+              translate: () => ({ translation: "快速移動" }),
+            }),
+            startContentSelectionTour() {},
+            state: { contentSelectionTourAttempted: false },
+          });
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const wrap = document.getElementById("translationDictionary");
+          assertEqual(wrap.style.display, "block");
+          assert(wrap.textContent.includes("surface:running"), "expected section title");
+          assert(wrap.textContent.includes("快速移動"), "expected translated definition");
+          box.remove();
+          textNode.remove();
+          sel.removeAllRanges();
+        },
+      },
+      {
+        name: "showWordPreview renders meaning and translated examples",
+        async run() {
+          const anchor = document.createElement("span");
+          anchor.textContent = "running";
+          anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          document.body.appendChild(anchor);
+          U.showWordPreview(anchor, "meaning", [{ text: "running fast" }], {
+            document,
+            WordStorage: { getSourceLang: () => Promise.resolve("en") },
+            chromeRuntime: createRuntime({
+              translate: () => ({ translation: "快速奔跑" }),
+            }),
+            getExampleText(entry) {
+              return entry.text;
+            },
+            isCjkText: () => false,
+            isBoundaryMatch: () => true,
+          });
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const card = document.querySelector(".la-word-preview");
+          assert(card, "expected preview card");
+          assert(card.textContent.includes("meaning"), "expected meaning");
+          assert(card.textContent.includes("快速奔跑"), "expected translated example");
+          U.hideWordPreview(0);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          anchor.remove();
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

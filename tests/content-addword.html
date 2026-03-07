@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>content-addword</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../lib/content-addword.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const U = window.ContentAddWord;
+
+    function createRuntime(handlers) {
+      return {
+        lastError: null,
+        sendMessage(message, callback) {
+          if (message.action === "translate") return callback(handlers.translate(message));
+          if (message.action === "lookupDictionary") return callback(handlers.lookupDictionary(message));
+          return callback({});
+        },
+      };
+    }
+
+    runTests([
+      {
+        name: "createAddWordModal builds expected structure and styles controls via callbacks",
+        run() {
+          const calls = [];
+          const modal = U.createAddWordModal({
+            document,
+            normalizedWord: "mobilnya",
+            t(key) {
+              return {
+                add_word_title: "Add Word",
+                add_word_hint: "Hint",
+                loading_translation: "Loading",
+                cancel: "Cancel",
+                save: "Save",
+              }[key] || key;
+            },
+            applyButtonStyle(button, variant) {
+              calls.push(`btn:${variant}`);
+              button.dataset.variant = variant;
+            },
+            applyTextareaStyle(textarea) {
+              calls.push("textarea");
+              textarea.dataset.styled = "1";
+            },
+          });
+          assertEqual(modal.overlay.dataset.targetWord, "mobilnya");
+          assertEqual(modal.title.textContent, "Add Word");
+          assertEqual(modal.wordLine.textContent, "mobilnya");
+          assertEqual(modal.hint.textContent, "Hint");
+          assertEqual(modal.input.placeholder, "Loading");
+          assertEqual(modal.input.dataset.styled, "1");
+          assertEqual(modal.lemmaBtn.dataset.variant, "lemma");
+          assertEqual(modal.cancelBtn.dataset.variant, "cancel");
+          assertEqual(modal.saveBtn.dataset.variant, "save");
+          assert(calls.includes("textarea"), "expected textarea style callback");
+        },
+      },
+      {
+        name: "updateWordLine uses current target word and adds lemma hint",
+        run() {
+          const overlay = document.createElement("div");
+          overlay.dataset.targetWord = "jalan";
+          const wordLine = document.createElement("div");
+          const hint = document.createElement("div");
+          const result = U.updateWordLine({
+            overlay,
+            normalizedWord: "berjalan",
+            wordLine,
+            hint,
+            t(key) {
+              return {
+                add_word_hint: "Hint",
+                using_lemma: "Using lemma",
+              }[key] || key;
+            },
+          });
+          assertEqual(result, "jalan");
+          assertEqual(wordLine.textContent, "jalan");
+          assert(hint.textContent.includes("Using lemma"), "expected lemma hint");
+        },
+      },
+      {
+        name: "setLemmaMode toggles target word and button label",
+        run() {
+          const overlay = document.createElement("div");
+          overlay.dataset.targetWord = "berjalan";
+          const wordLine = document.createElement("div");
+          const hint = document.createElement("div");
+          const lemmaBtn = document.createElement("button");
+          U.setLemmaMode({
+            overlay,
+            normalizedWord: "berjalan",
+            lemmaValue: "jalan",
+            useLemma: true,
+            wordLine,
+            hint,
+            lemmaBtn,
+            t(key) {
+              return {
+                add_word_hint: "Hint",
+                using_lemma: "Using lemma",
+                use_original: "Use original",
+                use_lemma: "Use lemma",
+              }[key] || key;
+            },
+          });
+          assertEqual(overlay.dataset.targetWord, "jalan");
+          assertEqual(lemmaBtn.textContent, "Use original");
+          U.setLemmaMode({
+            overlay,
+            normalizedWord: "berjalan",
+            lemmaValue: "jalan",
+            useLemma: false,
+            wordLine,
+            hint,
+            lemmaBtn,
+            t(key) {
+              return {
+                add_word_hint: "Hint",
+                using_lemma: "Using lemma",
+                use_original: "Use original",
+                use_lemma: "Use lemma",
+              }[key] || key;
+            },
+          });
+          assertEqual(overlay.dataset.targetWord, "berjalan");
+          assertEqual(lemmaBtn.textContent, "Use lemma");
+        },
+      },
+      {
+        name: "applyDictionarySelection fills input, updates dataset and selects row",
+        run() {
+          const overlay = document.createElement("div");
+          const input = document.createElement("textarea");
+          const dictList = document.createElement("div");
+          const rowA = document.createElement("div");
+          rowA.className = "la-addword-dict-item is-selected";
+          const rowB = document.createElement("div");
+          rowB.className = "la-addword-dict-item";
+          dictList.appendChild(rowA);
+          dictList.appendChild(rowB);
+          let edited = false;
+          U.applyDictionarySelection({
+            overlay,
+            item: {
+              pos: "Nomina",
+              definitionOriginal: "kendaraan darat",
+              definitionTranslated: "車輛",
+            },
+            section: {
+              mode: "lemma",
+              query: "mobil",
+              source: "kateglo",
+            },
+            index: 1,
+            input,
+            dictList,
+            row: rowB,
+            onUserEdit() {
+              edited = true;
+            },
+          });
+          assertEqual(input.value, "[Nomina] 車輛");
+          assertEqual(overlay.dataset.dictPos, "Nomina");
+          assertEqual(overlay.dataset.dictSource, "kateglo");
+          assertEqual(overlay.dataset.dictUsedLemma, "1");
+          assertEqual(overlay.dataset.dictLookupLemma, "mobil");
+          assertEqual(overlay.dataset.dictSelectedIndex, "1");
+          assert(edited, "expected onUserEdit callback");
+          assert(!rowA.classList.contains("is-selected"), "expected previous row deselected");
+          assert(rowB.classList.contains("is-selected"), "expected current row selected");
+        },
+      },
+      {
+        name: "prefillMeaningFromTranslation fills translation and first dictionary metadata",
+        async run() {
+          const overlay = document.createElement("div");
+          document.body.appendChild(overlay);
+          const input = document.createElement("textarea");
+          let dictionaryReady = null;
+          await U.prefillMeaningFromTranslation({
+            word: "mobilnya",
+            inputEl: input,
+            isUserEdited: () => false,
+            modalOverlay: overlay,
+            onDictionaryReady(payload) {
+              dictionaryReady = payload;
+            },
+            deps: {
+              WordStorage: {
+                getSourceLang: () => Promise.resolve("id"),
+                getDictionaryLookupEnabled: () => Promise.resolve(true),
+              },
+              resolveLemma: () => Promise.resolve({ query: "mobilnya", lemma: "mobil", effectiveQuery: "mobil" }),
+              normalizeDictionaryQuery: (text) => text,
+              contentT: (key) => key === "meaning_placeholder" ? "placeholder" : key,
+              supportsDictionaryBySourceLang: () => true,
+              shouldLookupDictionaryQuery: () => true,
+              mapDictionarySections: () => Promise.resolve([{
+                mode: "surface",
+                query: "mobilnya",
+                source: "kateglo",
+                entries: [{
+                  pos: "Nomina",
+                  definitionOriginal: "kendaraan",
+                  definitionTranslated: "車輛",
+                }],
+              }]),
+              chromeRuntime: createRuntime({
+                translate: () => ({ translation: "他的車" }),
+                lookupDictionary: () => ({ found: true, source: "kateglo", query: "mobilnya", lemma: "mobil", usedLemma: false }),
+              }),
+            },
+          });
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          assertEqual(input.value, "他的車");
+          assertEqual(input.placeholder, "placeholder");
+          assertEqual(overlay.dataset.lemma, "mobil");
+          assertEqual(overlay.dataset.dictPos, "Nomina");
+          assertEqual(overlay.dataset.dictSource, "kateglo");
+          assertEqual(overlay.dataset.dictSelectedIndex, "0");
+          assert(dictionaryReady, "expected dictionaryReady payload");
+          overlay.remove();
+        },
+      },
+      {
+        name: "prefillMeaningFromTranslation respects user edits and no dictionary result",
+        async run() {
+          const overlay = document.createElement("div");
+          document.body.appendChild(overlay);
+          const input = document.createElement("textarea");
+          input.value = "custom";
+          await U.prefillMeaningFromTranslation({
+            word: "test",
+            inputEl: input,
+            isUserEdited: () => true,
+            modalOverlay: overlay,
+            deps: {
+              WordStorage: {
+                getSourceLang: () => Promise.resolve("en"),
+                getDictionaryLookupEnabled: () => Promise.resolve(true),
+              },
+              resolveLemma: () => Promise.resolve({ query: "test", lemma: "", effectiveQuery: "test" }),
+              normalizeDictionaryQuery: (text) => text,
+              contentT: (key) => key === "meaning_placeholder" ? "placeholder" : key,
+              supportsDictionaryBySourceLang: () => true,
+              shouldLookupDictionaryQuery: () => true,
+              mapDictionarySections: () => Promise.resolve([]),
+              chromeRuntime: createRuntime({
+                translate: () => ({ translation: "translated" }),
+                lookupDictionary: () => ({ found: false }),
+              }),
+            },
+          });
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          assertEqual(input.value, "custom");
+          assertEqual(input.placeholder, "placeholder");
+          assertEqual(overlay.dataset.dictPos || "", "");
+          overlay.remove();
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

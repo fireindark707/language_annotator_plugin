@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>content-page-processing</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/content-page-processing.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const U = window.ContentPageProcessing;
+
+    runTests([
+      {
+        name: "findNextWholeWordIndex respects boundaries for latin words",
+        run() {
+          const text = "running runner run";
+          const lower = text.toLowerCase();
+          assertEqual(U.findNextWholeWordIndex(text, lower, "run", 0), 15);
+          assertEqual(U.containsWord(text, "runner"), true);
+          assertEqual(U.containsWord(text, "runn"), false);
+        },
+      },
+      {
+        name: "findTextNodes skips script tags and extension ui",
+        run() {
+          const host = document.createElement("div");
+          host.innerHTML = `
+            <p>alpha beta</p>
+            <script>ignored<\/script>
+            <div id="translationBox">ignored ui</div>
+            <div class="la-tour-card">ignored tour</div>
+          `;
+          document.body.appendChild(host);
+          const nodes = U.findTextNodes(host, {
+            Node,
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement(element) {
+              return !!(
+                element &&
+                ((element.id && element.id === "translationBox") ||
+                (element.classList && Array.from(element.classList).some((name) => name.startsWith("la-"))))
+              );
+            },
+          });
+          assertEqual(nodes.length, 1);
+          assertEqual(nodes[0].nodeValue.trim(), "alpha beta");
+          host.remove();
+        },
+      },
+      {
+        name: "buildHighlightedFragment wraps matched words and leaves learned words alone",
+        run() {
+          const fragment = U.buildHighlightedFragment("run and rest", ["run", "rest"], {
+            run: { meaning: "move fast", learned: false, examples: [] },
+            rest: { meaning: "pause", learned: true, examples: [] },
+          }, {
+            document,
+            showWordPreview() {},
+            hideWordPreview() {},
+          });
+          assert(fragment, "expected fragment");
+          const wrapper = document.createElement("div");
+          wrapper.appendChild(fragment);
+          assertEqual(wrapper.querySelectorAll(".plugin-highlight-word").length, 1);
+          assertEqual(wrapper.querySelector(".plugin-highlight-word").textContent, "run");
+          assertEqual(wrapper.textContent, "run and rest");
+        },
+      },
+      {
+        name: "collectExampleCandidates only collects unlearned exact matches",
+        run() {
+          const textNode = document.createTextNode("He was running quickly. The runner smiled.");
+          const container = document.createElement("p");
+          container.appendChild(textNode);
+          document.body.appendChild(container);
+          const result = U.collectExampleCandidates([textNode], ["running", "runner"], {
+            running: { learned: false },
+            runner: { learned: true },
+          }, {
+            splitIntoSentences(text) {
+              return text.split(".").map((part) => part.trim()).filter(Boolean);
+            },
+            isLowInformationExample() { return false; },
+            normalizeText(text) {
+              return (text || "").replace(/\s+/g, " ").trim();
+            },
+            currentHref: "https://example.com/page",
+          });
+          assertEqual(Array.isArray(result.running), true);
+          assertEqual(result.running.length, 1);
+          assertEqual(result.running[0].text, "He was running quickly");
+          assertEqual(result.runner, undefined);
+          container.remove();
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>practice-logic</title>
+</head>
+<body>
+  <div id="title"></div>
+  <div id="subtitle"></div>
+  <button id="closeBtn"></button>
+  <button id="helpBtn"></button>
+  <div id="progressChip"></div>
+  <div id="scoreChip"></div>
+  <div id="streakChip"></div>
+  <div id="challengeChip"></div>
+  <div id="progressBar"></div>
+  <div id="prompt"></div>
+  <div id="stimulus"></div>
+  <div id="options"></div>
+  <div id="feedback"></div>
+  <button id="clozeTranslateBtn"></button>
+  <div id="clozeTranslateText"></div>
+  <button id="nextBtn"></button>
+  <button id="markLearnedBtn"></button>
+  <div id="card"></div>
+  <div id="summary"></div>
+  <div id="summaryTitle"></div>
+  <div id="summaryBadge"></div>
+  <div id="summaryBigScore"></div>
+  <div id="summaryComment"></div>
+  <div id="summaryAccuracyLabel"></div>
+  <div id="summaryCorrectLabel"></div>
+  <div id="summaryBestStreakLabel"></div>
+  <div id="summaryAccuracy"></div>
+  <div id="summaryCorrect"></div>
+  <div id="summaryBestStreak"></div>
+  <div id="summaryText"></div>
+  <div id="summaryCelebrate"></div>
+  <div id="summaryReviewed"></div>
+  <div id="summaryReviewedTitle"></div>
+  <div id="summaryReviewedDesc"></div>
+  <div id="summaryReviewedList"></div>
+  <button id="applyLearnedWordsBtn"></button>
+  <div id="megaOverlay"></div>
+  <div id="megaText"></div>
+  <div id="answerFlash"></div>
+  <button id="nextRoundBtn"></button>
+  <div id="celebrate"></div>
+  <pre id="test-output"></pre>
+  <script>
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(message, callback) { callback({ translation: "" }); },
+      },
+    };
+    window.UiI18n = {
+      t(lang, key) { return key; },
+      langAttr(lang) { return lang || "en"; },
+      dir(lang) { return (lang || "").startsWith("ar") ? "rtl" : "ltr"; },
+    };
+    window.UiTour = { maybeStartOnce() {}, start() {}, reset() { return Promise.resolve(); }, getSteps() { return []; }, getLabel() { return "replay"; } };
+    window.WordStorage = {
+      getUiLanguage() { return Promise.resolve("en"); },
+      getWords() { return Promise.resolve({}); },
+      getSourceLang() { return Promise.resolve("en"); },
+      saveWords() { return Promise.resolve(); },
+    };
+    window.speechSynthesis = { cancel() {}, speak() {}, getVoices() { return []; } };
+    window.AudioContext = function () {};
+    window.webkitAudioContext = function () {};
+  </script>
+  <script src="../lib/practice-utils.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../practice.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    runTests([
+      {
+        name: "getQuestionPool excludes learned or empty-meaning entries",
+        run() {
+          allWords = [
+            { word: "alpha", meaning: "A", learned: false },
+            { word: "beta", meaning: "", learned: false },
+            { word: "gamma", meaning: "G", learned: true },
+          ];
+          const pool = getQuestionPool();
+          assertEqual(pool.length, 1);
+          assertEqual(pool[0].word, "alpha");
+        },
+      },
+      {
+        name: "buildClozeStimulus blanks exact whole-word matches only",
+        run() {
+          const text = buildClozeStimulus("run", [
+            "I run every morning.",
+            "Running is healthy.",
+          ]);
+          assert(text.includes("_____"), "expected blanked cloze");
+          assertEqual(buildClozeStimulus("run", ["Running is healthy."]), "");
+        },
+      },
+      {
+        name: "getReviewedWordsUnique deduplicates while dropping falsy values",
+        run() {
+          reviewedWordsThisRound = ["alpha", "beta", "", "alpha", null, "beta"];
+          const unique = getReviewedWordsUnique();
+          assertEqual(unique.length, 2);
+          assertEqual(unique[0], "alpha");
+          assertEqual(unique[1], "beta");
+        },
+      },
+      {
+        name: "init shows low-word reminder instead of starting practice when fewer than four words exist",
+        async run() {
+          WordStorage.getUiLanguage = () => Promise.resolve("en");
+          WordStorage.getWords = () => Promise.resolve({
+            one: { meaning: "1", learned: false },
+            two: { meaning: "2", learned: false },
+            three: { meaning: "3", learned: false },
+          });
+          await init();
+          assertEqual(feedbackEl.textContent, "practice_need_words");
+          assertEqual(nextBtn.style.display, "none");
+          assertEqual(markLearnedBtn.style.display, "none");
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

@@ -57,6 +57,7 @@ const nextRoundBtn = document.getElementById("nextRoundBtn");
 const celebrateEl = document.getElementById("celebrate");
 let answerFlashTimer = null;
 let practiceTourAttempted = false;
+const PracticeUtilsRef = globalThis.PracticeUtils || {};
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
@@ -95,17 +96,17 @@ function isZhUi() {
 }
 
 function shuffle(arr) {
-	const list = arr.slice();
-	for (let i = list.length - 1; i > 0; i -= 1) {
-		const j = Math.floor(Math.random() * (i + 1));
-		[list[i], list[j]] = [list[j], list[i]];
+	if (typeof PracticeUtilsRef.shuffle === "function") {
+		return PracticeUtilsRef.shuffle(arr);
 	}
-	return list;
+	return arr.slice();
 }
 
 function chooseDistractors(base, field, answer, count) {
-	const pool = shuffle(base.filter((x) => x[field] && x[field] !== answer));
-	return pool.slice(0, count).map((x) => x[field]);
+	if (typeof PracticeUtilsRef.chooseDistractors === "function") {
+		return PracticeUtilsRef.chooseDistractors(base, field, answer, count);
+	}
+	return [];
 }
 
 function getMeaningByWord(word) {
@@ -114,6 +115,9 @@ function getMeaningByWord(word) {
 }
 
 function getReviewedWordsUnique() {
+	if (typeof PracticeUtilsRef.getReviewedWordsUnique === "function") {
+		return PracticeUtilsRef.getReviewedWordsUnique(reviewedWordsThisRound);
+	}
 	return Array.from(new Set(reviewedWordsThisRound.filter(Boolean)));
 }
 
@@ -209,6 +213,9 @@ function showAnswerFlash(word, meaning, isCorrect) {
 }
 
 function getQuestionPool() {
+	if (typeof PracticeUtilsRef.getQuestionPool === "function") {
+		return PracticeUtilsRef.getQuestionPool(allWords);
+	}
 	return allWords.filter((x) => x && x.word && x.meaning && !x.learned);
 }
 
@@ -223,22 +230,16 @@ function escapeRegExp(text) {
 }
 
 function normalizeExampleText(example) {
+	if (typeof PracticeUtilsRef.normalizeExampleText === "function") {
+		return PracticeUtilsRef.normalizeExampleText(example);
+	}
 	if (!example) return "";
-	if (typeof example === "string") return example.trim();
-	if (typeof example === "object" && typeof example.text === "string") return example.text.trim();
-	return "";
+	return typeof example === "string" ? example.trim() : "";
 }
 
 function buildClozeStimulus(word, examples) {
-	const cleanedWord = (word || "").trim();
-	if (!cleanedWord || !Array.isArray(examples) || examples.length === 0) return "";
-	const candidates = shuffle(examples.map(normalizeExampleText).filter((x) => x.length > cleanedWord.length + 2));
-	if (!candidates.length) return "";
-	const pattern = new RegExp(`\\b${escapeRegExp(cleanedWord)}\\b`, "i");
-	for (let i = 0; i < candidates.length; i += 1) {
-		const sentence = candidates[i];
-		if (!pattern.test(sentence)) continue;
-		return sentence.replace(pattern, "_____");
+	if (typeof PracticeUtilsRef.buildClozeStimulus === "function") {
+		return PracticeUtilsRef.buildClozeStimulus(word, examples);
 	}
 	return "";
 }
@@ -682,7 +683,7 @@ function startRound() {
 }
 
 function init() {
-	Promise.all([
+	return Promise.all([
 		WordStorage.getUiLanguage().catch(() => "en"),
 		WordStorage.getWords(),
 	]).then(([lang, wordsObj]) => {

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>content-dictionary-utils</title>
+</head>
+<body>
+  <div id="host"></div>
+  <pre id="test-output"></pre>
+  <script src="../lib/dictionary-utils.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const U = window.DictionaryUtils;
+
+    runTests([
+      {
+        name: "getEffectiveDictionarySections falls back to legacy response shape",
+        run() {
+          const sections = U.getEffectiveDictionarySections({
+            found: true,
+            source: "dictionaryapi",
+            query: "running",
+            usedLemma: false,
+            entries: [{ definition: "to move fast" }],
+          });
+          assertEqual(sections.length, 1);
+          assertEqual(sections[0].mode, "surface");
+          assertEqual(sections[0].query, "running");
+        },
+      },
+      {
+        name: "mapDictionarySections translates and trims entries",
+        async run() {
+          const mapped = await U.mapDictionarySections({
+            sections: [{
+              mode: "surface",
+              query: "running",
+              source: "dictionaryapi",
+              entries: [
+                { pos: "verb", definition: "to move fast" },
+                { pos: "noun", definition: "a period of activity" },
+                { pos: "adj", definition: "ongoing" },
+                { pos: "extra", definition: "should be trimmed" },
+              ],
+            }],
+          }, "en", {
+            maxEntries: 3,
+            translateEntry(text) {
+              return Promise.resolve(`tr:${text}`);
+            },
+          });
+          assertEqual(mapped.length, 1);
+          assertEqual(mapped[0].entries.length, 3);
+          assertEqual(mapped[0].entries[0].definitionTranslated, "tr:to move fast");
+        },
+      },
+      {
+        name: "renderPassiveDictionarySections creates title, section title, entries and empty state",
+        run() {
+          const host = document.getElementById("host");
+          U.renderPassiveDictionarySections(host, [
+            { mode: "surface", query: "running", entries: [{ definitionOriginal: "to move", definitionTranslated: "移動", pos: "verb" }] },
+            { mode: "lemma", query: "run", entries: [] },
+          ], {
+            document,
+            titleText: "Dictionary",
+            emptyText: "No entries",
+            getSectionTitle: (section) => `${section.mode}:${section.query}`,
+            renderEntry(item) {
+              const el = document.createElement("div");
+              el.className = "entry";
+              el.textContent = `${item.pos}|${item.definitionTranslated}`;
+              return el;
+            },
+          });
+          assertEqual(host.firstChild.textContent, "Dictionary");
+          assertEqual(host.querySelectorAll(".entry").length, 1);
+          assert(host.textContent.includes("lemma:run"), "expected lemma section title");
+          assert(host.textContent.includes("No entries"), "expected empty state");
+        },
+      },
+      {
+        name: "renderInteractiveDictionarySections creates apply buttons and click handlers",
+        run() {
+          const host = document.getElementById("host");
+          let appliedPayload = null;
+          U.renderInteractiveDictionarySections(host, [
+            {
+              mode: "surface",
+              query: "mobilnya",
+              source: "kateglo",
+              entries: [
+                {
+                  pos: "Nomina",
+                  definitionOriginal: "kendaraan darat",
+                  definitionTranslated: "車輛",
+                },
+              ],
+            },
+          ], {
+            document,
+            emptyText: "No entries",
+            getSectionTitle: (section) => `${section.mode}:${section.query}`,
+            decorateSection(sectionWrap) {
+              sectionWrap.className = "section";
+            },
+            decorateSectionTitle(titleNode) {
+              titleNode.className = "section-title";
+            },
+            decorateEntryRow(row) {
+              row.dataset.decorated = "1";
+            },
+            createApplyButton() {
+              const btn = document.createElement("button");
+              btn.type = "button";
+              btn.className = "apply";
+              btn.textContent = "Apply";
+              return btn;
+            },
+            onApply(payload) {
+              appliedPayload = payload;
+            },
+          });
+          const title = host.querySelector(".section-title");
+          const row = host.querySelector('[data-decorated="1"]');
+          const btn = host.querySelector(".apply");
+          assert(title, "expected decorated section title");
+          assert(row, "expected decorated row");
+          assert(btn, "expected apply button");
+          btn.click();
+          assert(appliedPayload, "expected onApply payload");
+          assertEqual(appliedPayload.section.query, "mobilnya");
+          assertEqual(appliedPayload.item.definitionTranslated, "車輛");
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

@@ -1,5 +1,8 @@
 // background.js
 if (typeof importScripts === "function") {
+	importScripts("lib/dictionary-utils.js");
+	importScripts("lib/lemma-utils.js");
+	importScripts("lib/storage-merge-utils.js");
 	importScripts("packages/simplemma.bundle.js");
 	importScripts("storage.js");
 }
@@ -275,94 +278,6 @@ function decodeHtmlEntities(text) {
 		.replace(/&#39;/g, "'")
 		.replace(/&lt;/g, "<")
 		.replace(/&gt;/g, ">");
-}
-
-function normalizeWiktionaryDefinition(raw) {
-	return decodeHtmlEntities(stripHtmlTags(raw || ""));
-}
-
-function getWiktionaryLanguageKeys(baseLang) {
-	const normalized = (baseLang || "").toLowerCase();
-	const aliasMap = {
-		fil: ["fil", "tl"],
-		tl: ["tl", "fil"],
-		zh: ["zh", "zh-hans", "zh-hant"],
-	};
-	const aliases = aliasMap[normalized] || [normalized];
-	return Array.from(new Set(aliases.filter((x) => !!x)));
-}
-
-function matchesLanguageName(languageText, baseLang) {
-	const text = (languageText || "").toLowerCase();
-	if (!text) return false;
-	const nameMap = {
-		en: ["english"],
-		id: ["indonesian"],
-		ja: ["japanese"],
-		tl: ["tagalog", "filipino"],
-		fil: ["tagalog", "filipino"],
-		ms: ["malay"],
-		es: ["spanish"],
-		fr: ["french"],
-		de: ["german"],
-		pt: ["portuguese"],
-		ru: ["russian"],
-		ko: ["korean"],
-		zh: ["chinese", "mandarin"],
-	};
-	const probes = nameMap[(baseLang || "").toLowerCase()] || [];
-	return probes.some((p) => text.includes(p));
-}
-
-function lookupWiktionaryDictionary(word, sourceLang) {
-	const baseLang = ((sourceLang || "").split("-")[0] || "").toLowerCase();
-	const lang = baseLang === "fil" ? "tl" : baseLang;
-	const url = `https://en.wiktionary.org/api/rest_v1/page/definition/${encodeURIComponent(word)}`;
-	return fetchJsonSafe(url)
-		.then((data) => {
-			if (!data || typeof data !== "object") {
-				return { found: false, source: "wiktionary", entries: [] };
-			}
-
-			const targetKeys = getWiktionaryLanguageKeys(baseLang === "fil" ? "tl" : baseLang);
-			const directEntries = [];
-			targetKeys.forEach((key) => {
-				if (Array.isArray(data[key])) {
-					directEntries.push.apply(directEntries, data[key]);
-				}
-			});
-
-			let pickedEntries = directEntries;
-			if (pickedEntries.length === 0 && Array.isArray(data.other)) {
-				pickedEntries = data.other.filter((entry) =>
-					matchesLanguageName(entry && entry.language, baseLang === "fil" ? "tl" : baseLang)
-				);
-			}
-			if (pickedEntries.length === 0) {
-				return { found: false, source: "wiktionary", entries: [] };
-			}
-
-			const entries = [];
-			const seen = new Set();
-			pickedEntries.forEach((entry) => {
-				const pos = typeof entry.partOfSpeech === "string" ? entry.partOfSpeech.trim() : "";
-				const defs = Array.isArray(entry.definitions) ? entry.definitions : [];
-				defs.forEach((d) => {
-					const definition = normalizeWiktionaryDefinition(d && d.definition);
-					if (!definition) return;
-					const key = `${pos.toLowerCase()}__${definition.toLowerCase()}`;
-					if (seen.has(key)) return;
-					seen.add(key);
-					entries.push({ pos, definition });
-				});
-			});
-
-			return {
-				found: entries.length > 0,
-				source: "wiktionary",
-				entries: entries.slice(0, 5),
-			};
-		});
 }
 
 function tryLookupChain(tasks) {

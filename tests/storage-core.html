@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>storage-core</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script>
+    window.__LA_TEST_HOOKS__ = {};
+    window.chrome = {
+      runtime: { lastError: null },
+      storage: {
+        local: { get() {}, set() {}, remove() {} },
+        sync: { get() {}, set() {}, remove() {} },
+      },
+    };
+  </script>
+  <script src="../lib/storage-merge-utils.js"></script>
+  <script src="../storage.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const hooks = window.__LA_TEST_HOOKS__.storage;
+
+    runTests([
+      {
+        name: "splitWordsToShards reconstructs all words across multiple shards",
+        run() {
+          const words = {};
+          for (let i = 0; i < 24; i += 1) {
+            words[`word-${i}`] = { meaning: "x".repeat(420), learned: false, createdAt: i + 1 };
+          }
+          const shards = hooks.splitWordsToShards(words);
+          assert(shards.length > 1, "expected more than one shard");
+          const rebuilt = Object.assign({}, ...shards);
+          assertEqual(Object.keys(rebuilt).length, Object.keys(words).length, "all words must survive shard split");
+        },
+      },
+      {
+        name: "compactWordsForSync level 2 trims examples and keeps lemma data",
+        run() {
+          const words = {
+            alpha: {
+              meaning: "hello",
+              learned: false,
+              createdAt: 10,
+              lemma: "alpha",
+              encounterPageKeys: Array.from({ length: 40 }, (_, i) => `page-${i}`),
+              examples: Array.from({ length: 12 }, (_, i) => ({
+                text: `example-${i}`,
+                pinned: i % 2 === 0,
+                translation: `tr-${i}`,
+                translatedAt: 99,
+                sourceUrl: `https://a${i}.test`,
+                capturedAt: i,
+              })),
+              dictionary: {
+                pos: "noun",
+                definitionOriginal: "orig",
+                definitionTranslated: "trans",
+                source: "dictionaryapi",
+                lookupLemma: "alpha",
+                queryText: "alphas",
+                usedLemma: true,
+                entries: [{ pos: "noun", definitionOriginal: "orig", definitionTranslated: "trans" }],
+                selectedIndex: 0,
+                updatedAt: 123,
+              },
+            },
+          };
+          const compacted = hooks.compactWordsForSync(words, 2);
+          assertEqual(compacted.alpha.lemma, "alpha");
+          assertEqual(compacted.alpha.examples.length, 8, "level 2 should cap examples to 8");
+          assert(!("translation" in compacted.alpha.examples[0]), "level 2 should strip example translations");
+          assertEqual(compacted.alpha.encounterPageKeys.length, 30, "level 2 should cap page keys to 30");
+          assertEqual(compacted.alpha.dictionary.lookupLemma, "alpha");
+          assertEqual(compacted.alpha.dictionary.usedLemma, true);
+        },
+      },
+      {
+        name: "mergeExamples deduplicates and merges metadata",
+        run() {
+          const merged = hooks.mergeExamples(
+            [
+              { text: "Hello world", pinned: false, translation: "", sourceUrl: "", capturedAt: 0 },
+            ],
+            [
+              { text: "hello world", pinned: true, translation: "你好世界", sourceUrl: "https://example.com", capturedAt: 99 },
+            ]
+          );
+          assertEqual(merged.length, 1);
+          assertEqual(merged[0].pinned, true);
+          assertEqual(merged[0].translation, "你好世界");
+          assertEqual(merged[0].sourceUrl, "https://example.com");
+          assertEqual(merged[0].capturedAt, 99);
+        },
+      },
+      {
+        name: "mergeWordRecord keeps local meaning, earliest createdAt, merged counts and local lemma",
+        run() {
+          const merged = hooks.mergeWordRecord(
+            {
+              meaning: "local meaning",
+              learned: false,
+              createdAt: 80,
+              lemma: "run",
+              examples: [{ text: "Run fast", pinned: false }],
+              encounterCount: 1,
+              pageCount: 1,
+              encounterPageKeys: ["page-a"],
+              dictionary: { source: "dictionaryapi", definitionTranslated: "跑" },
+            },
+            {
+              meaning: "cloud meaning",
+              learned: true,
+              createdAt: 30,
+              lemma: "running",
+              examples: [{ text: "Run fast", pinned: true }, { text: "Run daily", pinned: false }],
+              encounterCount: 7,
+              pageCount: 2,
+              encounterPageKeys: ["page-a", "page-b"],
+              dictionary: { source: "kateglo", definitionOriginal: "to move" },
+            }
+          );
+          assertEqual(merged.meaning, "local meaning");
+          assertEqual(merged.learned, true);
+          assertEqual(merged.createdAt, 30);
+          assertEqual(merged.lemma, "run");
+          assertEqual(merged.examples.length, 2);
+          assert(merged.encounterCount >= 2, "encounter count should never be less than example count");
+          assert(merged.pageCount >= 2, "page count should reflect merged page keys");
+          assertEqual(merged.dictionary.source, "dictionaryapi");
+          assertEqual(merged.dictionary.definitionOriginal, "to move");
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

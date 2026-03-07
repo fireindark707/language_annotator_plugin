@@ -10,6 +10,15 @@ if [[ -z "$CHROME_BIN" ]]; then
 fi
 
 TEST_FILES=(
+  "$ROOT_DIR/tests/storage-core.html"
+  "$ROOT_DIR/tests/example-utils.html"
+  "$ROOT_DIR/tests/content-dictionary-utils.html"
+  "$ROOT_DIR/tests/content-addword.html"
+  "$ROOT_DIR/tests/content-translation.html"
+  "$ROOT_DIR/tests/content-page-processing.html"
+  "$ROOT_DIR/tests/words-logic.html"
+  "$ROOT_DIR/tests/practice-logic.html"
+  "$ROOT_DIR/tests/background-dictionary-flow.html"
   "$ROOT_DIR/tests/simplemma-smoke.html"
   "$ROOT_DIR/tests/dictionary-url-smoke.html"
 )

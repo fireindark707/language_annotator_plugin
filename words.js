@@ -6,12 +6,9 @@ const MAX_EXAMPLES_PER_WORD = 20;
 const MAX_TRANSLATE_CONCURRENCY = 2;
 const SEARCH_DEBOUNCE_MS = 350;
 const LEMMA_BACKFILL_CONCURRENCY = 3;
-const SIMPLEMMA_SUPPORTED_LANGS = new Set([
-	"ast", "bg", "ca", "cs", "cy", "da", "de", "el", "en", "enm", "eo", "es", "et", "fa",
-	"fi", "fr", "ga", "gd", "gl", "gv", "hbs", "hi", "hu", "hy", "id", "is", "it", "ka",
-	"la", "lb", "lt", "lv", "mk", "ms", "nb", "nl", "nn", "pl", "pt", "ro", "ru", "se",
-	"sk", "sl", "sq", "sv", "sw", "tl", "tr", "uk"
-]);
+const DictionaryUtilsRef = globalThis.DictionaryUtils || {};
+const LemmaUtilsRef = globalThis.LemmaUtils || {};
+const ExampleUtilsRef = globalThis.ExampleUtils || {};
 
 let cachedSourceLangPromise = null;
 let activeTranslateJobs = 0;
@@ -167,48 +164,24 @@ function startWordsTour(force) {
 	});
 }
 
-function normalizeDictionaryQuery(text) {
-	const cleaned = (text || "")
-		.trim()
-		.replace(/^[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+/u, "")
-		.replace(/[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+$/u, "");
-	if (!cleaned) return "";
+const normalizeDictionaryQuery = DictionaryUtilsRef.normalizeDictionaryQuery || function (text) {
+	const cleaned = (text || "").trim();
 	return cleaned.split(/\s+/)[0] || "";
-}
-
-function supportsDictionaryBySourceLang(sourceLang) {
+};
+const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySourceLang || function (sourceLang) {
 	const normalized = (sourceLang || "").toLowerCase();
-	if (!normalized || normalized === "auto") return false;
-	const base = normalized.split("-")[0];
-	const supported = new Set([
-		"ar", "bn", "cs", "de", "el", "en", "es", "fa", "fil", "fr",
-		"he", "hi", "hu", "id", "it", "ja", "jv", "km", "ko", "lo",
-		"ms", "my", "nl", "pl", "pt", "ro", "ru", "su", "sv", "sw",
-		"ta", "te", "th", "tl", "tr", "ur", "vi", "zh",
-	]);
-	return supported.has(base);
-}
-
-function getDictionarySourceLabel(source) {
-	const normalized = (source || "").toLowerCase();
-	if (normalized === "kateglo") return "Kateglo";
-	if (normalized === "dictionaryapi") return "Free Dictionary";
-	if (normalized === "jotoba") return "Jotoba";
-	if (normalized === "wiktionary") return "Wiktionary";
+	return !!normalized && normalized !== "auto";
+};
+const getDictionarySourceLabel = DictionaryUtilsRef.getDictionarySourceLabel || function () {
 	return "Dictionary";
-}
-
-function normalizeLemmaSourceLang(sourceLang) {
+};
+const normalizeLemmaSourceLang = LemmaUtilsRef.normalizeLemmaSourceLang || function (sourceLang) {
 	const base = (((sourceLang || "").split("-")[0]) || "").toLowerCase();
-	if (!base || base === "auto") return "";
-	if (base === "fil") return "tl";
-	return base;
-}
-
-function supportsLemmaBySourceLang(sourceLang) {
-	const lang = normalizeLemmaSourceLang(sourceLang);
-	return !!lang && SIMPLEMMA_SUPPORTED_LANGS.has(lang);
-}
+	return base === "auto" ? "" : base;
+};
+const supportsLemmaBySourceLang = LemmaUtilsRef.supportsLemmaBySourceLang || function () {
+	return false;
+};
 
 function resolveLemma(text, sourceLang) {
 	const query = normalizeDictionaryQuery(text);
@@ -466,40 +439,25 @@ function isBoundaryMatch(text, start, end, cjkWord) {
 }
 
 function normalizeExampleEntry(entry) {
-	if (typeof entry === "string") {
-		return { text: entry, pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
+	if (typeof ExampleUtilsRef.normalizeExampleEntry === "function") {
+		return ExampleUtilsRef.normalizeExampleEntry(entry) || { text: "", pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
 	}
-	if (!entry || typeof entry !== "object") {
-		return { text: "", pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
-	}
-	return {
-		text: typeof entry.text === "string" ? entry.text : "",
-		pinned: !!entry.pinned,
-		createdAt: typeof entry.createdAt === "number" ? entry.createdAt : 0,
-		pinnedAt: typeof entry.pinnedAt === "number" ? entry.pinnedAt : 0,
-		translation: typeof entry.translation === "string" ? entry.translation : "",
-		translatedAt: typeof entry.translatedAt === "number" ? entry.translatedAt : 0,
-		sourceUrl: typeof entry.sourceUrl === "string"
-			? entry.sourceUrl
-			: (typeof entry.url === "string" ? entry.url : ""),
-		capturedAt: typeof entry.capturedAt === "number"
-			? entry.capturedAt
-			: (typeof entry.timestamp === "number" ? entry.timestamp : 0),
-	};
+	return { text: "", pinned: false, createdAt: 0, pinnedAt: 0, translation: "", translatedAt: 0 };
 }
 
 function normalizeExamples(entries) {
+	if (typeof ExampleUtilsRef.normalizeExampleList === "function") {
+		return ExampleUtilsRef.normalizeExampleList(entries);
+	}
 	if (!Array.isArray(entries)) return [];
 	return entries.map(normalizeExampleEntry).filter((item) => item.text.trim().length > 0);
 }
 
 function sortExamples(entries) {
-	return entries.sort((a, b) => {
-		if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-		if (a.pinned && b.pinned && b.pinnedAt !== a.pinnedAt) return b.pinnedAt - a.pinnedAt;
-		if (b.createdAt !== a.createdAt) return b.createdAt - a.createdAt;
-		return a.text.localeCompare(b.text);
-	});
+	if (typeof ExampleUtilsRef.sortExamples === "function") {
+		return ExampleUtilsRef.sortExamples(entries);
+	}
+	return entries;
 }
 
 function getExampleIdentity(example) {
@@ -518,11 +476,10 @@ function findExampleIndexByIdentity(listItems, target) {
 }
 
 function trimExamples(entries) {
-	const sorted = sortExamples(entries.slice());
-	const pinned = sorted.filter((item) => item.pinned);
-	const unpinned = sorted.filter((item) => !item.pinned);
-	if (unpinned.length <= MAX_EXAMPLES_PER_WORD) return sorted;
-	return pinned.concat(unpinned.slice(0, MAX_EXAMPLES_PER_WORD));
+	if (typeof ExampleUtilsRef.enforceExampleLimit === "function") {
+		return ExampleUtilsRef.enforceExampleLimit(entries.slice(), MAX_EXAMPLES_PER_WORD);
+	}
+	return entries;
 }
 
 function createHighlightedSentenceElement(sentence, word) {

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>example-utils</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../lib/example-utils.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const U = window.ExampleUtils;
+
+    runTests([
+      {
+        name: "normalizeExampleEntry keeps translation/source metadata",
+        run() {
+          const item = U.normalizeExampleEntry({
+            text: "  Hello world  ",
+            pinned: true,
+            createdAt: 10,
+            pinnedAt: 20,
+            translation: "你好世界",
+            translatedAt: 30,
+            sourceUrl: "https://example.com",
+            capturedAt: 40,
+          });
+          assertEqual(item.text, "Hello world");
+          assertEqual(item.pinned, true);
+          assertEqual(item.translation, "你好世界");
+          assertEqual(item.sourceUrl, "https://example.com");
+          assertEqual(item.capturedAt, 40);
+        },
+      },
+      {
+        name: "sortExamples puts pinned first then newest first",
+        run() {
+          const sorted = U.sortExamples([
+            { text: "b", pinned: false, createdAt: 10, pinnedAt: 0 },
+            { text: "a", pinned: true, createdAt: 1, pinnedAt: 8 },
+            { text: "c", pinned: true, createdAt: 2, pinnedAt: 3 },
+          ]);
+          assertEqual(sorted[0].text, "a");
+          assertEqual(sorted[1].text, "c");
+          assertEqual(sorted[2].text, "b");
+        },
+      },
+      {
+        name: "enforceExampleLimit keeps pinned items outside unpinned cap",
+        run() {
+          const result = U.enforceExampleLimit([
+            { text: "p1", pinned: true, createdAt: 1, pinnedAt: 1 },
+            { text: "u3", pinned: false, createdAt: 3, pinnedAt: 0 },
+            { text: "u2", pinned: false, createdAt: 2, pinnedAt: 0 },
+            { text: "u1", pinned: false, createdAt: 1, pinnedAt: 0 },
+          ], 2);
+          assertEqual(result.length, 3);
+          assertEqual(result[0].text, "p1");
+        },
+      },
+      {
+        name: "isLowInformationExample rejects bare word and url-like strings",
+        run() {
+          assertEqual(U.isLowInformationExample("run", "run"), true);
+          assertEqual(U.isLowInformationExample("https://foo.bar/run", "run"), true);
+          assertEqual(U.isLowInformationExample("I run every morning before work.", "run"), false);
+        },
+      },
+      {
+        name: "similarity and containment rules catch near-duplicate short titles",
+        run() {
+          assertEqual(U.hasContainmentRelation("Bincang Pinggiran 4", ["Bincang Pinggiran"]), true);
+          assert(U.isTooSimilarToAny("Bincang Pinggiran 4", ["Bincang Pinggiran 3"], 0.88), "expected short-title similarity to be treated as duplicate");
+        },
+      },
+      {
+        name: "splitIntoSentences filters obvious code-like garbage",
+        run() {
+          const codey = "document.getElementById('x').addEventListener('click', function() { return 1; });";
+          const normal = "This is a real sentence. This is another one.";
+          assertEqual(U.splitIntoSentences(codey, "en").length, 0);
+          assertEqual(U.splitIntoSentences(normal, "en").length >= 2, true);
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

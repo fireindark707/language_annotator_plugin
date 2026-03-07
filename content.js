@@ -3,26 +3,16 @@ let addWordModal = null;
 let confirmModal = null;
 const MAX_EXAMPLES_PER_WORD = 20;
 const EXAMPLE_SIMILARITY_THRESHOLD = 0.88;
-let exampleMergeTimer = null;
-let pendingExampleMap = {};
-let wordPreviewCard = null;
-let wordPreviewHideTimer = null;
-const PREVIEW_TRANSLATE_CONCURRENCY = 2;
-let previewSourceLangPromise = null;
-let previewTranslateActive = 0;
-const previewTranslateQueue = [];
-const previewTranslateInflight = new Set();
-const previewTranslateCache = new Map();
 const lemmaCache = new Map();
 let contentUiLang = "en";
 let contentTourAttempted = false;
 let contentSelectionTourAttempted = false;
-const SIMPLEMMA_SUPPORTED_LANGS = new Set([
-	"ast", "bg", "ca", "cs", "cy", "da", "de", "el", "en", "enm", "eo", "es", "et", "fa",
-	"fi", "fr", "ga", "gd", "gl", "gv", "hbs", "hi", "hu", "hy", "id", "is", "it", "ka",
-	"la", "lb", "lt", "lv", "mk", "ms", "nb", "nl", "nn", "pl", "pt", "ro", "ru", "se",
-	"sk", "sl", "sq", "sv", "sw", "tl", "tr", "uk"
-]);
+const DictionaryUtilsRef = globalThis.DictionaryUtils || {};
+const LemmaUtilsRef = globalThis.LemmaUtils || {};
+const ExampleUtilsRef = globalThis.ExampleUtils || {};
+const ContentAddWordRef = globalThis.ContentAddWord || {};
+const ContentTranslationRef = globalThis.ContentTranslation || {};
+const ContentPageProcessingRef = globalThis.ContentPageProcessing || {};
 const SKIP_TEXT_TAGS = new Set([
 	"SCRIPT",
 	"STYLE",
@@ -100,107 +90,26 @@ function getExampleText(entry) {
 	return "";
 }
 
-async function translatePreviewSentence(sentence) {
-	if (!previewSourceLangPromise) {
-		previewSourceLangPromise = WordStorage.getSourceLang().catch(() => "auto");
-	}
-	const sourceLang = await previewSourceLangPromise;
-	return new Promise((resolve) => {
-		chrome.runtime.sendMessage(
-			{ action: "translate", text: sentence, sourceLang: sourceLang || "auto" },
-			(response) => {
-				if (chrome.runtime.lastError || !response || !response.translation) {
-					resolve("");
-					return;
-				}
-				resolve(response.translation);
-			}
-		);
-	});
-}
-
-function runPreviewTranslateQueue() {
-	while (
-		previewTranslateActive < PREVIEW_TRANSLATE_CONCURRENCY &&
-		previewTranslateQueue.length > 0
-	) {
-		const job = previewTranslateQueue.shift();
-		previewTranslateActive += 1;
-		Promise.resolve()
-			.then(job)
-			.catch(() => {})
-			.finally(() => {
-				previewTranslateActive -= 1;
-				runPreviewTranslateQueue();
-			});
-	}
-}
-
 function queuePreviewTranslation(sentence, targetEl) {
-	if (!sentence || !targetEl) return;
-	const cached = previewTranslateCache.get(sentence);
-	if (cached) {
-		targetEl.textContent = cached;
+	if (typeof ContentTranslationRef.queuePreviewTranslation === "function") {
+		ContentTranslationRef.queuePreviewTranslation(sentence, targetEl, {
+			WordStorage,
+			chromeRuntime: chrome.runtime,
+		});
 		return;
 	}
-	if (previewTranslateInflight.has(sentence)) return;
-	previewTranslateInflight.add(sentence);
-	targetEl.textContent = "…";
-	previewTranslateQueue.push(async () => {
-		const translated = await translatePreviewSentence(sentence);
-		previewTranslateInflight.delete(sentence);
-		if (!translated) return;
-		previewTranslateCache.set(sentence, translated);
-		if (targetEl.isConnected) {
-			targetEl.textContent = translated;
-		}
-	});
-	runPreviewTranslateQueue();
 }
 
 function createPreviewHighlightedSentence(sentence, word) {
+	if (typeof ContentTranslationRef.createPreviewHighlightedSentence === "function") {
+		return ContentTranslationRef.createPreviewHighlightedSentence(sentence, word, {
+			document,
+			isCjkText,
+			isBoundaryMatch,
+		});
+	}
 	const wrapper = document.createElement("div");
-	const rawWord = (word || "").trim();
-	if (!sentence || !rawWord) {
-		wrapper.textContent = sentence || "";
-		return wrapper;
-	}
-	const isCjkWord = isCjkText(rawWord);
-	const lowerSentence = sentence.toLowerCase();
-	const lowerWord = rawWord.toLowerCase();
-	let cursor = 0;
-	let matched = false;
-
-	while (cursor < sentence.length) {
-		const start = lowerSentence.indexOf(lowerWord, cursor);
-		if (start === -1) break;
-		const end = start + rawWord.length;
-		if (!isBoundaryMatch(sentence, start, end, isCjkWord)) {
-			cursor = start + 1;
-			continue;
-		}
-		if (start > cursor) {
-			wrapper.appendChild(document.createTextNode(sentence.slice(cursor, start)));
-		}
-		const mark = document.createElement("span");
-		mark.style.background = "#efe0a8";
-		mark.style.color = "#4b392c";
-		mark.style.borderRadius = "6px 5px 7px 5px";
-		mark.style.padding = "0 3px";
-		mark.style.boxShadow = "inset 0 -1px 0 rgba(120, 98, 67, 0.12)";
-		mark.textContent = sentence.slice(start, end);
-		wrapper.appendChild(mark);
-		cursor = end;
-		matched = true;
-	}
-
-	if (!matched) {
-		wrapper.textContent = sentence;
-		return wrapper;
-	}
-	if (cursor < sentence.length) {
-		wrapper.appendChild(document.createTextNode(sentence.slice(cursor)));
-	}
+	wrapper.textContent = sentence || "";
 	return wrapper;
 }
 
@@ -268,146 +177,37 @@ function markLearned(word) {
 	});
 }
 
-function ensureWordPreviewStyle() {
-	if (document.getElementById("laWordPreviewStyle")) return;
-	const style = document.createElement("style");
-	style.id = "laWordPreviewStyle";
-	style.textContent = `
-		.la-word-preview {
-			position: absolute;
-			z-index: 2147483645;
-			min-width: 260px;
-			max-width: 420px;
-			background: #fffaf3;
-			border: 1px solid #dccabd;
-			border-radius: 16px 14px 18px 13px;
-			box-shadow: 0 14px 28px rgba(88, 63, 50, 0.14);
-			padding: 11px 13px;
-			color: #34251f;
-			font-family: "Noto Sans TC", "Hiragino Sans", "Yu Gothic UI", sans-serif;
-			pointer-events: auto;
-			animation: laWordPreviewIn 160ms ease-out;
-		}
-		.la-word-preview-meaning {
-			font-size: 13px;
-			font-weight: 700;
-			line-height: 1.45;
-			color: #7f5a4d;
-		}
-		.la-word-preview-list {
-			margin: 8px 0 0;
-			padding-left: 18px;
-			font-size: 12px;
-			line-height: 1.45;
-			color: #4e3e36;
-		}
-		.la-word-preview-list li {
-			margin-bottom: 4px;
-		}
-		.la-word-preview-trans {
-			margin-top: 2px;
-			font-size: 11px;
-			color: #7a685d;
-			border-left: 2px solid #ddd0c2;
-			padding-left: 6px;
-		}
-		@keyframes laWordPreviewIn {
-			from { opacity: 0; transform: translateY(5px) scale(0.985); }
-			to { opacity: 1; transform: translateY(0) scale(1); }
-		}
-	`;
-	document.head.appendChild(style);
-}
-
-function ensureWordPreviewCard() {
-	ensureWordPreviewStyle();
-	if (wordPreviewCard && wordPreviewCard.isConnected) return wordPreviewCard;
-	wordPreviewCard = document.createElement("div");
-	wordPreviewCard.className = "la-word-preview";
-	wordPreviewCard.style.display = "none";
-	wordPreviewCard.addEventListener("mouseenter", () => {
-		if (wordPreviewHideTimer) clearTimeout(wordPreviewHideTimer);
-	});
-	wordPreviewCard.addEventListener("mouseleave", () => {
-		hideWordPreview(70);
-	});
-	document.body.appendChild(wordPreviewCard);
-	return wordPreviewCard;
-}
-
 function hideWordPreview(delay) {
-	if (!wordPreviewCard) return;
-	if (wordPreviewHideTimer) clearTimeout(wordPreviewHideTimer);
-	wordPreviewHideTimer = setTimeout(() => {
-		if (wordPreviewCard) wordPreviewCard.style.display = "none";
-	}, typeof delay === "number" ? delay : 0);
+	if (typeof ContentTranslationRef.hideWordPreview === "function") {
+		ContentTranslationRef.hideWordPreview(delay);
+	}
 }
 
 function showWordPreview(anchor, meaning, examples) {
-	const card = ensureWordPreviewCard();
-	if (wordPreviewHideTimer) clearTimeout(wordPreviewHideTimer);
-	card.innerHTML = "";
-
-	const meaningEl = document.createElement("div");
-	meaningEl.className = "la-word-preview-meaning";
-	meaningEl.textContent = meaning || "";
-	card.appendChild(meaningEl);
-
-	const items = (examples || [])
-		.map(getExampleText)
-		.filter((text) => text.length > 0)
-		.slice(0, 3);
-	if (items.length > 0) {
-		const list = document.createElement("ol");
-		list.className = "la-word-preview-list";
-		items.forEach((sentence) => {
-			const li = document.createElement("li");
-			const text = createPreviewHighlightedSentence(sentence, anchor.textContent || "");
-			const trans = document.createElement("div");
-			trans.className = "la-word-preview-trans";
-			trans.textContent = "…";
-			li.appendChild(text);
-			li.appendChild(trans);
-			queuePreviewTranslation(sentence, trans);
-			list.appendChild(li);
+	if (typeof ContentTranslationRef.showWordPreview === "function") {
+		ContentTranslationRef.showWordPreview(anchor, meaning, examples, {
+			document,
+			WordStorage,
+			chromeRuntime: chrome.runtime,
+			getExampleText,
+			isCjkText,
+			isBoundaryMatch,
 		});
-		card.appendChild(list);
 	}
-
-	card.style.display = "block";
-	const rect = anchor.getBoundingClientRect();
-	const cardRect = card.getBoundingClientRect();
-	let left = rect.left + window.scrollX;
-	let top = rect.bottom + window.scrollY + 8;
-	const maxLeft = window.scrollX + window.innerWidth - cardRect.width - 10;
-	if (left > maxLeft) left = Math.max(window.scrollX + 10, maxLeft);
-	const maxTop = window.scrollY + window.innerHeight - cardRect.height - 10;
-	if (top > maxTop) top = rect.top + window.scrollY - cardRect.height - 8;
-	card.style.left = `${Math.max(window.scrollX + 8, left)}px`;
-	card.style.top = `${Math.max(window.scrollY + 8, top)}px`;
 }
 
 // 创建高亮显示的span元素
 function createHighlightSpan(word, meaning, examples) {
+	if (typeof ContentPageProcessingRef.createHighlightSpan === "function") {
+		return ContentPageProcessingRef.createHighlightSpan(word, meaning, examples, {
+			document,
+			showWordPreview,
+			hideWordPreview,
+		});
+	}
 	const span = document.createElement("span");
 	span.className = "plugin-highlight-word";
 	span.textContent = word;
-	span.style.backgroundColor = "#efe0a8";
-	span.style.cursor = "pointer";
-	span.style.color = "#4b392c";
-	span.style.padding = "0 3px";
-	span.style.borderRadius = "6px 5px 7px 5px";
-	span.style.boxShadow = "inset 0 -1px 0 rgba(120, 98, 67, 0.12)";
-	span.title = "";
-	span.addEventListener("mouseenter", () => {
-		span.style.backgroundColor = "#e4d295";
-		showWordPreview(span, meaning, examples);
-	});
-	span.addEventListener("mouseleave", () => {
-		span.style.backgroundColor = "#efe0a8";
-		hideWordPreview(70);
-	});
-	// span.addEventListener("click", () => markLearned(word));
 	return span;
 }
 
@@ -416,14 +216,23 @@ function escapeRegExp(text) {
 }
 
 function isCjkText(text) {
+	if (typeof ContentPageProcessingRef.isCjkText === "function") {
+		return ContentPageProcessingRef.isCjkText(text);
+	}
 	return /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(text || "");
 }
 
 function isWordChar(char) {
+	if (typeof ContentPageProcessingRef.isWordChar === "function") {
+		return ContentPageProcessingRef.isWordChar(char);
+	}
 	return !!char && /[\p{L}\p{N}]/u.test(char);
 }
 
 function isBoundaryMatch(text, start, end, cjkWord) {
+	if (typeof ContentPageProcessingRef.isBoundaryMatch === "function") {
+		return ContentPageProcessingRef.isBoundaryMatch(text, start, end, cjkWord);
+	}
 	if (cjkWord) return true;
 	const prev = start > 0 ? text[start - 1] : "";
 	const next = end < text.length ? text[end] : "";
@@ -431,6 +240,9 @@ function isBoundaryMatch(text, start, end, cjkWord) {
 }
 
 function findNextWholeWordIndex(text, lowerText, word, fromIndex) {
+	if (typeof ContentPageProcessingRef.findNextWholeWordIndex === "function") {
+		return ContentPageProcessingRef.findNextWholeWordIndex(text, lowerText, word, fromIndex);
+	}
 	const lowerWord = (word || "").toLowerCase();
 	const cjkWord = isCjkText(word);
 	let searchFrom = fromIndex;
@@ -448,6 +260,9 @@ function findNextWholeWordIndex(text, lowerText, word, fromIndex) {
 }
 
 function containsWord(text, word) {
+	if (typeof ContentPageProcessingRef.containsWord === "function") {
+		return ContentPageProcessingRef.containsWord(text, word);
+	}
 	const trimmed = (word || "").trim();
 	if (!trimmed) return false;
 	const rawText = text || "";
@@ -460,6 +275,9 @@ function normalizeText(text) {
 }
 
 function normalizePageKey(url) {
+	if (typeof ContentPageProcessingRef.normalizePageKey === "function") {
+		return ContentPageProcessingRef.normalizePageKey(url, normalizeText);
+	}
 	if (!url) return "";
 	try {
 		const u = new URL(url);
@@ -470,6 +288,9 @@ function normalizePageKey(url) {
 }
 
 function getDerivedPageCountFromExamples(wordData) {
+	if (typeof ContentPageProcessingRef.getDerivedPageCountFromExamples === "function") {
+		return ContentPageProcessingRef.getDerivedPageCountFromExamples(wordData, normalizeText);
+	}
 	const examples = Array.isArray(wordData && wordData.examples) ? wordData.examples : [];
 	const keys = new Set();
 	for (let i = 0; i < examples.length; i += 1) {
@@ -481,18 +302,27 @@ function getDerivedPageCountFromExamples(wordData) {
 }
 
 function stripOuterPunctuation(text) {
+	if (typeof ExampleUtilsRef.stripOuterPunctuation === "function") {
+		return ExampleUtilsRef.stripOuterPunctuation(text);
+	}
 	return (text || "")
 		.replace(/^[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+/u, "")
 		.replace(/[\s"'“”‘’`~!@#$%^&*()\-_=+\[\]{};:,./<>?\\|]+$/u, "");
 }
 
 function normalizeDictionaryQuery(text) {
+	if (typeof DictionaryUtilsRef.normalizeDictionaryQuery === "function") {
+		return DictionaryUtilsRef.normalizeDictionaryQuery(text);
+	}
 	const cleaned = stripOuterPunctuation((text || "").trim());
 	if (!cleaned) return "";
 	return cleaned.split(/\s+/)[0] || "";
 }
 
 function normalizeLemmaSourceLang(sourceLang) {
+	if (typeof LemmaUtilsRef.normalizeLemmaSourceLang === "function") {
+		return LemmaUtilsRef.normalizeLemmaSourceLang(sourceLang);
+	}
 	const base = (((sourceLang || "").split("-")[0]) || "").toLowerCase();
 	if (!base || base === "auto") return "";
 	if (base === "fil") return "tl";
@@ -500,8 +330,10 @@ function normalizeLemmaSourceLang(sourceLang) {
 }
 
 function supportsLemmaBySourceLang(sourceLang) {
-	const lang = normalizeLemmaSourceLang(sourceLang);
-	return !!lang && SIMPLEMMA_SUPPORTED_LANGS.has(lang);
+	if (typeof LemmaUtilsRef.supportsLemmaBySourceLang === "function") {
+		return LemmaUtilsRef.supportsLemmaBySourceLang(sourceLang);
+	}
+	return !!normalizeLemmaSourceLang(sourceLang);
 }
 
 function resolveLemma(text, sourceLang) {
@@ -586,198 +418,156 @@ function shouldLookupDictionaryQuery(query) {
 }
 
 function supportsDictionaryBySourceLang(sourceLang) {
+	if (typeof DictionaryUtilsRef.supportsDictionaryBySourceLang === "function") {
+		return DictionaryUtilsRef.supportsDictionaryBySourceLang(sourceLang);
+	}
 	const normalized = (sourceLang || "").toLowerCase();
-	if (!normalized || normalized === "auto") return false;
-	const base = normalized.split("-")[0];
-	const supported = new Set([
-		"ar", "bn", "cs", "de", "el", "en", "es", "fa", "fil", "fr",
-		"he", "hi", "hu", "id", "it", "ja", "jv", "km", "ko", "lo",
-		"ms", "my", "nl", "pl", "pt", "ro", "ru", "su", "sv", "sw",
-		"ta", "te", "th", "tl", "tr", "ur", "vi", "zh",
-	]);
-	return supported.has(base);
+	return !!normalized && normalized !== "auto";
 }
 
 function getDictionarySourceLabel(source) {
-	const normalized = (source || "").toLowerCase();
-	if (normalized === "kateglo") return "Kateglo";
-	if (normalized === "dictionaryapi") return "Free Dictionary";
-	if (normalized === "jotoba") return "Jotoba";
-	if (normalized === "wiktionary") return "Wiktionary";
+	if (typeof DictionaryUtilsRef.getDictionarySourceLabel === "function") {
+		return DictionaryUtilsRef.getDictionarySourceLabel(source);
+	}
 	return "Dictionary";
 }
 
 function getDictionarySectionLabel(mode, query) {
+	if (typeof DictionaryUtilsRef.getDictionarySectionLabel === "function") {
+		return DictionaryUtilsRef.getDictionarySectionLabel(contentT, mode, query);
+	}
 	if (mode === "lemma") {
 		return `${contentT("lemma_label")}: ${query}`;
 	}
 	return `${contentT("dict_selected_form")}: ${query}`;
 }
 
-function mapDictionarySections(dictResponse, sourceLang) {
-	const sections = Array.isArray(dictResponse && dictResponse.sections)
-		? dictResponse.sections
-		: [];
-	const effectiveSections = sections.length > 0
-		? sections
-		: [{
-			mode: dictResponse && dictResponse.usedLemma ? "lemma" : "surface",
-			query: dictResponse && dictResponse.usedLemma ? (dictResponse.lemma || "") : (dictResponse && dictResponse.query ? dictResponse.query : ""),
-			lemma: dictResponse && dictResponse.lemma ? dictResponse.lemma : "",
-			source: dictResponse && dictResponse.source ? dictResponse.source : "dictionary",
-			found: !!(dictResponse && dictResponse.found),
-			entries: Array.isArray(dictResponse && dictResponse.entries) ? dictResponse.entries : [],
-		}];
+function getAddWordTargetWord(overlay, normalizedWord) {
+	if (typeof ContentAddWordRef.getTargetWord === "function") {
+		return ContentAddWordRef.getTargetWord(overlay, normalizedWord);
+	}
+	return String((overlay && overlay.dataset && overlay.dataset.targetWord) || normalizedWord || "")
+		.trim()
+		.toLowerCase();
+}
 
-	return Promise.all(effectiveSections.map((section) => {
-		const rawEntries = Array.isArray(section.entries)
-			? section.entries.filter((item) => item && item.definition).slice(0, 3)
-			: [];
-		if (rawEntries.length === 0) {
-			return Promise.resolve({
-				mode: section.mode || "surface",
-				query: section.query || "",
-				lemma: section.lemma || "",
-				source: section.source || "dictionary",
-				entries: [],
-			});
-		}
-		return Promise.all(rawEntries.map((entry) => new Promise((resolve) => {
-			chrome.runtime.sendMessage(
-				{
-					action: "translate",
-					text: entry.definition,
-					sourceLang: sourceLang || "auto",
-				},
-				(defResp) => {
-					const translated =
-						!chrome.runtime.lastError && defResp && defResp.translation
-							? defResp.translation
-							: "";
-					resolve({
-						pos: entry.pos || "",
-						definitionOriginal: entry.definition || "",
-						definitionTranslated: translated,
-					});
-				}
-			);
-		}))).then((mappedEntries) => ({
-			mode: section.mode || "surface",
-			query: section.query || "",
-			lemma: section.lemma || "",
-			source: section.source || "dictionary",
-			entries: mappedEntries.filter(Boolean),
-		}));
-	}));
+function updateAddWordLineState(options) {
+	if (typeof ContentAddWordRef.updateWordLine === "function") {
+		return ContentAddWordRef.updateWordLine(options);
+	}
+	const targetWord = getAddWordTargetWord(options && options.overlay, options && options.normalizedWord);
+	if (options && options.wordLine) options.wordLine.textContent = targetWord;
+	if (options && options.hint) {
+		options.hint.textContent = targetWord && targetWord !== options.normalizedWord
+			? `${contentT("add_word_hint")} (${contentT("using_lemma")}: ${targetWord})`
+			: contentT("add_word_hint");
+	}
+	return targetWord;
+}
+
+function setAddWordLemmaMode(options) {
+	if (typeof ContentAddWordRef.setLemmaMode === "function") {
+		return ContentAddWordRef.setLemmaMode(options);
+	}
+	const overlay = options && options.overlay;
+	const normalizedWord = String((options && options.normalizedWord) || "").trim().toLowerCase();
+	const lemmaValue = String((options && options.lemmaValue) || "").trim().toLowerCase();
+	if (!overlay || !overlay.dataset) return normalizedWord;
+	overlay.dataset.targetWord = options && options.useLemma && lemmaValue && lemmaValue !== normalizedWord
+		? lemmaValue
+		: normalizedWord;
+	return updateAddWordLineState(options);
+}
+
+function applyAddWordDictionarySelection(options) {
+	if (typeof ContentAddWordRef.applyDictionarySelection === "function") {
+		return ContentAddWordRef.applyDictionarySelection(options);
+	}
+	const item = options && options.item;
+	const section = options && options.section;
+	if (!item || !section) return;
+	const composed = item.definitionTranslated || item.definitionOriginal || "";
+	const text = item.pos ? `[${item.pos}] ${composed}` : composed;
+	if (options && options.input && text.trim()) options.input.value = text.trim();
+	if (options && typeof options.onUserEdit === "function") options.onUserEdit();
+	if (options && options.overlay && options.overlay.dataset) {
+		options.overlay.dataset.dictPos = item.pos || "";
+		options.overlay.dataset.dictDefinitionOriginal = item.definitionOriginal || "";
+		options.overlay.dataset.dictDefinitionTranslated = item.definitionTranslated || "";
+		options.overlay.dataset.dictSource = section.source || "dictionary";
+		options.overlay.dataset.dictUsedLemma = section.mode === "lemma" ? "1" : "";
+		options.overlay.dataset.dictLookupLemma = section.mode === "lemma" ? (section.query || "") : "";
+		options.overlay.dataset.dictQueryText = section.query || "";
+		options.overlay.dataset.dictSelectedIndex = String(options && typeof options.index === "number" ? options.index : 0);
+	}
+}
+
+function mapDictionarySections(dictResponse, sourceLang) {
+	if (typeof DictionaryUtilsRef.mapDictionarySections === "function") {
+		return DictionaryUtilsRef.mapDictionarySections(dictResponse, sourceLang, {
+			maxEntries: 3,
+			translateEntry(definition, lang) {
+				return new Promise((resolve) => {
+					chrome.runtime.sendMessage(
+						{
+							action: "translate",
+							text: definition,
+							sourceLang: lang || "auto",
+						},
+						(defResp) => {
+							const translated =
+								!chrome.runtime.lastError && defResp && defResp.translation
+									? defResp.translation
+									: "";
+							resolve(translated);
+						}
+					);
+				});
+			},
+		});
+	}
+	return Promise.resolve([]);
 }
 
 function isLowInformationExample(sentence, word) {
-	const s = stripOuterPunctuation(normalizeText(sentence)).toLowerCase();
-	const w = stripOuterPunctuation(normalizeText(word)).toLowerCase();
-	if (!s || !w) return true;
-	if (/(https?:\/\/|www\.|[a-z0-9-]+\.[a-z]{2,})(\/|\b)/i.test(s)) return true;
-	if (s.length < w.length * 2) return true;
-	if (s === w) return true;
-
-	// If removing non-letter/digit chars leaves just the target word, it adds no context.
-	const compactSentence = s.replace(/[^\p{L}\p{N}]+/gu, "");
-	const compactWord = w.replace(/[^\p{L}\p{N}]+/gu, "");
-	if (compactSentence && compactWord && compactSentence === compactWord) return true;
-	return false;
+	if (typeof ExampleUtilsRef.isLowInformationExample === "function") {
+		return ExampleUtilsRef.isLowInformationExample(sentence, word);
+	}
+	return true;
 }
 
 function normalizeExampleEntry(entry) {
-	if (typeof entry === "string") {
-		const text = normalizeText(entry);
-		return text ? { text, pinned: false, createdAt: 0 } : null;
+	if (typeof ExampleUtilsRef.normalizeExampleEntry === "function") {
+		return ExampleUtilsRef.normalizeExampleEntry(entry);
 	}
-	if (!entry || typeof entry !== "object") return null;
-	const text = normalizeText(entry.text || "");
-	if (!text) return null;
-	return {
-		text,
-		pinned: !!entry.pinned,
-		createdAt: typeof entry.createdAt === "number" ? entry.createdAt : 0,
-		pinnedAt: typeof entry.pinnedAt === "number" ? entry.pinnedAt : 0,
-		sourceUrl: typeof entry.sourceUrl === "string"
-			? entry.sourceUrl
-			: (typeof entry.url === "string" ? entry.url : ""),
-		capturedAt: typeof entry.capturedAt === "number"
-			? entry.capturedAt
-			: (typeof entry.timestamp === "number" ? entry.timestamp : 0),
-	};
+	return null;
 }
 
 function normalizeExampleList(entries) {
-	if (!Array.isArray(entries)) return [];
-	const out = [];
-	for (let i = 0; i < entries.length; i += 1) {
-		const parsed = normalizeExampleEntry(entries[i]);
-		if (parsed) out.push(parsed);
+	if (typeof ExampleUtilsRef.normalizeExampleList === "function") {
+		return ExampleUtilsRef.normalizeExampleList(entries);
 	}
-	return out;
+	return [];
 }
 
 function sortExamples(entries) {
-	return entries.sort((a, b) => {
-		if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
-		if (a.pinned && b.pinned) {
-			const aPinnedAt = a.pinnedAt || 0;
-			const bPinnedAt = b.pinnedAt || 0;
-			if (bPinnedAt !== aPinnedAt) return bPinnedAt - aPinnedAt;
-		}
-		const aCreatedAt = a.createdAt || 0;
-		const bCreatedAt = b.createdAt || 0;
-		if (bCreatedAt !== aCreatedAt) return bCreatedAt - aCreatedAt;
-		return a.text.localeCompare(b.text);
-	});
+	if (typeof ExampleUtilsRef.sortExamples === "function") {
+		return ExampleUtilsRef.sortExamples(entries);
+	}
+	return entries;
 }
 
 function enforceExampleLimit(entries, maxLimit) {
-	const pinned = entries.filter((item) => item.pinned);
-	const unpinned = entries.filter((item) => !item.pinned);
-	if (unpinned.length <= maxLimit) {
-		return sortExamples(pinned.concat(unpinned));
+	if (typeof ExampleUtilsRef.enforceExampleLimit === "function") {
+		return ExampleUtilsRef.enforceExampleLimit(entries, maxLimit);
 	}
-	const kept = pinned.concat(unpinned.slice(0, maxLimit));
-	return sortExamples(kept);
+	return entries;
 }
 
 function isLikelyGarbageSentence(text) {
-	const t = normalizeText(text);
-	if (!t) return true;
-	if (t.length < 8 || t.length > 160) return true;
-	if (!/\p{L}/u.test(t)) return true;
-
-	// Filter CSS/JS/template-like payloads.
-	if (
-		/(document\.getElementById|addEventListener|querySelector|function\s*\(|=>|var\s+\w+|const\s+\w+|let\s+\w+|return\s+|class\*=|elementor-|\.share-wrap|display\s*:|font-size\s*:|line-height\s*:)/i.test(
-			t
-		)
-	) {
-		return true;
+	if (typeof ExampleUtilsRef.isLikelyGarbageSentence === "function") {
+		return ExampleUtilsRef.isLikelyGarbageSentence(text);
 	}
-	if (/[.#][a-z0-9_-]+\s*\{[^}]*:[^}]*;[^}]*\}/i.test(t)) return true; // CSS block
-	if (/\{[^}]*:[^}]*;[^}]*\}/.test(t) && /;/.test(t)) return true; // style-like object/block
-
-	// Filter common JSON / tracking / query-string fragments.
-	if (
-		/(https?:\/\/|\\u[0-9a-fA-F]{4}|__typename|item_logging_info|source_as_enum|Y2lkOmU6|&_nc_|"id":|"name":)/i.test(
-			t
-		)
-	) {
-		return true;
-	}
-
-	// Too many structural chars usually means machine payload.
-	const structural = (t.match(/[{}[\]<>="_&]/g) || []).length;
-	if (structural / t.length > 0.06) return true;
-	const semicolons = (t.match(/;/g) || []).length;
-	if (semicolons >= 2) return true;
-
-	// Very long token is often an encoded id / query segment.
-	if (/\S{45,}/.test(t)) return true;
-
 	return false;
 }
 
@@ -790,56 +580,37 @@ function normalizeForSimilarity(text) {
 }
 
 function tokenizeForSimilarity(text) {
+	if (typeof ExampleUtilsRef.tokenizeForSimilarity === "function") {
+		return ExampleUtilsRef.tokenizeForSimilarity(text);
+	}
 	const normalized = normalizeForSimilarity(text);
 	return normalized ? normalized.split(" ") : [];
 }
 
 function sentenceSimilarity(a, b) {
-	const tokensA = tokenizeForSimilarity(a);
-	const tokensB = tokenizeForSimilarity(b);
-	if (tokensA.length === 0 || tokensB.length === 0) return 0;
-
-	const setA = new Set(tokensA);
-	const setB = new Set(tokensB);
-	let intersection = 0;
-	setA.forEach((token) => {
-		if (setB.has(token)) intersection += 1;
-	});
-	const union = setA.size + setB.size - intersection;
-	if (union === 0) return 0;
-
-	const jaccard = intersection / union;
-	const lengthRatio = Math.min(tokensA.length, tokensB.length) / Math.max(tokensA.length, tokensB.length);
-	return jaccard * 0.75 + lengthRatio * 0.25;
+	if (typeof ExampleUtilsRef.sentenceSimilarity === "function") {
+		return ExampleUtilsRef.sentenceSimilarity(a, b);
+	}
+	return 0;
 }
 
 function getSimilarityThresholdForPair(a, b) {
-	const lenA = tokenizeForSimilarity(a).length;
-	const lenB = tokenizeForSimilarity(b).length;
-	const minLen = Math.min(lenA, lenB);
-	// Short template-like titles should be deduped more aggressively.
-	if (minLen <= 4) return 0.62;
-	if (minLen <= 6) return 0.74;
+	if (typeof ExampleUtilsRef.getSimilarityThresholdForPair === "function") {
+		return ExampleUtilsRef.getSimilarityThresholdForPair(a, b, EXAMPLE_SIMILARITY_THRESHOLD);
+	}
 	return EXAMPLE_SIMILARITY_THRESHOLD;
 }
 
 function isTooSimilarToAny(candidate, pool) {
-	for (let i = 0; i < pool.length; i += 1) {
-		const threshold = getSimilarityThresholdForPair(candidate, pool[i]);
-		if (sentenceSimilarity(candidate, pool[i]) >= threshold) {
-			return true;
-		}
+	if (typeof ExampleUtilsRef.isTooSimilarToAny === "function") {
+		return ExampleUtilsRef.isTooSimilarToAny(candidate, pool, EXAMPLE_SIMILARITY_THRESHOLD);
 	}
 	return false;
 }
 
 function hasContainmentRelation(candidate, pool) {
-	const c = normalizeText(candidate).toLowerCase();
-	if (!c) return true;
-	for (let i = 0; i < pool.length; i += 1) {
-		const p = normalizeText(pool[i]).toLowerCase();
-		if (!p) continue;
-		if (c.includes(p) || p.includes(c)) return true;
+	if (typeof ExampleUtilsRef.hasContainmentRelation === "function") {
+		return ExampleUtilsRef.hasContainmentRelation(candidate, pool);
 	}
 	return false;
 }
@@ -855,338 +626,65 @@ function getContextTextForNode(node) {
 }
 
 function splitIntoSentences(text) {
-	const normalized = normalizeText(text);
-	if (!normalized) return [];
-
-	// Prefer language-aware sentence segmentation when available.
-	if (typeof Intl !== "undefined" && typeof Intl.Segmenter === "function") {
-		try {
-			const lang =
-				document.documentElement.lang ||
-				(typeof navigator !== "undefined" ? navigator.language : "en");
-			const segmenter = new Intl.Segmenter(lang || "en", { granularity: "sentence" });
-			const segments = Array.from(segmenter.segment(normalized), (item) => normalizeText(item.segment));
-			const sentences = segments.filter((s) => s.length >= 8);
-			if (sentences.length > 0) return sentences;
-		} catch (error) {
-			// Fallback to regex rules below.
-		}
+	if (typeof ExampleUtilsRef.splitIntoSentences === "function") {
+		const lang =
+			document.documentElement.lang ||
+			(typeof navigator !== "undefined" ? navigator.language : "en");
+		return ExampleUtilsRef.splitIntoSentences(text, lang || "en");
 	}
-
-	// Fallback: broader multilingual punctuation, including Arabic and Devanagari.
-	const matches =
-		normalized.match(/[^.!?。！？؟؛۔\u0964\u0965\n]+[.!?。！？؟؛۔\u0964\u0965]?/g) || [];
-	const sentences = matches
-		.map((s) => normalizeText(s))
-		.filter((s) => !isLikelyGarbageSentence(s));
-	if (sentences.length > 0) return sentences;
-	return isLikelyGarbageSentence(normalized) ? [] : [normalized];
+	return [];
 }
 
-function collectExampleCandidates(bodyTextNodes, storedWordsArray, storedWords) {
-	const candidates = {};
-	for (let i = 0; i < bodyTextNodes.length; i += 1) {
-		const node = bodyTextNodes[i];
-		const contextText = getContextTextForNode(node);
-		if (!contextText || contextText.length < 8) continue;
-		const sentences = splitIntoSentences(contextText);
-		if (sentences.length === 0) continue;
+const contentPageProcessingState = {
+	exampleMergeTimer: null,
+	pendingExampleMap: {},
+};
 
-		for (let w = 0; w < storedWordsArray.length; w += 1) {
-			const word = storedWordsArray[w];
-			if (!storedWords[word] || storedWords[word].learned) continue;
-			if (!containsWord(contextText, word)) continue;
-
-			for (let s = 0; s < sentences.length; s += 1) {
-				const sentence = sentences[s];
-				if (!containsWord(sentence, word)) continue;
-				if (isLowInformationExample(sentence, word)) continue;
-				if (!candidates[word]) candidates[word] = [];
-				candidates[word].push({
-					text: sentence,
-					sourceUrl: location.href,
-					capturedAt: Date.now(),
-				});
-			}
-		}
-	}
-	return candidates;
-}
-
-function enqueueExampleCandidates(candidates) {
-	const words = Object.keys(candidates);
-	if (words.length === 0) return;
-
-	words.forEach((word) => {
-		if (!pendingExampleMap[word]) pendingExampleMap[word] = [];
-		pendingExampleMap[word] = pendingExampleMap[word].concat(candidates[word]);
-	});
-
-	if (exampleMergeTimer) clearTimeout(exampleMergeTimer);
-	exampleMergeTimer = setTimeout(async () => {
-		const batch = pendingExampleMap;
-		pendingExampleMap = {};
-		exampleMergeTimer = null;
-		try {
-			const wordsData = await WordStorage.getWords();
-			let changed = false;
-
-				Object.keys(batch).forEach((word) => {
-					if (!wordsData[word]) return;
-					if (wordsData[word].learned) return;
-					const existing = normalizeExampleList(wordsData[word].examples);
-				const existingSet = new Set(existing.map((item) => item.text.toLowerCase()));
-				const incoming = batch[word]
-					.map((item) => {
-						const text = normalizeText(item && item.text ? item.text : "");
-						if (!text) return null;
-						return {
-							text,
-							sourceUrl: typeof item.sourceUrl === "string" ? item.sourceUrl : "",
-							capturedAt: typeof item.capturedAt === "number" ? item.capturedAt : Date.now(),
-						};
-					})
-					.filter((item) => !!item);
-				const newOnes = [];
-				const comparisonPool = existing.map((item) => item.text);
-
-					for (let i = incoming.length - 1; i >= 0; i -= 1) {
-						const sample = incoming[i];
-						if (isLowInformationExample(sample.text, word)) continue;
-						const key = sample.text.toLowerCase();
-						if (existingSet.has(key)) {
-						for (let e = 0; e < existing.length; e += 1) {
-							const existingItem = existing[e];
-							if (existingItem.text.toLowerCase() !== key) continue;
-							let touched = false;
-							if (!existingItem.sourceUrl && sample.sourceUrl) {
-								existingItem.sourceUrl = sample.sourceUrl;
-								touched = true;
-							}
-							if (!existingItem.capturedAt && sample.capturedAt) {
-								existingItem.capturedAt = sample.capturedAt;
-								if (!existingItem.createdAt) existingItem.createdAt = sample.capturedAt;
-								touched = true;
-							}
-							if (touched) changed = true;
-							break;
-						}
-						continue;
-						}
-						if (newOnes.find((x) => x.text.toLowerCase() === key)) continue;
-						if (hasContainmentRelation(sample.text, comparisonPool)) continue;
-						if (isTooSimilarToAny(sample.text, comparisonPool)) continue;
-						newOnes.push(sample);
-						comparisonPool.push(sample.text);
-					}
-
-					if (newOnes.length === 0) return;
-					const merged = newOnes.map((item, index) => ({
-						text: item.text,
-						pinned: false,
-					createdAt: item.capturedAt || (Date.now() + index),
-					sourceUrl: item.sourceUrl || "",
-					capturedAt: item.capturedAt || 0,
-				})).concat(existing);
-					wordsData[word].examples = enforceExampleLimit(
-						sortExamples(merged),
-						MAX_EXAMPLES_PER_WORD
-					);
-					const prevCount =
-						typeof wordsData[word].encounterCount === "number"
-							? wordsData[word].encounterCount
-							: 0;
-					const nextCount = prevCount + newOnes.length;
-					const currentExampleCount = Array.isArray(wordsData[word].examples)
-						? wordsData[word].examples.length
-						: 0;
-					wordsData[word].encounterCount = Math.max(nextCount, currentExampleCount);
-
-					const existingPageKeys = Array.isArray(wordsData[word].encounterPageKeys)
-						? wordsData[word].encounterPageKeys.filter((x) => typeof x === "string" && x)
-						: [];
-					const pageKeySet = new Set(existingPageKeys);
-					const currentPageKey = normalizePageKey(location.href);
-					let newPageHits = 0;
-					// DF rule: only +1 when this page contributes at least one NEW example.
-					if (newOnes.length > 0 && currentPageKey && !pageKeySet.has(currentPageKey)) {
-						pageKeySet.add(currentPageKey);
-						newPageHits = 1;
-					}
-					wordsData[word].encounterPageKeys = Array.from(pageKeySet).slice(-300);
-					const prevPageCount =
-						typeof wordsData[word].pageCount === "number"
-							? wordsData[word].pageCount
-							: getDerivedPageCountFromExamples(wordsData[word]);
-					const derivedPageCount = getDerivedPageCountFromExamples(wordsData[word]);
-					wordsData[word].pageCount = Math.max(prevPageCount + newPageHits, derivedPageCount);
-					changed = true;
-				});
-
-			if (changed) {
-				await WordStorage.saveWords(wordsData);
-			}
-		} catch (error) {
+function getContentPageProcessingDeps() {
+	return {
+		document,
+		Node,
+		skipTags: SKIP_TEXT_TAGS,
+		isExtensionUiElement,
+		isCurrentDomainExcluded,
+		showWordPreview,
+		hideWordPreview,
+		WordStorage,
+		splitIntoSentences,
+		isLowInformationExample,
+		normalizeText,
+		normalizeExampleList,
+		hasContainmentRelation,
+		isTooSimilarToAny,
+		enforceExampleLimit,
+		sortExamples,
+		maxExamplesPerWord: MAX_EXAMPLES_PER_WORD,
+		currentHref: () => location.href,
+		markLearned,
+		startContentTour,
+		state: {
+			get pendingExampleMap() { return contentPageProcessingState.pendingExampleMap; },
+			set pendingExampleMap(value) { contentPageProcessingState.pendingExampleMap = value; },
+			get exampleMergeTimer() { return contentPageProcessingState.exampleMergeTimer; },
+			set exampleMergeTimer(value) { contentPageProcessingState.exampleMergeTimer = value; },
+			get contentTourAttempted() { return contentTourAttempted; },
+			set contentTourAttempted(value) { contentTourAttempted = value; },
+		},
+		onMergeError(error) {
 			console.error("Failed to merge examples:", error);
-		}
-	}, 1200);
-}
-
-function highlightWords() {
-	isCurrentDomainExcluded().then((excluded) => {
-		if (excluded) return;
-	WordStorage.getWords().then((storedWords) => {
-		// sort storedWords by length from long to short
-		const storedWordsArray = Object.keys(storedWords);
-		storedWordsArray.sort((a, b) => b.length - a.length);
-		const bodyTextNodes = findTextNodes(document.body);
-		const replacements = [];
-		const exampleCandidates = collectExampleCandidates(
-			bodyTextNodes,
-			storedWordsArray,
-			storedWords
-		);
-
-		// 收集需要替换的信息 old
-		// bodyTextNodes.forEach((node) => {
-		// 	const checked_words = [];
-		// 	const words = node.nodeValue.split(/\s+/);
-		// 	let newNodeValue = node.nodeValue;
-		// 	words.forEach((word) => {
-		// 		const lowerCaseWord = word.toLowerCase();
-		// 		if (checked_words.includes(lowerCaseWord)) {
-		// 			return;
-		// 		}
-		// 		if (
-		// 			lowerCaseWord.length >= 3 &&
-		// 			storedWords[lowerCaseWord] &&
-		// 			!storedWords[lowerCaseWord].learned
-		// 		) {
-		// 			const regex = new RegExp(`\\b${word}\\b`, "gi");
-		// 			const replacementHtml = createHighlightSpan(
-		// 				word,
-		// 				storedWords[lowerCaseWord].meaning
-		// 			).outerHTML;
-		// 			newNodeValue = newNodeValue.replace(regex, replacementHtml);
-		// 		}
-		// 		checked_words.push(lowerCaseWord);
-		// 	});
-		// 	if (newNodeValue !== node.nodeValue) {
-		// 		replacements.push({ node, newNodeValue });
-		// 	}
-		// });
-
-		// 收集需要替换的信息（安全 DOM 组装，不使用 innerHTML）
-		bodyTextNodes.forEach((node) => {
-			const fragment = buildHighlightedFragment(
-				node.nodeValue,
-				storedWordsArray,
-				storedWords
-			);
-			if (fragment) {
-				replacements.push({ node, fragment });
-			}
-		});
-
-		// 执行 DOM 更新
-		replacements.forEach(({ node, fragment }) => {
-			const parent = node.parentNode;
-			if (!parent) return;
-			parent.insertBefore(fragment, node);
-			parent.removeChild(node);
-		});
-		enqueueExampleCandidates(exampleCandidates);
-		addClickEventToHighlightedWords();
-		if (!contentTourAttempted && document.querySelector(".plugin-highlight-word")) {
-			contentTourAttempted = true;
-			window.setTimeout(() => startContentTour(false), 260);
-		}
-		}).catch((error) => {
+		},
+		onHighlightError(error) {
 			if (!isContextInvalidatedError(error)) {
 				console.error("Failed to highlight words:", error);
 			}
-		});
-		});
-	}
-
-function buildHighlightedFragment(text, storedWordsArray, storedWords) {
-	const lowerText = text.toLowerCase();
-	let cursor = 0;
-	let hasMatch = false;
-	const fragment = document.createDocumentFragment();
-
-	while (cursor < text.length) {
-		let bestWord = null;
-		let bestIndex = -1;
-
-		for (let i = 0; i < storedWordsArray.length; i += 1) {
-			const word = storedWordsArray[i];
-			if (!storedWords[word] || storedWords[word].learned) continue;
-			const idx = findNextWholeWordIndex(text, lowerText, word, cursor);
-			if (idx === -1) continue;
-			if (bestIndex === -1 || idx < bestIndex || (idx === bestIndex && word.length > bestWord.length)) {
-				bestIndex = idx;
-				bestWord = word;
-			}
-		}
-
-		if (bestIndex === -1 || !bestWord) break;
-
-		if (bestIndex > cursor) {
-			fragment.appendChild(document.createTextNode(text.slice(cursor, bestIndex)));
-		}
-
-			const matchedText = text.slice(bestIndex, bestIndex + bestWord.length);
-			fragment.appendChild(
-				createHighlightSpan(
-					matchedText,
-					storedWords[bestWord].meaning,
-					Array.isArray(storedWords[bestWord].examples)
-						? storedWords[bestWord].examples
-						: []
-				)
-			);
-		hasMatch = true;
-		cursor = bestIndex + bestWord.length;
-	}
-
-	if (!hasMatch) return null;
-	if (cursor < text.length) {
-		fragment.appendChild(document.createTextNode(text.slice(cursor)));
-	}
-	return fragment;
+		},
+	};
 }
 
-// 查找文本节点
-function findTextNodes(element) {
-	let textNodes = [];
-	if (element) {
-		if (
-			element.nodeType === Node.ELEMENT_NODE &&
-			(SKIP_TEXT_TAGS.has(element.tagName) || isExtensionUiElement(element))
-		) {
-			return textNodes;
-		}
-		element.childNodes.forEach((node) => {
-			if (
-				node.nodeType === Node.TEXT_NODE &&
-				node.nodeValue.trim().length >= 2 &&
-				!(node.parentElement && isExtensionUiElement(node.parentElement))
-			) {
-				textNodes.push(node);
-			} else {
-				textNodes = textNodes.concat(findTextNodes(node));
-			}
-		});
+function highlightWords() {
+	if (typeof ContentPageProcessingRef.highlightWords === "function") {
+		return ContentPageProcessingRef.highlightWords(getContentPageProcessingDeps());
 	}
-	return textNodes;
-}
-
-// 为高亮单词添加点击事件监听器的函数
-function addClickEventToHighlightedWords() {
-	document.querySelectorAll(".plugin-highlight-word").forEach((span) => {
-		span.addEventListener("click", () => markLearned(span.textContent));
-	});
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -1201,115 +699,61 @@ function showAddWordModal(word) {
 	if (addWordModal) addWordModal.remove();
 
 	const normalizedWord = word.trim().toLowerCase();
-	const overlay = document.createElement("div");
-	overlay.className = "la-addword-overlay";
-
-	const modal = document.createElement("div");
-	modal.className = "la-addword-modal";
-
-	const title = document.createElement("h3");
-	title.className = "la-addword-title";
-	title.textContent = contentT("add_word_title");
-
-	const wordLine = document.createElement("div");
-	wordLine.className = "la-addword-word";
-	wordLine.textContent = normalizedWord;
-
-	const hint = document.createElement("div");
-	hint.className = "la-addword-hint";
-	hint.textContent = contentT("add_word_hint");
-
-	const lemmaNotice = document.createElement("div");
-	lemmaNotice.className = "la-addword-lemma";
-	lemmaNotice.style.display = "none";
-
-	const lemmaText = document.createElement("div");
-	lemmaText.className = "la-addword-lemma-text";
-
-	const lemmaBtn = document.createElement("button");
-	lemmaBtn.type = "button";
-	lemmaBtn.className = "la-addword-lemma-btn";
-	applyModalButtonStyle(lemmaBtn, "lemma");
-
-	lemmaNotice.appendChild(lemmaText);
-	lemmaNotice.appendChild(lemmaBtn);
-
-	const input = document.createElement("textarea");
-	input.className = "la-addword-input";
-	input.placeholder = contentT("loading_translation");
-	input.rows = 3;
-	applyModalTextareaStyle(input);
+	const modalUi = typeof ContentAddWordRef.createAddWordModal === "function"
+		? ContentAddWordRef.createAddWordModal({
+			document,
+			normalizedWord,
+			t: contentT,
+			applyButtonStyle: applyModalButtonStyle,
+			applyTextareaStyle: applyModalTextareaStyle,
+		})
+		: null;
+	const overlay = modalUi ? modalUi.overlay : document.createElement("div");
+	const modal = modalUi ? modalUi.modal : document.createElement("div");
+	const wordLine = modalUi ? modalUi.wordLine : document.createElement("div");
+	const hint = modalUi ? modalUi.hint : document.createElement("div");
+	const lemmaNotice = modalUi ? modalUi.lemmaNotice : document.createElement("div");
+	const lemmaText = modalUi ? modalUi.lemmaText : document.createElement("div");
+	const lemmaBtn = modalUi ? modalUi.lemmaBtn : document.createElement("button");
+	const input = modalUi ? modalUi.input : document.createElement("textarea");
 	let userEdited = false;
-
-	const dictPreview = document.createElement("div");
-	dictPreview.className = "la-addword-dict";
-	dictPreview.style.display = "none";
-
-	const dictTitle = document.createElement("div");
-	dictTitle.className = "la-addword-dict-title";
-	dictTitle.textContent = "Dictionary";
-
-	const dictList = document.createElement("div");
-	dictList.className = "la-addword-dict-list";
-
-	dictPreview.appendChild(dictTitle);
-	dictPreview.appendChild(dictList);
-
-	const footer = document.createElement("div");
-	footer.className = "la-addword-footer";
-
-	const cancelBtn = document.createElement("button");
-	cancelBtn.className = "la-addword-btn la-addword-cancel";
-	cancelBtn.textContent = contentT("cancel");
-	applyModalButtonStyle(cancelBtn, "cancel");
-
-	const saveBtn = document.createElement("button");
-	saveBtn.className = "la-addword-btn la-addword-save";
-	saveBtn.textContent = contentT("save");
-	applyModalButtonStyle(saveBtn, "save");
-
-	footer.appendChild(cancelBtn);
-	footer.appendChild(saveBtn);
-	modal.appendChild(title);
-	modal.appendChild(wordLine);
-	modal.appendChild(hint);
-	modal.appendChild(lemmaNotice);
-	modal.appendChild(input);
-	modal.appendChild(dictPreview);
-	modal.appendChild(footer);
-	overlay.appendChild(modal);
+	const dictPreview = modalUi ? modalUi.dictPreview : document.createElement("div");
+	const dictTitle = modalUi ? modalUi.dictTitle : document.createElement("div");
+	const dictList = modalUi ? modalUi.dictList : document.createElement("div");
+	const cancelBtn = modalUi ? modalUi.cancelBtn : document.createElement("button");
+	const saveBtn = modalUi ? modalUi.saveBtn : document.createElement("button");
 	document.body.appendChild(overlay);
 	addWordModal = overlay;
-	overlay.dataset.targetWord = normalizedWord;
 	input.focus();
 	input.addEventListener("input", () => {
 		userEdited = true;
 	});
 
 	function getTargetWord() {
-		return (overlay.dataset.targetWord || normalizedWord).trim().toLowerCase();
+		return getAddWordTargetWord(overlay, normalizedWord);
 	}
 
 	function updateWordLine() {
-		const targetWord = getTargetWord();
-		wordLine.textContent = targetWord;
-		if (targetWord !== normalizedWord) {
-			hint.textContent = `${contentT("add_word_hint")} (${contentT("using_lemma")}: ${targetWord})`;
-			return;
-		}
-		hint.textContent = contentT("add_word_hint");
+		return updateAddWordLineState({
+			overlay,
+			normalizedWord,
+			wordLine,
+			hint,
+			t: contentT,
+		});
 	}
 
 	function setLemmaMode(useLemma, lemmaValue) {
-		const normalizedLemma = (lemmaValue || "").trim().toLowerCase();
-		if (!normalizedLemma || normalizedLemma === normalizedWord) {
-			overlay.dataset.targetWord = normalizedWord;
-			updateWordLine();
-			return;
-		}
-		overlay.dataset.targetWord = useLemma ? normalizedLemma : normalizedWord;
-		updateWordLine();
-		lemmaBtn.textContent = useLemma ? contentT("use_original") : contentT("use_lemma");
+		return setAddWordLemmaMode({
+			overlay,
+			normalizedWord,
+			lemmaValue,
+			useLemma,
+			wordLine,
+			hint,
+			lemmaBtn,
+			t: contentT,
+		});
 	}
 
 	function closeModal() {
@@ -1412,79 +856,46 @@ async function saveWord() {
 				lemmaBtn.onclick = null;
 				setLemmaMode(false, "");
 			}
-			dictList.innerHTML = "";
-			sections.forEach((section, sectionIndex) => {
-				const sectionWrap = document.createElement("div");
-				sectionWrap.className = "la-addword-dict-section";
-				if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
-
-				const sectionTitle = document.createElement("div");
-				sectionTitle.className = "la-addword-dict-section-title";
-				sectionTitle.textContent = `${getDictionarySectionLabel(section.mode, section.query)} · ${getDictionarySourceLabel(section.source)}`;
-				sectionWrap.appendChild(sectionTitle);
-
-				if (!Array.isArray(section.entries) || section.entries.length === 0) {
-					const empty = document.createElement("div");
-					empty.className = "la-addword-dict-original";
-					empty.textContent = contentT("no_dict_entries");
-					sectionWrap.appendChild(empty);
-					dictList.appendChild(sectionWrap);
-					return;
-				}
-
-				section.entries.forEach((item, index) => {
-					const row = document.createElement("div");
-					row.className = "la-addword-dict-item";
-					if (sectionIndex === 0 && index === 0) row.classList.add("is-selected");
-
-					const bodyWrap = document.createElement("div");
-					bodyWrap.className = "la-addword-dict-body";
-
-					const pos = document.createElement("div");
-					pos.className = "la-addword-dict-pos";
-					pos.textContent = item.pos ? `[${item.pos}]` : "";
-
-					const original = document.createElement("div");
-					original.className = "la-addword-dict-original";
-					original.textContent = item.definitionOriginal;
-
-					const translated = document.createElement("div");
-					translated.className = "la-addword-dict-translated";
-					translated.textContent = item.definitionTranslated || "";
-
-					const applyBtn = document.createElement("button");
-					applyBtn.type = "button";
-					applyBtn.className = "la-addword-dict-apply";
-					applyBtn.textContent = contentT("apply");
-					applyModalButtonStyle(applyBtn, "apply");
-					applyBtn.addEventListener("click", () => {
-						const composed = item.definitionTranslated || item.definitionOriginal || "";
-						const text = item.pos ? `[${item.pos}] ${composed}` : composed;
-						if (text.trim()) input.value = text.trim();
-						userEdited = true;
-						overlay.dataset.dictPos = item.pos || "";
-						overlay.dataset.dictDefinitionOriginal = item.definitionOriginal || "";
-						overlay.dataset.dictDefinitionTranslated = item.definitionTranslated || "";
-						overlay.dataset.dictSource = section.source || "dictionary";
-						overlay.dataset.dictUsedLemma = section.mode === "lemma" ? "1" : "";
-						overlay.dataset.dictLookupLemma = section.mode === "lemma" ? (section.query || "") : "";
-						overlay.dataset.dictQueryText = section.query || "";
-						overlay.dataset.dictSelectedIndex = String(index);
-						dictList.querySelectorAll(".la-addword-dict-item").forEach((node) => {
-							node.classList.remove("is-selected");
+			if (typeof DictionaryUtilsRef.renderInteractiveDictionarySections === "function") {
+				DictionaryUtilsRef.renderInteractiveDictionarySections(dictList, sections, {
+					document,
+					emptyText: contentT("no_dict_entries"),
+					getSectionTitle: (section) => `${getDictionarySectionLabel(section.mode, section.query)} · ${getDictionarySourceLabel(section.source)}`,
+					decorateSection(sectionWrap, section, sectionIndex) {
+						sectionWrap.className = "la-addword-dict-section";
+						if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
+					},
+					decorateSectionTitle(sectionTitle) {
+						sectionTitle.className = "la-addword-dict-section-title";
+					},
+					createApplyButton() {
+						const applyBtn = document.createElement("button");
+						applyBtn.type = "button";
+						applyBtn.className = "la-addword-dict-apply";
+						applyBtn.textContent = contentT("apply");
+						applyModalButtonStyle(applyBtn, "apply");
+						return applyBtn;
+					},
+					onApply({ item, section, index, row }) {
+						applyAddWordDictionarySelection({
+							overlay,
+							item,
+							section,
+							index,
+							input,
+							dictList,
+							row,
+							onUserEdit() {
+								userEdited = true;
+							},
 						});
-						row.classList.add("is-selected");
-					});
-
-					bodyWrap.appendChild(pos);
-					bodyWrap.appendChild(original);
-					bodyWrap.appendChild(translated);
-					row.appendChild(bodyWrap);
-					row.appendChild(applyBtn);
-					sectionWrap.appendChild(row);
+					},
 				});
-				dictList.appendChild(sectionWrap);
-			});
+				const firstRow = dictList.querySelector(".la-addword-dict-item");
+				if (firstRow) firstRow.classList.add("is-selected");
+			} else {
+				dictList.innerHTML = "";
+			}
 		}
 	);
 	updateWordLine();
@@ -1962,71 +1373,28 @@ function showConfirmModal(message) {
 }
 
 function prefillMeaningFromTranslation(word, wordLineEl, inputEl, isUserEdited, modalOverlay, onDictionaryReady) {
-	Promise.all([
-		WordStorage.getSourceLang(),
-		WordStorage.getDictionaryLookupEnabled().catch(() => true),
-	]).then(async ([sourceLang, dictionaryEnabled]) => {
-		const lemmaInfo = await resolveLemma(word, sourceLang || "auto").catch(() => ({
-			query: normalizeDictionaryQuery(word),
-			lemma: "",
-			effectiveQuery: normalizeDictionaryQuery(word),
-		}));
-		if (modalOverlay.isConnected) {
-			modalOverlay.dataset.lemma = lemmaInfo.lemma || "";
-		}
-		chrome.runtime.sendMessage(
-			{ action: "translate", text: word, sourceLang: sourceLang || "auto" },
-			(response) => {
-				if (!modalOverlay.isConnected) return;
-				if (chrome.runtime.lastError) {
-					inputEl.placeholder = contentT("meaning_placeholder");
-					return;
-				}
-				const translated = response && response.translation ? response.translation.trim() : "";
-				if (translated && !isUserEdited() && inputEl.value.trim() === "") {
-					inputEl.value = translated;
-				}
-				inputEl.placeholder = contentT("meaning_placeholder");
-			}
-		);
-
-		const dictQuery = normalizeDictionaryQuery(word);
-		if (!(dictionaryEnabled && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery))) return;
-		chrome.runtime.sendMessage(
-			{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
-			async (dictResponse) => {
-				if (!modalOverlay.isConnected) return;
-				if (chrome.runtime.lastError || !dictResponse || !dictResponse.found) return;
-				const mappedSections = await mapDictionarySections(dictResponse, sourceLang || "auto");
-				if (!modalOverlay.isConnected) return;
-				const nonEmptySections = mappedSections.filter((section) => Array.isArray(section.entries) && section.entries.length > 0);
-				if (nonEmptySections.length === 0) return;
-				const firstSection = nonEmptySections[0];
-				const first = firstSection.entries[0];
-				if (!first) return;
-				modalOverlay.dataset.dictPos = first.pos || "";
-				modalOverlay.dataset.dictDefinitionOriginal = first.definitionOriginal || "";
-				modalOverlay.dataset.dictDefinitionTranslated = first.definitionTranslated || "";
-				modalOverlay.dataset.dictSource = firstSection.source || "dictionary";
-				modalOverlay.dataset.dictEntries = JSON.stringify(firstSection.entries);
-				modalOverlay.dataset.dictSelectedIndex = "0";
-				modalOverlay.dataset.dictUsedLemma = firstSection.mode === "lemma" ? "1" : "";
-				modalOverlay.dataset.dictLookupLemma = firstSection.mode === "lemma" ? (firstSection.query || "") : "";
-				modalOverlay.dataset.dictQueryText = firstSection.query || dictQuery;
-				if (typeof onDictionaryReady === "function") {
-					onDictionaryReady({
-						source: dictResponse.source || firstSection.source || "dictionary",
-						usedLemma: !!dictResponse.usedLemma,
-						lemma: dictResponse.lemma || "",
-						query: dictResponse.query || dictQuery,
-						sections: mappedSections,
-					});
-				}
-			}
-		);
-	}).catch(() => {
-		inputEl.placeholder = contentT("meaning_placeholder");
-	});
+	if (typeof ContentAddWordRef.prefillMeaningFromTranslation === "function") {
+		return ContentAddWordRef.prefillMeaningFromTranslation({
+			word,
+			wordLineEl,
+			inputEl,
+			isUserEdited,
+			modalOverlay,
+			onDictionaryReady,
+			deps: {
+				WordStorage,
+				resolveLemma,
+				normalizeDictionaryQuery,
+				contentT,
+				supportsDictionaryBySourceLang,
+				shouldLookupDictionaryQuery,
+				mapDictionarySections,
+				chromeRuntime: chrome.runtime,
+			},
+		});
+	}
+	inputEl.placeholder = contentT("meaning_placeholder");
+	return Promise.resolve();
 }
 
 // 勾选后自动翻译
@@ -2076,289 +1444,64 @@ function translateText(text) {
 }
 
 function showTranslation(translation) {
-	ensureTranslationUiStyles();
-
-	// 先检查并移除已存在的浮动框
-	const existingBox = document.getElementById("translationBox");
-	if (existingBox) {
-		existingBox.remove();
+	if (typeof ContentTranslationRef.showTranslation === "function") {
+		return ContentTranslationRef.showTranslation(translation, { document });
 	}
-
-	// 获取选中文本的位置信息
-	const selection = window.getSelection();
-	if (!selection.rangeCount) return; // 确保有选中的内容
-  
-	let range = selection.getRangeAt(0);
-	let rect = range.getBoundingClientRect();
-  
-	// 创建浮框显示翻译结果
-	const translationBox = document.createElement('div');
-	translationBox.id = 'translationBox';
-	translationBox.style.position = 'absolute';
-	translationBox.style.left = `${rect.left + window.scrollX}px`; // 使用选中文本的左边界加上页面滚动的位移
-	translationBox.style.top = `${rect.bottom + window.scrollY + 10}px`; // 选中文本的下边界作为顶部位置，加上页面滚动的位移，并增加一些偏移量
-	translationBox.style.padding = '0';
-	translationBox.style.setProperty('background', '#fffaf3', 'important');
-	translationBox.style.setProperty('color', '#34251f', 'important');
-	translationBox.style.setProperty('border', '1px solid #dccabd', 'important');
-	translationBox.style.setProperty('border-radius', '16px 14px 18px 13px', 'important');
-	translationBox.style.setProperty('box-shadow', '0 14px 28px rgba(88, 63, 50, 0.16)', 'important');
-	translationBox.style.setProperty('opacity', '1', 'important');
-	translationBox.style.setProperty('mix-blend-mode', 'normal', 'important');
-	translationBox.style.setProperty('backdrop-filter', 'blur(1px)', 'important');
-	translationBox.style.zIndex = '10000';
-	translationBox.style.maxWidth = `${window.innerWidth / 3}px`; // 设置最大宽度为屏幕宽度的1/3
-	translationBox.style.overflow = 'auto'; // 超出部分显示滚动条
-	translationBox.style.minWidth = '220px';
-	translationBox.style.padding = '11px 34px 11px 12px';
-	translationBox.style.animation = "pluginTranslationIn 180ms ease-out";
-	translationBox.style.willChange = "transform, opacity";
-	translationBox.style.pointerEvents = "auto";
-
-	const closeBtn = document.createElement("button");
-	closeBtn.textContent = "×";
-	closeBtn.setAttribute("aria-label", "Close");
-	closeBtn.style.position = "absolute";
-	closeBtn.style.right = "8px";
-	closeBtn.style.top = "6px";
-	closeBtn.style.border = "0";
-	closeBtn.style.background = "transparent";
-	closeBtn.style.color = "#8f6f62";
-	closeBtn.style.fontSize = "14px";
-	closeBtn.style.cursor = "pointer";
-	closeBtn.style.lineHeight = "1";
-	closeBtn.style.padding = "0 2px";
-	closeBtn.style.zIndex = "1";
-
-	const body = document.createElement("div");
-	body.style.fontSize = "13px";
-	body.style.lineHeight = "1.5";
-	body.textContent = translation;
-
-	const dictWrap = document.createElement("div");
-	dictWrap.id = "translationDictionary";
-	dictWrap.style.marginTop = "8px";
-	dictWrap.style.paddingTop = "8px";
-	dictWrap.style.borderTop = "1px solid #e1d4c7";
-	dictWrap.style.fontSize = "12px";
-	dictWrap.style.lineHeight = "1.45";
-	dictWrap.style.color = "#6a5a52";
-	dictWrap.style.display = "none";
-
-	let pointerDownInside = false;
-	let startX = 0;
-	let startY = 0;
-	let moved = false;
-
-	function hasSelectedTextInsideBox() {
-		const sel = window.getSelection();
-		if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return false;
-		for (let i = 0; i < sel.rangeCount; i += 1) {
-			const range = sel.getRangeAt(i);
-			const node = range.commonAncestorContainer;
-			const target = node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
-			if (target && translationBox.contains(target)) return true;
-		}
-		return false;
-	}
-
-	function cleanup() {
-		document.removeEventListener("mousedown", onMouseDown, true);
-		document.removeEventListener("mousemove", onMouseMove, true);
-		document.removeEventListener("mouseup", onMouseUp, true);
-	}
-
-	function closeBox() {
-		cleanup();
-		translationBox.remove();
-	}
-
-	function onMouseDown(event) {
-		pointerDownInside = translationBox.contains(event.target);
-		startX = event.clientX;
-		startY = event.clientY;
-		moved = false;
-	}
-
-	function onMouseMove(event) {
-		if (!pointerDownInside) return;
-		if (Math.abs(event.clientX - startX) > 3 || Math.abs(event.clientY - startY) > 3) {
-			moved = true;
-		}
-	}
-
-	function onMouseUp() {
-		if (hasSelectedTextInsideBox()) return;
-		if (pointerDownInside && moved) return;
-		closeBox();
-	}
-
-	closeBtn.addEventListener("click", function (event) {
-		event.stopPropagation();
-		closeBox();
-	});
-
-	document.addEventListener("mousedown", onMouseDown, true);
-	document.addEventListener("mousemove", onMouseMove, true);
-	document.addEventListener("mouseup", onMouseUp, true);
-
-	translationBox.appendChild(closeBtn);
-	translationBox.appendChild(body);
-	translationBox.appendChild(dictWrap);
-
-	document.body.appendChild(translationBox);
-
-	// 自动移除浮框，例如10秒后
-	setTimeout(() => {
-		closeBox();
-	}, 10000);
+	return null;
 }
 
 function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
-	const dictWrap = document.getElementById("translationDictionary");
-	if (!dictWrap || !dictResponse) return;
-	const sections = Array.isArray(dictResponse.sections)
-		? dictResponse.sections
-		: [];
-	const effectiveSections = sections.length > 0
-		? sections
-		: [{
-			mode: dictResponse.usedLemma ? "lemma" : "surface",
-			query: dictResponse.usedLemma ? (dictResponse.lemma || "") : (dictResponse.query || ""),
-			lemma: dictResponse.lemma || "",
-			source: dictResponse.source || "dictionary",
-			found: !!dictResponse.found,
-			entries: Array.isArray(dictResponse.entries) ? dictResponse.entries : [],
-		}];
-	dictWrap.innerHTML = "";
-	dictWrap.style.display = "block";
-	const title = document.createElement("div");
-	title.textContent = contentT("dictionary");
-	title.style.fontWeight = "700";
-	title.style.marginBottom = "6px";
-	title.style.color = "#856a5f";
-	dictWrap.appendChild(title);
-	effectiveSections.forEach((section, sectionIndex) => {
-		const sectionWrap = document.createElement("div");
-		sectionWrap.style.marginTop = sectionIndex === 0 ? "0" : "8px";
-		if (sectionIndex > 0) {
-			sectionWrap.style.paddingTop = "8px";
-			sectionWrap.style.borderTop = "1px dashed #e1d4c7";
-		}
-		const sectionTitle = document.createElement("div");
-		sectionTitle.textContent = `${getDictionarySectionLabel(section.mode, section.query)} · ${getDictionarySourceLabel(section.source)}`;
-		sectionTitle.style.fontSize = "11px";
-		sectionTitle.style.fontWeight = "700";
-		sectionTitle.style.marginBottom = "4px";
-		sectionTitle.style.color = "#8c6c59";
-		sectionWrap.appendChild(sectionTitle);
-
-		const entries = Array.isArray(section.entries) ? section.entries.slice(0, 3) : [];
-		if (entries.length === 0) {
-			const empty = document.createElement("div");
-			empty.textContent = contentT("no_dict_entries");
-			empty.style.fontSize = "11px";
-			empty.style.color = "#9a8478";
-			sectionWrap.appendChild(empty);
-			dictWrap.appendChild(sectionWrap);
-			return;
-		}
-
-		entries.forEach((item) => {
-			const row = document.createElement("div");
-			row.style.marginTop = "5px";
-			const pos = document.createElement("div");
-			pos.style.fontSize = "11px";
-			pos.style.color = "#8b7368";
-			pos.textContent = item.pos ? `[${item.pos}]` : "";
-			const def = document.createElement("div");
-			def.textContent = "…";
-			row.appendChild(pos);
-			row.appendChild(def);
-			sectionWrap.appendChild(row);
-			chrome.runtime.sendMessage(
-				{
-					action: "translate",
-					text: item.definition || "",
-					sourceLang: sourceLang || "auto",
+	if (typeof ContentTranslationRef.appendDictionaryToTranslationBox === "function") {
+		return ContentTranslationRef.appendDictionaryToTranslationBox(dictResponse, sourceLang, {
+			document,
+			DictionaryUtilsRef,
+			contentT,
+			getDictionarySectionLabel,
+			getDictionarySourceLabel,
+			chromeRuntime: chrome.runtime,
+			startContentSelectionTour,
+			state: {
+				get contentSelectionTourAttempted() {
+					return contentSelectionTourAttempted;
 				},
-				(transResp) => {
-					if (chrome.runtime.lastError || !transResp) return;
-					const translated = transResp.translation || "";
-					def.textContent = translated || (item.definition || "");
-				}
-			);
+				set contentSelectionTourAttempted(value) {
+					contentSelectionTourAttempted = value;
+				},
+			},
 		});
-		dictWrap.appendChild(sectionWrap);
-	});
-	if (!contentSelectionTourAttempted && document.getElementById("translationBox")) {
-		contentSelectionTourAttempted = true;
-		window.setTimeout(() => startContentSelectionTour(false), 220);
 	}
-}
-
-function ensureTranslationUiStyles() {
-	if (document.getElementById("pluginTranslationStyle")) return;
-	const style = document.createElement("style");
-	style.id = "pluginTranslationStyle";
-	style.textContent = `
-		@keyframes pluginTranslationIn {
-			from { opacity: 0; transform: translateY(7px) scale(0.985); }
-			to { opacity: 1; transform: translateY(0) scale(1); }
-		}
-	`;
-	document.head.appendChild(style);
 }
 
 // 以下为事件监听和初始化代码
 
-let lastUrl = location.href;
-let highlightDebounceTimer = null;
-let ignoreMutationsUntil = 0;
-
 function scheduleHighlight(delay) {
-	if (highlightDebounceTimer) clearTimeout(highlightDebounceTimer);
-	highlightDebounceTimer = setTimeout(() => {
-		ignoreMutationsUntil = Date.now() + 500;
-		highlightWords();
-	}, delay || 120);
+	if (typeof ContentPageProcessingRef.scheduleHighlight === "function") {
+		return ContentPageProcessingRef.scheduleHighlight(delay, {
+			highlightWords,
+		});
+	}
 }
 
 function checkUrlAndHighlight() {
-	const currentUrl = location.href;
-	if (lastUrl !== currentUrl) {
-		lastUrl = currentUrl;
-		scheduleHighlight(80);
+	if (typeof ContentPageProcessingRef.checkUrlAndHighlight === "function") {
+		return ContentPageProcessingRef.checkUrlAndHighlight({
+			getLocationHref: () => location.href,
+			highlightWords,
+		});
 	}
 }
 
 function setupNavigationWatchers() {
-	const originalPushState = history.pushState;
-	const originalReplaceState = history.replaceState;
-
-	history.pushState = function () {
-		originalPushState.apply(this, arguments);
-		checkUrlAndHighlight();
-	};
-
-	history.replaceState = function () {
-		originalReplaceState.apply(this, arguments);
-		checkUrlAndHighlight();
-	};
-
-	window.addEventListener("popstate", checkUrlAndHighlight);
-	window.addEventListener("hashchange", checkUrlAndHighlight);
-
-	const observer = new MutationObserver(() => {
-		if (Date.now() < ignoreMutationsUntil) return;
-		// SPA 页面内容异步更新时，合并高频变更，避免频繁重跑
-		scheduleHighlight(180);
-		checkUrlAndHighlight();
-	});
-	observer.observe(document.documentElement, {
-		childList: true,
-		subtree: true,
-	});
+	if (typeof ContentPageProcessingRef.setupNavigationWatchers === "function") {
+		return ContentPageProcessingRef.setupNavigationWatchers({
+			history,
+			window,
+			document,
+			MutationObserver,
+			getLocationHref: () => location.href,
+			highlightWords,
+		});
+	}
 }
 
 window.addEventListener("load", () => {
