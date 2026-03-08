@@ -3,6 +3,7 @@ let addWordModal = null;
 const MAX_EXAMPLES_PER_WORD = 20;
 let contentUiLang = "en";
 let contentTourAttempted = false;
+let contentTourPending = false;
 let contentSelectionTourAttempted = false;
 function requireContentDependency(name) {
 	const dependency = globalThis[name];
@@ -331,6 +332,8 @@ function getContentPageProcessingDeps() {
 			set exampleMergeTimer(value) { contentPageProcessingState.exampleMergeTimer = value; },
 			get contentTourAttempted() { return contentTourAttempted; },
 			set contentTourAttempted(value) { contentTourAttempted = value; },
+			get contentTourPending() { return contentTourPending; },
+			set contentTourPending(value) { contentTourPending = value; },
 		},
 		onMergeError(error) {
 			if (!isContextInvalidatedError(error)) {

@@ -97,7 +97,6 @@
           wordsState = { running: { meaning: '奔跑', learned: false, examples: [] } };
           document.getElementById('fixture').textContent = 'running words stay visible';
           await window.highlightWords();
-          await wait(30);
           assert(document.querySelector('.plugin-highlight-word'), 'expected highlighted word');
         },
       },

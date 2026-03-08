@@ -753,8 +753,13 @@
     function renderStep() {
       const step = resolvedSteps[index];
       if (!step) return;
-      const rect = step.targetEl.getBoundingClientRect();
-      step.targetEl.scrollIntoView({ block: "center", inline: "center", behavior: "smooth" });
+      let rect = step.targetEl.getBoundingClientRect();
+      const withinVerticalViewport = rect.top >= 24 && rect.bottom <= (window.innerHeight - 24);
+      const withinHorizontalViewport = rect.left >= 12 && rect.right <= (window.innerWidth - 12);
+      if (!withinVerticalViewport || !withinHorizontalViewport) {
+        step.targetEl.scrollIntoView({ block: "center", inline: "nearest", behavior: "auto" });
+        rect = step.targetEl.getBoundingClientRect();
+      }
       focus.style.left = `${rect.left - 8}px`;
       focus.style.top = `${rect.top - 8}px`;
       focus.style.width = `${rect.width + 16}px`;

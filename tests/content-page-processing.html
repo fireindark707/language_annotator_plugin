@@ -295,6 +295,91 @@
           assertEqual(saved.encounterCount, 2);
         },
       },
+      {
+        name: "highlightWords triggers content tour after visible highlights appear",
+        async run() {
+          const host = document.createElement("div");
+          host.textContent = "running words stay visible";
+          document.body.appendChild(host);
+          let tourCalls = 0;
+          const originalRequestAnimationFrame = window.requestAnimationFrame;
+          const originalGetClientRects = Element.prototype.getClientRects;
+          window.requestAnimationFrame = function (callback) {
+            return window.setTimeout(() => callback(Date.now()), 0);
+          };
+          Element.prototype.getClientRects = function () {
+            if (this.classList && this.classList.contains("plugin-highlight-word")) {
+              return [{ left: 0, top: 0, right: 40, bottom: 18, width: 40, height: 18 }];
+            }
+            return originalGetClientRects.call(this);
+          };
+          const state = {
+            pendingExampleMap: {},
+            exampleMergeTimer: null,
+            contentTourAttempted: false,
+            contentTourPending: false,
+          };
+          U.highlightWords({
+            document,
+            Node,
+            WordStorage: {
+              getWords() {
+                return Promise.resolve({
+                  running: { meaning: "run", learned: false, examples: [] },
+                });
+              },
+              saveWords() {
+                return Promise.resolve();
+              },
+            },
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement(element) {
+              return !!(element && element.classList && element.classList.contains("la-tour-card"));
+            },
+            showWordPreview() {},
+            hideWordPreview() {},
+            splitIntoSentences(text) {
+              return [text];
+            },
+            isLowInformationExample() { return false; },
+            normalizeText(text) {
+              return (text || "").replace(/\s+/g, " ").trim();
+            },
+            normalizeExampleList(entries) {
+              return entries || [];
+            },
+            hasContainmentRelation() { return false; },
+            isTooSimilarToAny() { return false; },
+            enforceExampleLimit(entries) { return entries; },
+            sortExamples(entries) { return entries; },
+            maxExamplesPerWord: 20,
+            currentHref() { return "https://example.com/page"; },
+            onMergeError(error) { throw error; },
+            onHighlightError(error) { throw error; },
+            markLearned() {},
+            openAddWordModal() {},
+            startContentTour() {
+              tourCalls += 1;
+              return true;
+            },
+            isCurrentDomainExcluded() {
+              return Promise.resolve(false);
+            },
+            state,
+          });
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 80));
+            assert(document.querySelector(".plugin-highlight-word"), "expected highlighted word");
+            assertEqual(tourCalls, 1);
+            assertEqual(state.contentTourAttempted, true);
+            assertEqual(state.contentTourPending, false);
+          } finally {
+            window.requestAnimationFrame = originalRequestAnimationFrame;
+            Element.prototype.getClientRects = originalGetClientRects;
+            host.remove();
+          }
+        },
+      },
     ]);
   </script>
 </body>
