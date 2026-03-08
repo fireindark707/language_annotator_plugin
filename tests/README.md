@@ -15,6 +15,9 @@ Current coverage mapped to README features:
 - `runtime-dependencies-smoke.html`
   - shared globals required by entry scripts are present
   - required methods exist before hard dependency cleanup
+- `sentence-splitter.html`
+  - `sentencex-wasm` initialization
+  - multilingual abbreviation repair (`Kep.`, `Sr.`, `z. B.`, `A.I.`)
 - `translation-utils.html`
   - runtime translation requests
   - Google Translate request composition

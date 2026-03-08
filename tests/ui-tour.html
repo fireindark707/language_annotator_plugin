@@ -3,6 +3,7 @@
 <head><meta charset="utf-8"><title>ui-tour</title></head>
 <body>
   <button id="target">Target</button>
+  <button id="hidden-target" style="display:none;">Hidden</button>
   <pre id="test-output"></pre>
   <script>
     function createArea(initial) {
@@ -63,6 +64,25 @@
         run() {
           assertEqual(UiTour.getLabel('xx', 'next'), 'Next');
           assert(Array.isArray(UiTour.getSteps('xx', 'popup')), 'expected fallback steps array');
+        },
+      },
+      {
+        name: 'start ignores hidden targets and keeps only visible steps',
+        async run() {
+          await UiTour.reset('tour_visible_only');
+          UiTour.start({
+            storageKey: 'tour_visible_only',
+            lang: 'en',
+            steps: [
+              { target: '#hidden-target', title: 'Hidden', body: 'Hidden body' },
+              { target: '#target', title: 'Visible', body: 'Visible body' },
+            ],
+          });
+          assert(document.querySelector('.la-tour-root'), 'expected overlay');
+          assertEqual(document.querySelector('.la-tour-title').textContent, 'Visible');
+          document.querySelector('.la-tour-btn-primary').click();
+          await wait(20);
+          assertEqual(chrome.storage.local._store['tourSeen:tour_visible_only'], true);
         },
       },
     ]);

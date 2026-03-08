@@ -4,6 +4,9 @@
   "version": "1.4.2",
   "description": "__MSG_appDescription__",
   "default_locale": "en",
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
   "permissions": ["activeTab", "storage", "unlimitedStorage", "contextMenus"],
   "host_permissions": [
     "https://translate.googleapis.com/*",
@@ -18,7 +21,13 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["lib/dictionary-utils.js", "lib/lemma-utils.js", "lib/translation-utils.js", "lib/example-utils.js", "lib/storage-merge-utils.js", "lib/content-ui.js", "lib/content-addword.js", "lib/content-lookup-ui.js", "lib/content-page-processing.js", "storage.js", "ui-i18n.js", "ui-tour.js", "content.js"]
+      "js": ["lib/dictionary-utils.js", "lib/lemma-utils.js", "lib/translation-utils.js", "lib/sentence-splitter.js", "lib/example-utils.js", "lib/storage-merge-utils.js", "lib/content-ui.js", "lib/content-addword.js", "lib/content-lookup-ui.js", "lib/content-page-processing.js", "storage.js", "ui-i18n.js", "ui-tour.js", "content.js"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["packages/sentencex_wasm.js", "packages/sentencex_wasm_bg.wasm"],
+      "matches": ["<all_urls>"]
     }
   ],
   "action": {

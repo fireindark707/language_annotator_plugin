@@ -41,6 +41,7 @@
   <script src="../lib/dictionary-utils.js"></script>
   <script src="../lib/lemma-utils.js"></script>
   <script src="../lib/translation-utils.js"></script>
+  <script src="../lib/sentence-splitter.js"></script>
   <script src="../lib/example-utils.js"></script>
   <script src="../lib/storage-merge-utils.js"></script>
   <script src="../lib/content-ui.js"></script>
@@ -56,6 +57,7 @@
       {
         name: 'selection flow shows translation box with dictionary sections',
         async run() {
+          tourCalls.length = 0;
           const selection = window.getSelection();
           const textNode = document.createTextNode('running');
           document.body.appendChild(textNode);
@@ -67,6 +69,7 @@
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
           await wait(120);
           assert(document.getElementById('translationBox'), 'expected translation box');
+          assert(tourCalls.includes('content_selection_v1'), 'expected content selection tour on first translation box');
           assert(document.getElementById('translationDictionary').textContent.includes('dict_selected_form'), 'expected dictionary section label');
           textNode.remove();
           selection.removeAllRanges();

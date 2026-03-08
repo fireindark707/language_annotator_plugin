@@ -70,7 +70,7 @@ function contentT(key) {
 function startContentTour(force) {
 	if (!globalThis.UiTour) return;
 	const run = force ? UiTour.start : UiTour.maybeStartOnce;
-	run({
+	return run({
 		storageKey: "content_v1",
 		lang: contentUiLang,
 		steps: UiTour.getSteps(contentUiLang, "content"),
@@ -80,7 +80,7 @@ function startContentTour(force) {
 function startContentSelectionTour(force) {
 	if (!globalThis.UiTour) return;
 	const run = force ? UiTour.start : UiTour.maybeStartOnce;
-	run({
+	return run({
 		storageKey: "content_selection_v1",
 		lang: contentUiLang,
 		steps: UiTour.getSteps(contentUiLang, "contentSelection"),
@@ -333,7 +333,9 @@ function getContentPageProcessingDeps() {
 			set contentTourAttempted(value) { contentTourAttempted = value; },
 		},
 		onMergeError(error) {
-			console.error("Failed to merge examples:", error);
+			if (!isContextInvalidatedError(error)) {
+				console.error("Failed to merge examples:", error);
+			}
 		},
 		onHighlightError(error) {
 			if (!isContextInvalidatedError(error)) {
@@ -629,7 +631,18 @@ function translateText(text) {
 }
 
 function showTranslation(translation) {
-	return ContentLookupUiRef.showTranslation(translation, { document });
+	return ContentLookupUiRef.showTranslation(translation, {
+		document,
+		startContentSelectionTour,
+		state: {
+			get contentSelectionTourAttempted() {
+				return contentSelectionTourAttempted;
+			},
+			set contentSelectionTourAttempted(value) {
+				contentSelectionTourAttempted = value;
+			},
+		},
+	});
 }
 
 function appendDictionaryToTranslationBox(dictResponse, sourceLang) {

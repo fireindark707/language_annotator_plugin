@@ -40,11 +40,11 @@
         { target: "#wordsList .word-actions", title: "每個詞都有完整工具列", body: "這裡能發音、標記學會、展開例句、查看詞典與刪除，比 popup 更適合深度整理。", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "高亮詞就是你的學習錨點", body: "把滑鼠移上去可看翻譯與例句，點一下可標記已學會。若想新增單詞，請直接在頁面上選字後按右鍵使用外掛選單。", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "高亮詞就是你的學習錨點", body: "深黃色是你已收錄的詞，較淡的是同一原型的相關詞形。移上去可看發音、翻譯、例句與詞典；點已收錄詞會標記已學會，點相關詞形則會進入新增單詞流程。", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "這裡是即時翻譯結果", body: "當你選取頁面文字時，外掛會直接在原頁面旁邊顯示翻譯，不必跳出目前閱讀流程。", placement: "bottom" },
-        { target: "#translationDictionary", title: "單詞被查到時也會帶出詞典", body: "如果這次選取的是可查詞典的單詞，這裡會補上詞性與解釋。若你想把它正式加入字庫，請保持選字後按右鍵使用外掛選單。", placement: "top" }
+        { target: "#translationBox", title: "這裡是即時翻譯結果", body: "當你選取頁面文字時，外掛會直接在原頁面旁邊顯示翻譯；若是單詞，也可能同時補上發音、詞典與原型相關提示。", placement: "bottom" },
+        { target: "#translationDictionary", title: "單詞被查到時也會帶出詞典", body: "如果這次選取的是可查詞典的單詞，這裡會補上詞性與解釋，必要時也會提示目前詞形與原型版本。若想正式加入字庫，請保持選字後按右鍵使用外掛選單。", placement: "top" }
       ]
     },
     "zh-CN": {
@@ -84,11 +84,11 @@
         { target: "#wordsList .word-actions", title: "每个词都有完整工具栏", body: "这里能发音、标记已学会、展开例句、查看词典与删除，比 popup 更适合深度整理。", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "高亮词就是你的学习锚点", body: "鼠标悬停可看翻译与例句，点击可标记已学会。若想新增单词，请直接在页面上选字后右键使用扩展菜单。", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "高亮词就是你的学习锚点", body: "深黄色是你已收录的词，较淡的是同一原型的相关词形。悬停可看发音、翻译、例句与词典；点已收录词会标记已学会，点相关词形则会进入新增单词流程。", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "这里是即时翻译结果", body: "当你选取页面文字时，扩展会直接在原页面旁边显示翻译，不必跳出当前阅读流程。", placement: "bottom" },
-        { target: "#translationDictionary", title: "查得到时也会补上词典", body: "如果这次选取的是可查词典的单词，这里会补上词性与解释。若你想把它正式加入词库，请保持选字后右键使用扩展菜单。", placement: "top" }
+        { target: "#translationBox", title: "这里是即时翻译结果", body: "当你选取页面文字时，扩展会直接在原页面旁边显示翻译；如果是单词，也可能同时补上发音、词典与原型提示。", placement: "bottom" },
+        { target: "#translationDictionary", title: "查得到时也会补上词典", body: "如果这次选取的是可查词典的单词，这里会补上词性与解释，必要时也会提示当前词形与原型版本。若你想把它正式加入词库，请保持选字后右键使用扩展菜单。", placement: "top" }
       ]
     },
     en: {
@@ -128,11 +128,11 @@
         { target: "#wordsList .word-actions", title: "Each word has a full action rail", body: "Pronounce, mark learned, open examples, inspect dictionary entries, and delete words from the same row.", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "Highlighted words are your learning anchors", body: "Hover to preview meaning and examples. Click to mark a word as learned. To add a new word, select text on the page and use the extension from the right-click menu.", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "Highlighted words are your learning anchors", body: "The deeper highlight marks a word you already saved; the lighter one marks a related form from the same base form. Hover to see pronunciation, translation, examples, and dictionary data. Clicking a saved word marks it as learned, while clicking a related form opens Add Word.", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "This is the instant translation box", body: "When you select text on a page, the extension shows the translation right beside your reading flow instead of moving you elsewhere.", placement: "bottom" },
-        { target: "#translationDictionary", title: "Dictionary data appears when available", body: "If the selected text is a dictionary-supported word, this area adds part of speech and definitions. To save it properly, keep the selection and use the extension from the right-click menu.", placement: "top" }
+        { target: "#translationBox", title: "This is the instant translation box", body: "When you select text on a page, the extension shows the translation right beside your reading flow. For single words, it may also add pronunciation, dictionary results, and base-form hints.", placement: "bottom" },
+        { target: "#translationDictionary", title: "Dictionary data appears when available", body: "If the selected text is a dictionary-supported word, this area adds part of speech and definitions, and may also explain the current form versus the base form. To save it properly, keep the selection and use the extension from the right-click menu.", placement: "top" }
       ]
     },
     fr: {
@@ -172,11 +172,11 @@
         { target: "#wordsList .word-actions", title: "Chaque mot a une barre d'actions complète", body: "Depuis la même ligne, vous pouvez écouter la prononciation, marquer comme appris, ouvrir les exemples, consulter le dictionnaire et supprimer le mot.", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "Les mots surlignés sont vos repères", body: "Survolez pour prévisualiser le sens et les exemples. Cliquez pour marquer un mot comme appris. Pour ajouter un nouveau mot, sélectionnez-le dans la page puis utilisez le menu de l'extension avec le clic droit.", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "Les mots surlignés sont vos repères", body: "Le surlignage plus soutenu indique un mot déjà enregistré ; le plus léger indique une forme liée du même mot de base. Au survol, vous voyez la prononciation, la traduction, les exemples et le dictionnaire. Un clic sur le mot enregistré le marque comme appris ; un clic sur la forme liée ouvre l'ajout de mot.", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "Voici la bulle de traduction instantanée", body: "Quand vous sélectionnez du texte dans une page, l'extension affiche la traduction juste à côté, sans vous sortir de votre lecture.", placement: "bottom" },
-        { target: "#translationDictionary", title: "Les données du dictionnaire apparaissent si disponibles", body: "Si le texte sélectionné correspond à un mot pris en charge par le dictionnaire, cette zone ajoute la catégorie grammaticale et les définitions. Pour l'enregistrer correctement, gardez la sélection puis utilisez le menu de l'extension avec le clic droit.", placement: "top" }
+        { target: "#translationBox", title: "Voici la bulle de traduction instantanée", body: "Quand vous sélectionnez du texte dans une page, l'extension affiche la traduction juste à côté. Pour un mot seul, elle peut aussi ajouter la prononciation, le dictionnaire et des indications sur la forme de base.", placement: "bottom" },
+        { target: "#translationDictionary", title: "Les données du dictionnaire apparaissent si disponibles", body: "Si le texte sélectionné correspond à un mot pris en charge par le dictionnaire, cette zone ajoute la catégorie grammaticale et les définitions, et peut aussi distinguer la forme actuelle de la forme de base. Pour l'enregistrer correctement, gardez la sélection puis utilisez le menu de l'extension avec le clic droit.", placement: "top" }
       ]
     },
     pt: {
@@ -216,11 +216,11 @@
         { target: "#wordsList .word-actions", title: "Cada palavra tem uma barra de ações completa", body: "Na mesma linha, você pode ouvir a pronúncia, marcar como aprendida, abrir exemplos, consultar o dicionário e excluir a palavra.", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "As palavras destacadas são seus pontos de apoio", body: "Passe o mouse para ver significado e exemplos. Clique para marcar uma palavra como aprendida. Para adicionar uma nova palavra, selecione-a na página e use o menu da extensão com o botão direito.", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "As palavras destacadas são seus pontos de apoio", body: "O destaque mais forte marca uma palavra já salva; o mais claro marca uma forma relacionada da mesma forma base. Passe o mouse para ver pronúncia, tradução, exemplos e dicionário. Clicar na palavra salva marca como aprendida; clicar na forma relacionada abre Adicionar palavra.", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "Esta é a caixa de tradução instantânea", body: "Quando você seleciona texto em uma página, a extensão mostra a tradução ao lado do fluxo de leitura, sem tirar você da página.", placement: "bottom" },
-        { target: "#translationDictionary", title: "Os dados do dicionário aparecem quando disponíveis", body: "Se o texto selecionado for uma palavra suportada pelo dicionário, esta área acrescenta classe gramatical e definições. Para salvá-la corretamente, mantenha a seleção e use o menu da extensão com o botão direito.", placement: "top" }
+        { target: "#translationBox", title: "Esta é a caixa de tradução instantânea", body: "Quando você seleciona texto em uma página, a extensão mostra a tradução ao lado da leitura. Para palavras isoladas, ela também pode acrescentar pronúncia, dicionário e pistas sobre a forma base.", placement: "bottom" },
+        { target: "#translationDictionary", title: "Os dados do dicionário aparecem quando disponíveis", body: "Se o texto selecionado for uma palavra suportada pelo dicionário, esta área acrescenta classe gramatical e definições, e pode explicar a forma atual em relação à forma base. Para salvá-la corretamente, mantenha a seleção e use o menu da extensão com o botão direito.", placement: "top" }
       ]
     },
     ar: {
@@ -260,11 +260,11 @@
         { target: "#wordsList .word-actions", title: "لكل كلمة شريط أدوات كامل", body: "من السطر نفسه يمكنك تشغيل النطق، ووضع علامة تم التعلم، وفتح الأمثلة، وقراءة القاموس، وحذف الكلمة.", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "الكلمات المميزة هي نقاط ارتكازك", body: "مرر المؤشر لرؤية المعنى والأمثلة. انقر لوضع علامة على الكلمة كمتعلَّمة. لإضافة كلمة جديدة، حددها في الصفحة ثم استخدم قائمة الإضافة عبر الزر الأيمن.", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "الكلمات المميزة هي نقاط ارتكازك", body: "التظليل الأغمق يعني كلمة محفوظة لديك، والتظليل الأخف يعني صيغة مرتبطة من نفس الصيغة الأساسية. عند المرور سترى النطق والترجمة والأمثلة وبيانات القاموس. الضغط على الكلمة المحفوظة يعلّمها كمُتقَنة، أما الضغط على الصيغة المرتبطة فيفتح إضافة كلمة جديدة.", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "هذه نافذة الترجمة الفورية", body: "عندما تحدد نصاً في الصفحة، تعرض الإضافة الترجمة بجانب مسار قراءتك بدلاً من نقلك إلى مكان آخر.", placement: "bottom" },
-        { target: "#translationDictionary", title: "تظهر بيانات القاموس عند توفرها", body: "إذا كان النص المحدد كلمة مدعومة في القاموس، تضيف هذه المنطقة نوع الكلمة والتعريفات. لحفظها بشكل صحيح، أبقِ التحديد واستخدم قائمة الإضافة عبر الزر الأيمن.", placement: "top" }
+        { target: "#translationBox", title: "هذه نافذة الترجمة الفورية", body: "عندما تحدد نصاً في الصفحة، تعرض الإضافة الترجمة بجانب قراءتك. وإذا كان التحديد كلمة واحدة، فقد تضيف أيضاً النطق ونتائج القاموس وإشارة إلى الصيغة الأساسية.", placement: "bottom" },
+        { target: "#translationDictionary", title: "تظهر بيانات القاموس عند توفرها", body: "إذا كان النص المحدد كلمة مدعومة في القاموس، تضيف هذه المنطقة نوع الكلمة والتعريفات، وقد تشرح أيضاً الفرق بين الصيغة الحالية والصيغة الأساسية. لحفظها بشكل صحيح، أبقِ التحديد واستخدم قائمة الإضافة عبر الزر الأيمن.", placement: "top" }
       ]
     },
     hi: {
@@ -304,11 +304,11 @@
         { target: "#wordsList .word-actions", title: "हर शब्द के लिए पूरा एक्शन रेल है", body: "उसी पंक्ति से आप उच्चारण चला सकते हैं, सीखा हुआ चिह्नित कर सकते हैं, उदाहरण खोल सकते हैं, शब्दकोश देख सकते हैं और शब्द हटा सकते हैं।", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "हाइलाइट किए गए शब्द आपके सीखने के संकेत हैं", body: "अर्थ और उदाहरण देखने के लिए माउस ले जाएँ। किसी शब्द को सीखा हुआ चिह्नित करने के लिए क्लिक करें। नया शब्द जोड़ने के लिए पेज पर टेक्स्ट चुनें और राइट-क्लिक मेनू से एक्सटेंशन का उपयोग करें।", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "हाइलाइट किए गए शब्द आपके सीखने के संकेत हैं", body: "गहरा हाइलाइट उस शब्द को दिखाता है जिसे आप पहले से सहेज चुके हैं, जबकि हल्का हाइलाइट उसी मूल रूप के जुड़े हुए रूप को दिखाता है। होवर करने पर उच्चारण, अनुवाद, उदाहरण और शब्दकोश दिखेंगे। सहेजे गए शब्द पर क्लिक करने से वह सीखा हुआ चिह्नित होगा, जबकि जुड़े हुए रूप पर क्लिक करने से Add Word खुलेगा।", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "यह त्वरित अनुवाद बॉक्स है", body: "जब आप पेज पर टेक्स्ट चुनते हैं, एक्सटेंशन आपकी पढ़ाई के प्रवाह के पास ही अनुवाद दिखाता है, आपको कहीं और भेजे बिना।", placement: "bottom" },
-        { target: "#translationDictionary", title: "उपलब्ध होने पर शब्दकोश डेटा दिखता है", body: "अगर चुना गया टेक्स्ट शब्दकोश-सपोर्टेड शब्द है, तो यह क्षेत्र शब्द-भेद और परिभाषाएँ जोड़ता है। इसे सही तरह सहेजने के लिए चयन बनाए रखें और राइट-क्लिक मेनू से एक्सटेंशन का उपयोग करें।", placement: "top" }
+        { target: "#translationBox", title: "यह त्वरित अनुवाद बॉक्स है", body: "जब आप पेज पर टेक्स्ट चुनते हैं, एक्सटेंशन पढ़ने के प्रवाह के पास ही अनुवाद दिखाता है। यदि चयन एक शब्द है, तो यह उच्चारण, शब्दकोश और मूल रूप से जुड़ी जानकारी भी दिखा सकता है।", placement: "bottom" },
+        { target: "#translationDictionary", title: "उपलब्ध होने पर शब्दकोश डेटा दिखता है", body: "अगर चुना गया टेक्स्ट शब्दकोश-सपोर्टेड शब्द है, तो यह क्षेत्र शब्द-भेद और परिभाषाएँ जोड़ता है, और ज़रूरत होने पर वर्तमान रूप और मूल रूप का अंतर भी बताता है। इसे सही तरह सहेजने के लिए चयन बनाए रखें और राइट-क्लिक मेनू से एक्सटेंशन का उपयोग करें।", placement: "top" }
       ]
     },
     ja: {
@@ -348,11 +348,11 @@
         { target: "#wordsList .word-actions", title: "各単語に完全な操作列があります", body: "同じ行から発音、学習済み切替、例文表示、辞書確認、削除まで行えます。", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "ハイライト語は学習の目印です", body: "マウスオーバーで意味と例文を確認し、クリックで学習済みにできます。新しい単語を追加したい場合は、ページ上で文字を選択して右クリックメニューから拡張機能を使ってください。", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "ハイライト語は学習の目印です", body: "濃いハイライトは保存済みの単語、薄いハイライトは同じ基本形に属する関連語形です。ホバーすると発音・翻訳・例文・辞書を確認できます。保存済みの単語をクリックすると学習済みにでき、関連語形をクリックすると単語追加に進みます。", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "これは即時翻訳ボックスです", body: "ページ上で文字を選択すると、読書の流れを止めずに、その場で翻訳が表示されます。", placement: "bottom" },
-        { target: "#translationDictionary", title: "利用可能なら辞書情報も表示されます", body: "選択した文字が辞書対応の単語なら、この領域に品詞や定義が追加されます。正しく保存したい場合は、選択状態を保ったまま右クリックメニューから拡張機能を使ってください。", placement: "top" }
+        { target: "#translationBox", title: "これは即時翻訳ボックスです", body: "ページ上で文字を選択すると、読書の流れを止めずにその場で翻訳が表示されます。単語を選んだ場合は、発音・辞書・基本形のヒントも追加されることがあります。", placement: "bottom" },
+        { target: "#translationDictionary", title: "利用可能なら辞書情報も表示されます", body: "選択した文字が辞書対応の単語なら、この領域に品詞や定義が追加され、必要に応じて現在の語形と基本形の違いも示されます。正しく保存したい場合は、選択状態を保ったまま右クリックメニューから拡張機能を使ってください。", placement: "top" }
       ]
     },
     ko: {
@@ -392,11 +392,11 @@
         { target: "#wordsList .word-actions", title: "각 단어에는 완전한 작업 열이 있습니다", body: "같은 줄에서 발음, 학습 완료 표시, 예문 열기, 사전 확인, 삭제까지 모두 처리할 수 있습니다.", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "하이라이트된 단어는 학습의 기준점입니다", body: "마우스를 올리면 뜻과 예문을 미리 볼 수 있고, 클릭하면 학습 완료로 표시할 수 있습니다. 새 단어를 추가하려면 페이지에서 텍스트를 선택한 뒤 마우스 오른쪽 메뉴에서 확장 기능을 사용하세요.", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "하이라이트된 단어는 학습의 기준점입니다", body: "진한 하이라이트는 이미 저장한 단어이고, 연한 하이라이트는 같은 기본형에 속한 관련 활용형입니다. 호버하면 발음, 번역, 예문, 사전 정보를 볼 수 있습니다. 저장한 단어를 클릭하면 학습 완료로 표시되고, 관련 활용형을 클릭하면 새 단어 추가 흐름이 열립니다.", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "이것이 즉시 번역 상자입니다", body: "페이지에서 텍스트를 선택하면 읽는 흐름을 끊지 않고 바로 옆에 번역이 표시됩니다.", placement: "bottom" },
-        { target: "#translationDictionary", title: "가능할 때 사전 정보도 함께 나옵니다", body: "선택한 텍스트가 사전 지원 단어라면, 이 영역에 품사와 정의가 추가됩니다. 제대로 저장하려면 선택 상태를 유지한 채 오른쪽 클릭 메뉴에서 확장 기능을 사용하세요.", placement: "top" }
+        { target: "#translationBox", title: "이것이 즉시 번역 상자입니다", body: "페이지에서 텍스트를 선택하면 읽는 흐름을 끊지 않고 바로 옆에 번역이 표시됩니다. 단어를 선택한 경우 발음, 사전, 기본형 관련 힌트도 함께 나타날 수 있습니다.", placement: "bottom" },
+        { target: "#translationDictionary", title: "가능할 때 사전 정보도 함께 나옵니다", body: "선택한 텍스트가 사전 지원 단어라면 이 영역에 품사와 정의가 추가되고, 필요하면 현재 형태와 기본형의 차이도 설명합니다. 제대로 저장하려면 선택 상태를 유지한 채 오른쪽 클릭 메뉴에서 확장 기능을 사용하세요.", placement: "top" }
       ]
     },
     id: {
@@ -436,11 +436,11 @@
         { target: "#wordsList .word-actions", title: "Setiap kata punya rel aksi lengkap", body: "Dari baris yang sama kamu bisa memutar pelafalan, menandai sudah dipelajari, membuka contoh, melihat kamus, dan menghapus kata.", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "Kata yang disorot adalah jangkar belajar kamu", body: "Arahkan mouse untuk melihat arti dan contoh. Klik untuk menandai kata sebagai sudah dipelajari. Untuk menambah kata baru, pilih teks di halaman lalu gunakan ekstensi dari menu klik kanan.", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "Kata yang disorot adalah jangkar belajar kamu", body: "Sorotan yang lebih kuat menandai kata yang sudah kamu simpan, sedangkan sorotan yang lebih ringan menandai bentuk terkait dari bentuk dasar yang sama. Saat di-hover, kamu bisa melihat pelafalan, terjemahan, contoh, dan kamus. Klik kata yang sudah disimpan untuk menandainya sebagai sudah dipelajari; klik bentuk terkait untuk masuk ke alur Add Word.", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "Ini adalah kotak terjemahan instan", body: "Saat kamu memilih teks di halaman, ekstensi menampilkan terjemahan tepat di samping alur membaca tanpa memindahkanmu ke tempat lain.", placement: "bottom" },
-        { target: "#translationDictionary", title: "Data kamus muncul bila tersedia", body: "Jika teks yang dipilih adalah kata yang didukung kamus, area ini menambahkan kelas kata dan definisi. Untuk menyimpannya dengan benar, pertahankan seleksi lalu gunakan ekstensi dari menu klik kanan.", placement: "top" }
+        { target: "#translationBox", title: "Ini adalah kotak terjemahan instan", body: "Saat kamu memilih teks di halaman, ekstensi menampilkan terjemahan tepat di samping alur membaca. Untuk kata tunggal, ekstensi juga bisa menambahkan pelafalan, kamus, dan petunjuk tentang bentuk dasar.", placement: "bottom" },
+        { target: "#translationDictionary", title: "Data kamus muncul bila tersedia", body: "Jika teks yang dipilih adalah kata yang didukung kamus, area ini menambahkan kelas kata dan definisi, dan bila perlu juga menjelaskan bentuk saat ini dibanding bentuk dasarnya. Untuk menyimpannya dengan benar, pertahankan seleksi lalu gunakan ekstensi dari menu klik kanan.", placement: "top" }
       ]
     },
     ru: {
@@ -480,11 +480,11 @@
         { target: "#wordsList .word-actions", title: "У каждого слова есть полная панель действий", body: "Из одной строки можно запустить произношение, отметить слово как выученное, открыть примеры, посмотреть словарь и удалить слово.", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "Подсвеченные слова — ваши учебные якоря", body: "Наведите курсор, чтобы увидеть значение и примеры. Нажмите, чтобы отметить слово как выученное. Чтобы добавить новое слово, выделите текст на странице и используйте расширение через контекстное меню.", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "Подсвеченные слова — ваши учебные якоря", body: "Более насыщенная подсветка означает уже сохранённое слово, а более лёгкая — связанную форму того же базового слова. При наведении вы увидите произношение, перевод, примеры и словарь. Нажатие на сохранённое слово помечает его как выученное, а на связанную форму — открывает добавление нового слова.", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "Это окно мгновенного перевода", body: "Когда вы выделяете текст на странице, расширение показывает перевод прямо рядом с чтением, не уводя вас в другое место.", placement: "bottom" },
-        { target: "#translationDictionary", title: "Данные словаря появляются, если доступны", body: "Если выделенный текст — слово, поддерживаемое словарём, эта область добавит часть речи и определения. Чтобы сохранить его правильно, удерживайте выделение и используйте расширение через контекстное меню.", placement: "top" }
+        { target: "#translationBox", title: "Это окно мгновенного перевода", body: "Когда вы выделяете текст на странице, расширение показывает перевод прямо рядом с чтением. Для отдельных слов оно также может добавить произношение, словарь и подсказки о базовой форме.", placement: "bottom" },
+        { target: "#translationDictionary", title: "Данные словаря появляются, если доступны", body: "Если выделенный текст — слово, поддерживаемое словарём, эта область добавит часть речи и определения, а при необходимости также объяснит текущую форму и базовую форму. Чтобы сохранить его правильно, удерживайте выделение и используйте расширение через контекстное меню.", placement: "top" }
       ]
     },
     es: {
@@ -524,11 +524,11 @@
         { target: "#wordsList .word-actions", title: "Cada palabra tiene una barra de acciones completa", body: "Desde la misma fila puedes reproducir la pronunciación, marcar como aprendida, abrir ejemplos, consultar el diccionario y eliminar la palabra.", placement: "left" }
       ],
       content: [
-        { target: ".plugin-highlight-word", title: "Las palabras resaltadas son tus anclas de aprendizaje", body: "Pasa el cursor para ver significado y ejemplos. Haz clic para marcar una palabra como aprendida. Para añadir una palabra nueva, selecciona el texto en la página y usa la extensión desde el menú del clic derecho.", placement: "bottom" }
+        { target: ".plugin-highlight-word", title: "Las palabras resaltadas son tus anclas de aprendizaje", body: "El resaltado más intenso marca una palabra que ya guardaste; el más suave marca una forma relacionada de la misma forma base. Al pasar el cursor verás pronunciación, traducción, ejemplos y diccionario. Al hacer clic en una palabra guardada la marcas como aprendida; al hacer clic en una forma relacionada se abre Add Word.", placement: "bottom" }
       ],
       contentSelection: [
-        { target: "#translationBox", title: "Esta es la caja de traducción instantánea", body: "Cuando seleccionas texto en una página, la extensión muestra la traducción justo al lado de tu flujo de lectura, sin sacarte de la página.", placement: "bottom" },
-        { target: "#translationDictionary", title: "Los datos del diccionario aparecen cuando están disponibles", body: "Si el texto seleccionado es una palabra compatible con el diccionario, esta zona añade categoría gramatical y definiciones. Para guardarla correctamente, mantén la selección y usa la extensión desde el menú del clic derecho.", placement: "top" }
+        { target: "#translationBox", title: "Esta es la caja de traducción instantánea", body: "Cuando seleccionas texto en una página, la extensión muestra la traducción justo al lado de tu lectura. Si seleccionas una sola palabra, también puede añadir pronunciación, diccionario y pistas sobre la forma base.", placement: "bottom" },
+        { target: "#translationDictionary", title: "Los datos del diccionario aparecen cuando están disponibles", body: "Si el texto seleccionado es una palabra compatible con el diccionario, esta zona añade categoría gramatical y definiciones, y cuando hace falta también explica la forma actual frente a la forma base. Para guardarla correctamente, mantén la selección y usa la extensión desde el menú del clic derecho.", placement: "top" }
       ]
     }
   };
@@ -640,9 +640,20 @@
 
   function resolveTarget(step) {
     if (!step) return null;
-    if (typeof step.target === "function") return step.target() || null;
-    if (typeof step.target === "string") return document.querySelector(step.target);
-    return step.target || null;
+    const target =
+      typeof step.target === "function"
+        ? (step.target() || null)
+        : (typeof step.target === "string" ? document.querySelector(step.target) : (step.target || null));
+    if (!target) return null;
+    try {
+      const style = window.getComputedStyle(target);
+      const rects = target.getClientRects();
+      if (style.display === "none" || style.visibility === "hidden") return null;
+      if ((!rects || rects.length === 0) && target.offsetWidth === 0 && target.offsetHeight === 0) return null;
+    } catch (_) {
+      return null;
+    }
+    return target;
   }
 
   function buildResolvedSteps(steps) {
