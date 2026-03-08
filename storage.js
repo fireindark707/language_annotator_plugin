@@ -12,7 +12,13 @@
 	const SUPPORTED_UI_LANGS = ["zh-TW", "zh-CN", "en", "fr", "pt", "ar", "hi", "ja", "ko", "id", "ru", "es"];
 	const VERSION = 2;
 	const TARGET_SHARD_BYTES = 6000;
+	const DEFERRED_SYNC_DELAY_MS = 12000;
 	const StorageMergeUtilsRef = global.StorageMergeUtils;
+	let pendingWordsSync = null;
+	let pendingWordsSyncTimer = null;
+	let pendingWordsSyncPromise = null;
+	let pendingWordsSyncResolve = null;
+	let autoFlushInstalled = false;
 
 	function isContextInvalidatedError(error) {
 		return !!(error && typeof error.message === "string" && error.message.includes("Extension context invalidated"));
@@ -216,6 +222,64 @@
 		}
 	}
 
+	function ensurePendingWordsSyncPromise() {
+		if (pendingWordsSyncPromise) return pendingWordsSyncPromise;
+		pendingWordsSyncPromise = new Promise((resolve) => {
+			pendingWordsSyncResolve = resolve;
+		});
+		return pendingWordsSyncPromise;
+	}
+
+	async function flushPendingWordsSync() {
+		if (!pendingWordsSync) {
+			const idleResult = { compactLevel: 0, droppedWords: 0, skipped: true };
+			if (pendingWordsSyncResolve) pendingWordsSyncResolve(idleResult);
+			pendingWordsSyncPromise = null;
+			pendingWordsSyncResolve = null;
+			return idleResult;
+		}
+		if (pendingWordsSyncTimer) {
+			clearTimeout(pendingWordsSyncTimer);
+			pendingWordsSyncTimer = null;
+		}
+		const words = pendingWordsSync;
+		pendingWordsSync = null;
+		const result = await writeWordsToSyncSafe(words);
+		if (pendingWordsSyncResolve) pendingWordsSyncResolve(result);
+		pendingWordsSyncPromise = null;
+		pendingWordsSyncResolve = null;
+		return result;
+	}
+
+	function scheduleDeferredWordsSync(words) {
+		pendingWordsSync = words;
+		ensurePendingWordsSyncPromise();
+		if (pendingWordsSyncTimer) clearTimeout(pendingWordsSyncTimer);
+		pendingWordsSyncTimer = setTimeout(() => {
+			flushPendingWordsSync().catch((error) => {
+				console.info("Deferred cloud sync flush was skipped; local data remains intact.", error);
+			});
+		}, DEFERRED_SYNC_DELAY_MS);
+		return { deferred: true };
+	}
+
+	function installDeferredSyncAutoFlush() {
+		if (autoFlushInstalled) return;
+		if (typeof document === "undefined" || typeof global.addEventListener !== "function") return;
+		autoFlushInstalled = true;
+		document.addEventListener("visibilitychange", () => {
+			if (document.visibilityState !== "hidden") return;
+			flushPendingWordsSync().catch((error) => {
+				console.info("Visibility-triggered cloud sync flush was skipped; local data remains intact.", error);
+			});
+		});
+		global.addEventListener("pagehide", () => {
+			flushPendingWordsSync().catch((error) => {
+				console.info("Pagehide-triggered cloud sync flush was skipped; local data remains intact.", error);
+			});
+		});
+	}
+
 	async function hydrateLocalFromSyncIfNeeded() {
 		const localWordsResult = await getFromArea(chrome.storage.local, {
 			[LEGACY_WORDS_KEY]: {},
@@ -361,9 +425,13 @@
 			return localResult[LEGACY_WORDS_KEY] || {};
 		},
 
-		async saveWords(words) {
+		async saveWords(words, options) {
 			await setToArea(chrome.storage.local, { [LEGACY_WORDS_KEY]: words });
-			return await writeWordsToSyncSafe(words);
+			const syncMode = options && options.syncMode ? options.syncMode : "deferred";
+			if (syncMode === "immediate") {
+				return await writeWordsToSyncSafe(words);
+			}
+			return scheduleDeferredWordsSync(words);
 		},
 
 		async getSourceLang() {
@@ -411,7 +479,7 @@
 			const excludedDomains = Array.isArray(items.excludedDomains)
 				? items.excludedDomains
 				: DEFAULT_EXCLUDED_DOMAINS;
-			await this.saveWords(words);
+			await this.saveWords(words, { syncMode: "immediate" });
 			await this.saveSourceLang(sourceLang);
 			await this.saveAutoTranslateOnSelect(autoTranslateOnSelect);
 			await this.saveDictionaryLookupEnabled(dictionaryLookupEnabled);
@@ -482,9 +550,8 @@
 
 		async syncFromCloud() {
 			await this.init();
+			await flushPendingWordsSync();
 			const localWords = await this.getWords();
-			// Push first, then pull and merge.
-			const initialSyncState = await writeWordsToSyncSafe(localWords);
 			const cloudWords = await readWordsFromSync();
 			const merged = Object.assign({}, localWords);
 			let mergedWords = 0;
@@ -502,18 +569,23 @@
 				merged[word] = next;
 				mergedWords += 1;
 			}
-			const finalSyncState = await this.saveWords(merged);
+			await setToArea(chrome.storage.local, { [LEGACY_WORDS_KEY]: merged });
+			const finalSyncState = await writeWordsToSyncSafe(merged);
 			return {
 				cloudWords: cloudEntries.length,
 				processedWords: mergedWords,
 				totalWords: Object.keys(merged).length,
-				initialSyncState,
 				finalSyncState,
 			};
+		},
+		async flushSync() {
+			await this.init();
+			return flushPendingWordsSync();
 		},
 	};
 
 	global.WordStorage = WordStorage;
+	installDeferredSyncAutoFlush();
 	if (global && global.__LA_TEST_HOOKS__) {
 		global.__LA_TEST_HOOKS__.storage = {
 			estimateBytes,
@@ -523,6 +595,10 @@
 			normalizeExampleForMerge,
 			mergeExamples,
 			mergeWordRecord,
+			flushPendingWordsSync,
+			scheduleDeferredWordsSync,
+			installDeferredSyncAutoFlush,
+			DEFERRED_SYNC_DELAY_MS,
 			DEFAULT_EXCLUDED_DOMAINS: DEFAULT_EXCLUDED_DOMAINS.slice(),
 			SUPPORTED_UI_LANGS: SUPPORTED_UI_LANGS.slice(),
 		};

@@ -142,7 +142,7 @@ function markLearned(word) {
 		WordStorage.getWords().then((words) => {
 			if (words[lowerCaseWord]) {
 				words[lowerCaseWord].learned = true;
-				WordStorage.saveWords(words).then(() => {
+				WordStorage.saveWords(words, { syncMode: "immediate" }).then(() => {
 					// 可能需要刷新页面或以其他方式更新显示
 					console.log(`Word: ${lowerCaseWord} marked as learned.`);
 					// make all highlighted words with the same word has no style
@@ -480,7 +480,7 @@ async function saveWord() {
 				familyForms: Array.isArray(familyResult.familyForms) ? familyResult.familyForms : [],
 				dictionary: dictionary,
 			};
-			await WordStorage.saveWords(words);
+			await WordStorage.saveWords(words, { syncMode: "immediate" });
 			closeModal();
 		} catch (error) {
 			console.error("Failed to save word:", error);

@@ -13,6 +13,13 @@
   <div id="dictionaryLookupRow"><span id="dictionaryLookupLabel"></span><span id="dictionaryLookupDesc"></span><input id="dictionaryLookupEnabled" type="checkbox"></div>
   <span id="importExportLabel"></span>
   <div id="syncStorageHint"></div>
+  <div id="simpleImportLabel"></div>
+  <div id="simpleImportDesc"></div>
+  <textarea id="simpleImportInput"></textarea>
+  <button id="simpleImportBtn"></button>
+  <button id="simpleImportFileBtn"></button>
+  <input id="simpleImportFile" type="file">
+  <div id="simpleImportStatus"></div>
   <span id="excludedDomainsLabel"></span>
   <span id="excludedDomainsDesc"></span>
   <select id="sourceLang"><option value="auto">auto</option><option value="en">English</option><option value="id">Indonesian</option><option value="zh">Chinese</option></select>
@@ -35,10 +42,14 @@
     const tourCalls = [];
     const saveCalls = [];
     let importedItems = null;
+    let savedWords = {};
     let anchorClicks = 0;
     window.DictionaryUtils = {
       supportsDictionaryBySourceLang(lang) {
         return ["en", "id", "zh"].includes((lang || "").split("-")[0]);
+      },
+      getEffectiveDictionarySections(payload) {
+        return Array.isArray(payload && payload.sections) ? payload.sections : [];
       },
     };
     window.UiI18n = {
@@ -54,12 +65,19 @@
       getSteps(lang, scope) { return [{ target: '#sourceLang', title: scope, body: lang }]; },
       getLabel(lang, key) { return `${lang}:${key}`; },
     };
+    window.LemmaUtils = {
+      supportsLemmaBySourceLang(lang) {
+        return ['en', 'id'].includes((lang || '').split('-')[0]);
+      },
+    };
     window.WordStorage = {
       getSourceLang() { return Promise.resolve('id'); },
       getAutoTranslateOnSelect() { return Promise.resolve(true); },
       getDictionaryLookupEnabled() { return Promise.resolve(true); },
       getUiLanguage() { return Promise.resolve('en'); },
       getExcludedDomains() { return Promise.resolve(['google.com']); },
+      getWords() { return Promise.resolve(JSON.parse(JSON.stringify(savedWords))); },
+      saveWords(words) { savedWords = JSON.parse(JSON.stringify(words)); saveCalls.push(['words', Object.keys(words).length]); return Promise.resolve({ compactLevel: 0, droppedWords: 0 }); },
       saveSourceLang(value) { saveCalls.push(['source', value]); return Promise.resolve(); },
       saveAutoTranslateOnSelect(value) { saveCalls.push(['auto', value]); return Promise.resolve(); },
       saveDictionaryLookupEnabled(value) { saveCalls.push(['dict', value]); return Promise.resolve(); },
@@ -69,7 +87,33 @@
       exportData() { return Promise.resolve({ words: { test: { meaning: 'x' } } }); },
       importData(items) { importedItems = items; return Promise.resolve(); },
     };
-    window.chrome = { runtime: { lastError: null } };
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(message, callback) {
+          if (message.action === 'getLemma') return callback({ found: true, lemma: 'mobil' });
+          if (message.action === 'getLemmaVariations') return callback({ found: true, familyForms: ['mobil', 'mobilnya'] });
+          if (message.action === 'lookupDictionary') {
+            return callback({
+              found: true,
+              source: 'kateglo',
+              query: message.text,
+              lemma: 'mobil',
+              usedLemma: false,
+              sections: [{
+                mode: 'surface',
+                query: message.text,
+                source: 'kateglo',
+                entries: [{ pos: 'Nomina', definition: 'kendaraan darat' }],
+              }],
+              entries: [{ pos: 'Nomina', definition: 'kendaraan darat' }],
+            });
+          }
+          if (message.action === 'translate') return callback({ translation: message.text === 'kendaraan darat' ? '陸上交通工具' : `T:${message.text}` });
+          callback(null);
+        },
+      },
+    };
     window.FileReader = function FileReader() {};
     window.FileReader.prototype.readAsText = function readAsText() {
       this.onload({ target: { result: JSON.stringify({ words: { imported: { meaning: 'ok' } } }) } });
@@ -138,6 +182,24 @@
           await wait(60);
           assert(tourCalls.some((x) => x.type === 'reset' && x.key === 'options_v1'), 'expected help reset');
           assert(tourCalls.some((x) => x.type === 'start' && x.scope === 'options_v1'), 'expected help start');
+        },
+      },
+      {
+        name: 'simple import parses first column and enriches imported words asynchronously',
+        async run() {
+          const input = document.getElementById('simpleImportInput');
+          input.value = 'mobilnya,extra\n"dinas",foo\n\nMOBILNYA';
+          document.getElementById('simpleImportBtn').click();
+          await wait(120);
+          assert(savedWords.mobilnya, 'expected first word imported');
+          assert(savedWords.dinas, 'expected csv first column imported');
+          assertEqual(Object.keys(savedWords).length >= 2, true);
+          await wait(220);
+          assertEqual(savedWords.mobilnya.lemma, 'mobil');
+          assert(savedWords.mobilnya.familyForms.includes('mobilnya'), 'expected family forms');
+          assertEqual(savedWords.mobilnya.meaning, '陸上交通工具');
+          assertEqual(savedWords.mobilnya.dictionary.source, 'kateglo');
+          assert(document.getElementById('simpleImportStatus').textContent.includes('simple_import'), 'expected import status text');
         },
       },
     ]);

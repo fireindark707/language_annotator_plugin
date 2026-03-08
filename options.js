@@ -19,6 +19,11 @@ document.addEventListener("DOMContentLoaded", function () {
 	const exportBtn = document.getElementById("exportBtn");
 	const importBtn = document.getElementById("importBtn");
 	const importFile = document.getElementById("importFile");
+	const simpleImportInput = document.getElementById("simpleImportInput");
+	const simpleImportBtn = document.getElementById("simpleImportBtn");
+	const simpleImportFileBtn = document.getElementById("simpleImportFileBtn");
+	const simpleImportFile = document.getElementById("simpleImportFile");
+	const simpleImportStatus = document.getElementById("simpleImportStatus");
 	const excludedDomainInput = document.getElementById("excludedDomainInput");
 	const addExcludedDomainBtn = document.getElementById("addExcludedDomainBtn");
 	const excludedDomainList = document.getElementById("excludedDomainList");
@@ -112,6 +117,11 @@ document.addEventListener("DOMContentLoaded", function () {
 		document.getElementById("dictionaryLookupDesc").textContent = t(uiLang, "dictionary_lookup_desc");
 		document.getElementById("importExportLabel").textContent = t(uiLang, "import_export");
 		document.getElementById("syncStorageHint").textContent = t(uiLang, "sync_storage_hint");
+		document.getElementById("simpleImportLabel").textContent = t(uiLang, "simple_import");
+		document.getElementById("simpleImportDesc").textContent = t(uiLang, "simple_import_desc");
+		simpleImportInput.placeholder = t(uiLang, "simple_import_placeholder");
+		simpleImportBtn.textContent = t(uiLang, "simple_import_action");
+		simpleImportFileBtn.textContent = t(uiLang, "simple_import_file");
 		document.getElementById("excludedDomainsLabel").textContent = t(uiLang, "excluded_domains");
 		document.getElementById("excludedDomainsDesc").textContent = t(uiLang, "excluded_domains_desc");
 		excludedDomainInput.placeholder = "example.com";
@@ -155,6 +165,233 @@ document.addEventListener("DOMContentLoaded", function () {
 			saveTimer = null;
 			persistSettings(false);
 		}, 180);
+	}
+
+	function setSimpleImportStatus(messageKey, replacements) {
+		const uiLanguage = uiLanguageSelect.value || "en";
+		let message = t(uiLanguage, messageKey);
+		Object.keys(replacements || {}).forEach(function (key) {
+			message = message.replace(`{${key}}`, String(replacements[key]));
+		});
+		simpleImportStatus.textContent = message;
+	}
+
+	function normalizeImportedWord(raw) {
+		const value = (raw || "").trim().replace(/^\uFEFF/, "");
+		if (!value) return "";
+		const unquoted = value.replace(/^['"]+|['"]+$/g, "").trim();
+		return unquoted;
+	}
+
+	function extractFirstColumn(line) {
+		const raw = (line || "").trim();
+		if (!raw) return "";
+		let delimiter = "";
+		if (raw.includes("\t")) delimiter = "\t";
+		else if (raw.includes(",")) delimiter = ",";
+		else if (raw.includes(";")) delimiter = ";";
+		if (!delimiter) return normalizeImportedWord(raw);
+
+		let inQuotes = false;
+		let cell = "";
+		for (let i = 0; i < raw.length; i += 1) {
+			const ch = raw[i];
+			if (ch === '"') {
+				if (inQuotes && raw[i + 1] === '"') {
+					cell += '"';
+					i += 1;
+					continue;
+				}
+				inQuotes = !inQuotes;
+				continue;
+			}
+			if (ch === delimiter && !inQuotes) break;
+			cell += ch;
+		}
+		return normalizeImportedWord(cell);
+	}
+
+	function parseSimpleImportText(rawText) {
+		const lines = String(rawText || "").split(/\r?\n/);
+		const seen = new Set();
+		const words = [];
+		lines.forEach(function (line) {
+			const word = extractFirstColumn(line);
+			if (!word) return;
+			const key = word.toLocaleLowerCase();
+			if (seen.has(key)) return;
+			seen.add(key);
+			words.push(word);
+		});
+		return words;
+	}
+
+	function createSimpleImportedEntry(existing, createdAt) {
+		return {
+			meaning: existing && typeof existing.meaning === "string" ? existing.meaning : "",
+			learned: !!(existing && existing.learned),
+			createdAt: existing && typeof existing.createdAt === "number" ? existing.createdAt : createdAt,
+			examples: Array.isArray(existing && existing.examples) ? existing.examples : [],
+			lemma: existing && typeof existing.lemma === "string" ? existing.lemma : "",
+			familyForms: Array.isArray(existing && existing.familyForms) ? existing.familyForms : [],
+			dictionary: existing && existing.dictionary && typeof existing.dictionary === "object" ? existing.dictionary : null,
+			encounterCount: existing && typeof existing.encounterCount === "number" ? existing.encounterCount : 0,
+			pageCount: existing && typeof existing.pageCount === "number" ? existing.pageCount : 0,
+			encounterPageKeys: Array.isArray(existing && existing.encounterPageKeys) ? existing.encounterPageKeys : [],
+		};
+	}
+
+	function requestRuntime(action, payload) {
+		return new Promise(function (resolve) {
+			chrome.runtime.sendMessage(Object.assign({ action: action }, payload || {}), function (response) {
+				if (chrome.runtime.lastError) {
+					resolve(null);
+					return;
+				}
+				resolve(response || null);
+			});
+		});
+	}
+
+	function pickDictionarySummary(dictPayload) {
+		if (!dictPayload || !dictPayload.found) return null;
+		const sections = DictionaryUtilsRef.getEffectiveDictionarySections(dictPayload);
+		const primary = sections.find(function (section) {
+			return Array.isArray(section.entries) && section.entries.length > 0 && section.mode === "surface";
+		}) || sections.find(function (section) {
+			return Array.isArray(section.entries) && section.entries.length > 0;
+		});
+		if (!primary) return null;
+		const first = primary.entries[0] || {};
+		return {
+			source: primary.source || dictPayload.source || "dictionary",
+			queryText: primary.query || dictPayload.query || "",
+			lookupLemma: dictPayload.lemma || "",
+			usedLemma: !!dictPayload.usedLemma,
+			pos: typeof first.pos === "string" ? first.pos : "",
+			definitionOriginal: typeof first.definition === "string" ? first.definition : "",
+			definitionTranslated: "",
+			entries: [{
+				pos: typeof first.pos === "string" ? first.pos : "",
+				definitionOriginal: typeof first.definition === "string" ? first.definition : "",
+				definitionTranslated: "",
+			}],
+			selectedIndex: 0,
+			updatedAt: Date.now(),
+		};
+	}
+
+	async function enrichImportedWords(importedWords) {
+		if (!importedWords.length) return;
+		const sourceLang = await WordStorage.getSourceLang();
+		const dictionaryEnabled = await WordStorage.getDictionaryLookupEnabled().catch(function () {
+			return true;
+		});
+		const canLookupDictionary = dictionaryEnabled && DictionaryUtilsRef.supportsDictionaryBySourceLang(sourceLang);
+		const canLemma = globalThis.LemmaUtils && globalThis.LemmaUtils.supportsLemmaBySourceLang(sourceLang);
+
+		let words = await WordStorage.getWords();
+		for (let index = 0; index < importedWords.length; index += 1) {
+			const word = importedWords[index];
+			const current = words[word];
+			if (!current) continue;
+
+			let next = Object.assign({}, current);
+			if (canLemma) {
+				const lemmaResult = await requestRuntime("getLemma", { text: word, sourceLang: sourceLang || "auto" });
+				if (lemmaResult && lemmaResult.found && typeof lemmaResult.lemma === "string") {
+					next.lemma = lemmaResult.lemma.trim();
+					const variationsResult = await requestRuntime("getLemmaVariations", {
+						text: word,
+						lemma: next.lemma,
+						sourceLang: sourceLang || "auto",
+					});
+					if (variationsResult && Array.isArray(variationsResult.familyForms)) {
+						next.familyForms = variationsResult.familyForms.slice();
+					}
+				}
+			}
+
+			if (canLookupDictionary) {
+				const dictPayload = await requestRuntime("lookupDictionary", {
+					text: word,
+					sourceLang: sourceLang || "auto",
+				});
+				const dictSummary = pickDictionarySummary(dictPayload);
+				if (dictSummary) {
+					if (dictSummary.definitionOriginal) {
+						const translated = await requestRuntime("translate", {
+							text: dictSummary.definitionOriginal,
+							sourceLang: sourceLang || "auto",
+						});
+					if (translated && typeof translated.translation === "string") {
+						dictSummary.definitionTranslated = translated.translation.trim();
+						if (dictSummary.entries[0]) {
+							dictSummary.entries[0].definitionTranslated = dictSummary.definitionTranslated;
+						}
+					}
+					}
+					next.dictionary = dictSummary;
+					if (!next.meaning) {
+						next.meaning = dictSummary.definitionTranslated || dictSummary.definitionOriginal || next.meaning;
+					}
+				}
+			}
+
+			if (!next.meaning) {
+				const translatedWord = await requestRuntime("translate", {
+					text: word,
+					sourceLang: sourceLang || "auto",
+				});
+				if (translatedWord && typeof translatedWord.translation === "string") {
+					next.meaning = translatedWord.translation.trim();
+				}
+			}
+
+			words[word] = next;
+			if ((index + 1) % 3 === 0 || index === importedWords.length - 1) {
+				await WordStorage.saveWords(words, { syncMode: "deferred" });
+				setSimpleImportStatus("simple_import_progress", {
+					current: index + 1,
+					total: importedWords.length,
+				});
+			}
+		}
+
+		setSimpleImportStatus("simple_import_enriched", { count: importedWords.length });
+	}
+
+	async function runSimpleImport(rawText) {
+		const uiLanguage = uiLanguageSelect.value || "en";
+		const importedWords = parseSimpleImportText(rawText);
+		if (importedWords.length === 0) {
+			UiToast.show(t(uiLanguage, "simple_import_empty"), "error");
+			setSimpleImportStatus("simple_import_empty");
+			return;
+		}
+
+		const words = await WordStorage.getWords();
+		let addedCount = 0;
+		const now = Date.now();
+		importedWords.forEach(function (word, index) {
+			const existing = words[word];
+			if (!existing) addedCount += 1;
+			words[word] = createSimpleImportedEntry(existing, now + index);
+		});
+		await WordStorage.saveWords(words, { syncMode: "immediate" });
+
+		UiToast.show(t(uiLanguage, "simple_import_done").replace("{count}", String(importedWords.length)), "success");
+		setSimpleImportStatus("simple_import_queued", {
+			count: importedWords.length,
+			added: addedCount,
+		});
+
+		window.setTimeout(function () {
+			enrichImportedWords(importedWords).catch(function (error) {
+				console.error("Simple import enrichment failed:", error);
+				setSimpleImportStatus("simple_import_partial");
+			});
+		}, 30);
 	}
 
 	Promise.all([
@@ -261,6 +498,18 @@ document.addEventListener("DOMContentLoaded", function () {
 		importFile.click();
 	});
 
+	simpleImportBtn.addEventListener("click", function () {
+		runSimpleImport(simpleImportInput.value).catch(function (error) {
+			console.error("Simple import failed:", error);
+			UiToast.show(t(uiLanguageSelect.value || "en", "import_failed"), "error");
+			setSimpleImportStatus("simple_import_partial");
+		});
+	});
+
+	simpleImportFileBtn.addEventListener("click", function () {
+		simpleImportFile.click();
+	});
+
 	importFile.addEventListener("change", function (event) {
 		const file = event.target.files[0];
 		const uiLanguage = uiLanguageSelect.value || "zh-TW";
@@ -282,6 +531,21 @@ document.addEventListener("DOMContentLoaded", function () {
 			}
 		};
 		reader.readAsText(file);
+	});
+
+	simpleImportFile.addEventListener("change", function (event) {
+		const file = event.target.files[0];
+		if (!file) return;
+		const reader = new FileReader();
+		reader.onload = function (e) {
+			runSimpleImport(e.target.result || "").catch(function (error) {
+				console.error("Simple import file failed:", error);
+				UiToast.show(t(uiLanguageSelect.value || "en", "import_failed"), "error");
+				setSimpleImportStatus("simple_import_partial");
+			});
+		};
+		reader.readAsText(file);
+		event.target.value = "";
 	});
 
 	if (helpBtn) {

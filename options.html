@@ -140,6 +140,31 @@
             box-shadow: 0 0 0 3px rgba(217, 31, 38, 0.14);
         }
 
+        textarea,
+        input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 14px 12px 16px 11px;
+            background: #fffdf9;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            font-family: inherit;
+        }
+
+        textarea:focus,
+        input[type="text"]:focus {
+            border-color: #e4878f;
+            box-shadow: 0 0 0 3px rgba(217, 31, 38, 0.14);
+        }
+
+        textarea {
+            min-height: 120px;
+            resize: vertical;
+            margin-top: 10px;
+        }
+
         .actions {
             display: flex;
             gap: 8px;
@@ -264,6 +289,12 @@
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
+        }
+
+        .simple-import {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px dashed var(--border);
         }
 
         .domain-row {
@@ -439,6 +470,17 @@
                 <button id="importBtn" class="btn-secondary" type="button">匯入</button>
                 <input type="file" id="importFile" style="display:none;" />
             </div>
+            <div class="simple-import">
+                <div class="switch-title" id="simpleImportLabel">簡易匯入</div>
+                <div class="switch-desc" id="simpleImportDesc">貼上純文字單詞清單，或匯入 txt / csv。系統會先快速建立單詞，再逐步補上原型與詞典。</div>
+                <textarea id="simpleImportInput" rows="6" placeholder="apple&#10;banana&#10;orange"></textarea>
+                <div class="io-actions">
+                    <button id="simpleImportBtn" class="btn-secondary" type="button">開始簡易匯入</button>
+                    <button id="simpleImportFileBtn" class="btn-secondary" type="button">匯入 txt / csv</button>
+                    <input type="file" id="simpleImportFile" accept=".txt,.csv,text/plain,text/csv" style="display:none;" />
+                </div>
+                <div class="switch-desc" id="simpleImportStatus"></div>
+            </div>
         </div>
 
         <div class="actions">
@@ -449,6 +491,7 @@
 
     <script src="lib/storage-merge-utils.js"></script>
     <script src="lib/dictionary-utils.js"></script>
+    <script src="lib/lemma-utils.js"></script>
     <script src="storage.js"></script>
     <script src="ui-i18n.js"></script>
     <script src="ui-tour.js"></script>

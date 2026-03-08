@@ -552,7 +552,7 @@ function markCurrentQuestionLearned() {
 	WordStorage.getWords().then((words) => {
 		if (!words[q.word]) return false;
 		words[q.word].learned = true;
-		return WordStorage.saveWords(words).then(() => true);
+		return WordStorage.saveWords(words, { syncMode: "immediate" }).then(() => true);
 	}).then((saved) => {
 		if (!saved) {
 			markLearnedBtn.disabled = false;
@@ -580,7 +580,7 @@ function applySummaryLearnedWords() {
 			}
 		});
 		if (!changed) return true;
-		return WordStorage.saveWords(words).then(() => true);
+		return WordStorage.saveWords(words, { syncMode: "immediate" }).then(() => true);
 	}).then((saved) => {
 		if (!saved) {
 			updateApplyLearnedWordsBtn();

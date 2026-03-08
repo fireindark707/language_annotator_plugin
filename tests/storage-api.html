@@ -93,6 +93,74 @@
           assertEqual(domains[1], 'chat.openai.com');
         },
       },
+      {
+        name: 'saveWords defers sync by default until flushSync is called',
+        async run() {
+          Object.keys(chrome.storage.local._store).forEach((key) => { delete chrome.storage.local._store[key]; });
+          Object.keys(chrome.storage.sync._store).forEach((key) => { delete chrome.storage.sync._store[key]; });
+          await S.saveWords({ deferred: { meaning: 'D' } });
+          assertEqual(!!chrome.storage.sync._store.words_meta_v2, false);
+          const syncState = await S.flushSync();
+          assert(syncState && syncState.failed !== true, 'expected deferred sync to flush successfully');
+          assert(chrome.storage.sync._store.words_meta_v2, 'expected sync metadata after flush');
+        },
+      },
+      {
+        name: 'saveWords immediate mode writes sync right away',
+        async run() {
+          Object.keys(chrome.storage.local._store).forEach((key) => { delete chrome.storage.local._store[key]; });
+          Object.keys(chrome.storage.sync._store).forEach((key) => { delete chrome.storage.sync._store[key]; });
+          const syncState = await S.saveWords({ immediate: { meaning: 'I' } }, { syncMode: 'immediate' });
+          assert(syncState && syncState.failed !== true, 'expected immediate sync state');
+          assert(chrome.storage.sync._store.words_meta_v2, 'expected sync metadata written immediately');
+        },
+      },
+      {
+        name: 'visibilitychange flushes deferred sync automatically',
+        async run() {
+          Object.keys(chrome.storage.local._store).forEach((key) => { delete chrome.storage.local._store[key]; });
+          Object.keys(chrome.storage.sync._store).forEach((key) => { delete chrome.storage.sync._store[key]; });
+          await S.saveWords({ hiddenFlush: { meaning: 'H' } });
+          assertEqual(!!chrome.storage.sync._store.words_meta_v2, false);
+          Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+          document.dispatchEvent(new Event('visibilitychange'));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          assert(chrome.storage.sync._store.words_meta_v2, 'expected sync metadata after visibility flush');
+        },
+      },
+      {
+        name: 'pagehide flushes deferred sync automatically',
+        async run() {
+          Object.keys(chrome.storage.local._store).forEach((key) => { delete chrome.storage.local._store[key]; });
+          Object.keys(chrome.storage.sync._store).forEach((key) => { delete chrome.storage.sync._store[key]; });
+          await S.saveWords({ pagehideFlush: { meaning: 'P' } });
+          assertEqual(!!chrome.storage.sync._store.words_meta_v2, false);
+          window.dispatchEvent(new Event('pagehide'));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          assert(chrome.storage.sync._store.words_meta_v2, 'expected sync metadata after pagehide flush');
+        },
+      },
+      {
+        name: 'syncFromCloud merges remote words before writing back to sync',
+        async run() {
+          Object.keys(chrome.storage.local._store).forEach((key) => { delete chrome.storage.local._store[key]; });
+          Object.keys(chrome.storage.sync._store).forEach((key) => { delete chrome.storage.sync._store[key]; });
+          chrome.storage.local._store.words = {
+            localOnly: { meaning: 'L', createdAt: 2 },
+          };
+          chrome.storage.sync._store.words = {
+            remoteOnly: { meaning: 'R', createdAt: 1 },
+          };
+          const result = await S.syncFromCloud();
+          const localWords = await S.getWords();
+          assert(localWords.localOnly, 'expected local word kept');
+          assert(localWords.remoteOnly, 'expected remote word merged into local');
+          assertEqual(result.cloudWords, 1);
+          assertEqual(result.totalWords, 2);
+          assert(result.finalSyncState && result.finalSyncState.failed !== true, 'expected final sync state');
+          assert(chrome.storage.sync._store.words_meta_v2, 'expected sync shards metadata written');
+        },
+      },
     ]);
   </script>
 </body>

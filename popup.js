@@ -298,7 +298,7 @@ function updateExamplesForWord(word, updater) {
 		const current = normalizeExamples(existing);
 		const next = updater(current.slice());
 		words[word].examples = trimExamples(next);
-		return WordStorage.saveWords(words).then(() => true);
+		return WordStorage.saveWords(words, { syncMode: "deferred" }).then(() => true);
 	}));
 }
 
@@ -673,7 +673,7 @@ function deleteWord(word, wordItem) {
 	}
 	const runDelete = () => WordStorage.getWords().then((words) => {
 		delete words[word];
-		return WordStorage.saveWords(words);
+		return WordStorage.saveWords(words, { syncMode: "immediate" });
 	});
 	const promise = wordItem ? new Promise((resolve) => window.setTimeout(resolve, 210)).then(runDelete) : runDelete();
 	promise.then(() => {
@@ -691,7 +691,7 @@ function deleteWord(word, wordItem) {
 function toggleLearned(word) {
 	new Promise((resolve) => window.setTimeout(resolve, 170)).then(() => WordStorage.getWords()).then((words) => {
 		words[word].learned = !words[word].learned;
-		return WordStorage.saveWords(words);
+		return WordStorage.saveWords(words, { syncMode: "immediate" });
 	}).then(() => {
 		updateWordsList();
 		UiToast.show(t("saved"), "success");
