@@ -8,50 +8,11 @@ if (typeof importScripts === "function") {
 	importScripts("storage.js");
 }
 
-const SIMPLEMMA_DICTIONARY_BASE_URL =
-	"https://media.githubusercontent.com/media/fireindark707/simplelemma_js/main/src/data/";
-let lemmaService = null;
-
-function normalizeLemmaLang(sourceLang) {
-	const base = (((sourceLang || "").split("-")[0]) || "").toLowerCase();
-	if (!base || base === "auto") return "";
-	if (base === "fil") return "tl";
-	return base;
-}
-
-function supportsLemmaLang(sourceLang) {
-	const lang = normalizeLemmaLang(sourceLang);
-	if (!lang || !globalThis.simplemma || !Array.isArray(simplemma.SUPPORTED_LANGUAGES)) return false;
-	return simplemma.SUPPORTED_LANGUAGES.includes(lang);
-}
-
-function getLemmaService() {
-	if (lemmaService) return lemmaService;
-	if (!globalThis.simplemma) return null;
-	const factory = new simplemma.FetchDictionaryFactory(SIMPLEMMA_DICTIONARY_BASE_URL);
-	const strategy = new simplemma.DefaultStrategy({ dictionaryFactory: factory });
-	lemmaService = new simplemma.Lemmatizer({ lemmatizationStrategy: strategy });
-	return lemmaService;
-}
-
-function getLemmaForQuery(text, sourceLang) {
-	const query = (text || "").trim();
-	const lang = normalizeLemmaLang(sourceLang);
-	if (!query || !lang || !supportsLemmaLang(lang)) {
-		return Promise.resolve({ found: false, lemma: "", lang });
-	}
-	const service = getLemmaService();
-	if (!service || typeof service.lemmatizeAsync !== "function") {
-		return Promise.resolve({ found: false, lemma: "", lang });
-	}
-	return service.lemmatizeAsync(query, lang)
-		.then((lemma) => {
-			const normalized = typeof lemma === "string" ? lemma.trim() : "";
-			if (!normalized) return { found: false, lemma: "", lang };
-			return { found: true, lemma: normalized, lang };
-		})
-		.catch(() => ({ found: false, lemma: "", lang }));
-}
+const SIMPLEMMA_DICTIONARY_BASE_URL = LemmaUtils.SIMPLEMMA_DICTIONARY_BASE_URL;
+let getLemmaForQuery = LemmaUtils.createSimplemmaLemmaProvider({
+	simplemmaGlobal: globalThis.simplemma,
+	dictionaryBaseUrl: SIMPLEMMA_DICTIONARY_BASE_URL,
+});
 
 chrome.runtime.onInstalled.addListener(function () {
 	chrome.contextMenus.create({
@@ -155,7 +116,7 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 	if (request.action === "getLemma") {
 		getLemmaForQuery(request.text, request.sourceLang)
 			.then((result) => sendResponse(result))
-			.catch(() => sendResponse({ found: false, lemma: "", lang: normalizeLemmaLang(request.sourceLang) }));
+			.catch(() => sendResponse({ found: false, lemma: "", lang: LemmaUtils.normalizeLemmaSourceLang(request.sourceLang) }));
 		return true;
 	}
 

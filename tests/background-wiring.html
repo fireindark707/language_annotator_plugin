@@ -51,6 +51,7 @@
       Lemmatizer: function Lemmatizer() { this.lemmatizeAsync = (text) => Promise.resolve(text === 'running' ? 'run' : text); },
     };
   </script>
+  <script src="../lib/lemma-utils.js"></script>
   <script src="../background.js"></script>
   <script src="./lib/test-harness.js"></script>
   <script>

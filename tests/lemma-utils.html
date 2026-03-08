@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>lemma-utils</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script>
+    window.chrome = {
+      runtime: {
+        sendMessage(message, callback) {
+          const lemmaMap = { berjalan: "jalan", cars: "car" };
+          callback({ found: !!lemmaMap[message.text], lemma: lemmaMap[message.text] || "" });
+        },
+      },
+    };
+    window.simplemma = {
+      SUPPORTED_LANGUAGES: ["en", "id", "tl"],
+      FetchDictionaryFactory: function FetchDictionaryFactory(url) { this.url = url; },
+      DefaultStrategy: function DefaultStrategy(options) { this.options = options; },
+      Lemmatizer: function Lemmatizer() {
+        this.lemmatizeAsync = async (text) => ({ running: "run", berjalan: "jalan" }[text] || text);
+      },
+    };
+  </script>
+  <script src="../lib/lemma-utils.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assertEqual, runTests } = window.TestHarness;
+
+    runTests([
+      {
+        name: "normalize and support helpers map lemma languages correctly",
+        run() {
+          assertEqual(LemmaUtils.normalizeLemmaSourceLang("fil-PH"), "tl");
+          assertEqual(LemmaUtils.normalizeLemmaSourceLang("auto"), "");
+          assertEqual(LemmaUtils.supportsLemmaBySourceLang("id-ID"), true);
+          assertEqual(LemmaUtils.supportsRuntimeLemmaBySourceLang("fil-PH", window.simplemma), true);
+          assertEqual(LemmaUtils.supportsRuntimeLemmaBySourceLang("zh-TW", window.simplemma), false);
+        },
+      },
+      {
+        name: "createRuntimeLemmaResolver normalizes query and caches results",
+        async run() {
+          let calls = 0;
+          const resolver = LemmaUtils.createRuntimeLemmaResolver({
+            normalizeQuery(text) { return (text || "").trim().replace(/^\"|\"$/g, ""); },
+            sendMessage(message, callback) {
+              calls += 1;
+              chrome.runtime.sendMessage(message, callback);
+            },
+            cache: new Map(),
+          });
+
+          const first = await resolver('"berjalan"', "id-ID");
+          const second = await resolver('"berjalan"', "id-ID");
+          assertEqual(first.lemma, "jalan");
+          assertEqual(first.effectiveQuery, "jalan");
+          assertEqual(first.lang, "id");
+          assertEqual(second.lemma, "jalan");
+          assertEqual(calls, 1);
+        },
+      },
+      {
+        name: "createSimplemmaLemmaProvider returns normalized lemma payloads",
+        async run() {
+          const provider = LemmaUtils.createSimplemmaLemmaProvider({
+            simplemmaGlobal: window.simplemma,
+          });
+          const result = await provider("running", "en-US");
+          assertEqual(result.found, true);
+          assertEqual(result.lemma, "run");
+          assertEqual(result.lang, "en");
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

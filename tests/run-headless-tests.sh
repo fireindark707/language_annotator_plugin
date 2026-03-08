@@ -14,6 +14,7 @@ TEST_FILES=(
   "$ROOT_DIR/tests/storage-api.html"
   "$ROOT_DIR/tests/runtime-dependencies-smoke.html"
   "$ROOT_DIR/tests/translation-utils.html"
+  "$ROOT_DIR/tests/lemma-utils.html"
   "$ROOT_DIR/tests/ui-tour.html"
   "$ROOT_DIR/tests/ui-i18n.html"
   "$ROOT_DIR/tests/ui-toast.html"

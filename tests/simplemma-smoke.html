@@ -7,6 +7,7 @@
 <body>
   <pre id="test-output">running</pre>
   <script src="file:///home/phoenix000/文件/projects/language_annotator_plugin/tests/lib/test-harness.js"></script>
+  <script src="file:///home/phoenix000/文件/projects/language_annotator_plugin/lib/lemma-utils.js"></script>
   <script src="file:///home/phoenix000/文件/projects/language_annotator_plugin/packages/simplemma.bundle.js"></script>
   <script>
     const { assert, assertEqual, runTests } = window.TestHarness;
@@ -43,6 +44,16 @@
           assertEqual(await lemmatizer.lemmatizeAsync('cars', 'en'), 'car', 'cars -> car');
           assertEqual(await lemmatizer.lemmatizeAsync('berjalan', 'id'), 'jalan', 'berjalan -> jalan');
           assertEqual(await lemmatizer.lemmatizeAsync('makanan', 'id'), 'makan', 'makanan -> makan');
+        },
+      },
+      {
+        name: 'lemma utils provider works against bundled simplemma runtime',
+        async run() {
+          const provider = LemmaUtils.createSimplemmaLemmaProvider({ simplemmaGlobal: window.simplemma });
+          const result = await provider('running', 'en');
+          assertEqual(result.found, true);
+          assertEqual(result.lemma, 'run');
+          assertEqual(result.lang, 'en');
         },
       },
     ]);

@@ -17,7 +17,6 @@ const translationMemoryCache = new Map();
 const enqueueTranslationJob = TranslationUtilsRef.createTaskQueue(MAX_TRANSLATE_CONCURRENCY);
 const exampleObservers = new WeakMap();
 const wordWriteLocks = new Map();
-const lemmaCache = new Map();
 let lemmaBackfillStarted = false;
 let lemmaBackfillPromise = null;
 function getEncounterCount(wordData) {
@@ -169,34 +168,11 @@ const supportsDictionaryBySourceLang = DictionaryUtilsRef.supportsDictionaryBySo
 const getDictionarySourceLabel = DictionaryUtilsRef.getDictionarySourceLabel;
 const normalizeLemmaSourceLang = LemmaUtilsRef.normalizeLemmaSourceLang;
 const supportsLemmaBySourceLang = LemmaUtilsRef.supportsLemmaBySourceLang;
-
-function resolveLemma(text, sourceLang) {
-	const query = normalizeDictionaryQuery(text);
-	const lang = normalizeLemmaSourceLang(sourceLang);
-	if (!query || !lang || !supportsLemmaBySourceLang(lang)) {
-		return Promise.resolve({ query, lemma: "", effectiveQuery: query, lang });
-	}
-	const cacheKey = `${lang}__${query.toLowerCase()}`;
-	if (lemmaCache.has(cacheKey)) return Promise.resolve(lemmaCache.get(cacheKey));
-	return new Promise((resolve) => {
-		chrome.runtime.sendMessage(
-			{ action: "getLemma", text: query, sourceLang: lang },
-			(response) => {
-				const lemma = response && response.found && typeof response.lemma === "string"
-					? response.lemma.trim()
-					: "";
-				const payload = {
-					query,
-					lemma,
-					effectiveQuery: lemma || query,
-					lang,
-				};
-				lemmaCache.set(cacheKey, payload);
-				resolve(payload);
-			}
-		);
-	});
-}
+const resolveLemma = LemmaUtilsRef.createRuntimeLemmaResolver({
+	normalizeQuery: normalizeDictionaryQuery,
+	sendMessage: chrome.runtime.sendMessage.bind(chrome.runtime),
+	cache: new Map(),
+});
 
 function createLimiter(limit) {
 	let active = 0;
