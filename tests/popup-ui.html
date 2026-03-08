@@ -76,6 +76,7 @@
           const items = document.querySelectorAll('.word-item');
           assertEqual(items.length, 1);
           assert(items[0].textContent.includes('vulgar'), 'expected unlearned word');
+          assert(document.querySelector('.word-text-group .word'), 'expected grouped word layout');
           assert(tourCalls.some((x) => x.type === 'maybe' && x.scope === 'popup_v1'), 'expected popup tour');
         },
       },

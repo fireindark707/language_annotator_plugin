@@ -285,17 +285,28 @@
 
         .word-line {
             display: flex;
-            align-items: baseline;
+            align-items: flex-start;
+            justify-content: space-between;
             gap: 8px;
+            min-width: 0;
+        }
+
+        .word-text-group {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex;
             flex-wrap: wrap;
+            align-items: baseline;
+            gap: 4px 8px;
         }
 
         .word {
             font-size: 22px;
             font-weight: 800;
             margin: 0;
-            display: block;
+            display: inline;
             line-height: 1.15;
+            overflow-wrap: anywhere;
             word-break: break-word;
         }
 
@@ -311,6 +322,8 @@
             color: #8a756a;
             font-size: 12px;
             line-height: 1.4;
+            max-width: 100%;
+            overflow-wrap: anywhere;
             word-break: break-word;
             margin-right: 6px;
         }

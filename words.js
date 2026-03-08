@@ -804,6 +804,8 @@ function updateWordsList() {
 
 				const wordLine = document.createElement("div");
 				wordLine.className = "word-line";
+				const wordTextGroup = document.createElement("div");
+				wordTextGroup.className = "word-text-group";
 
 				const wordSpan = document.createElement("span");
 				wordSpan.className = `word${words[word].learned ? " learned" : ""}`;
@@ -965,10 +967,11 @@ function updateWordsList() {
 				actionWrap.appendChild(exampleButton);
 				actionWrap.appendChild(dictButton);
 				actionWrap.appendChild(deleteButton);
-				wordLine.appendChild(wordSpan);
+				wordTextGroup.appendChild(wordSpan);
 				if (lemmaSpan) {
-					wordLine.appendChild(lemmaSpan);
+					wordTextGroup.appendChild(lemmaSpan);
 				}
+				wordLine.appendChild(wordTextGroup);
 				wordLine.appendChild(countSpan);
 				wordMain.appendChild(wordLine);
 				wordMain.appendChild(meaningSpan);

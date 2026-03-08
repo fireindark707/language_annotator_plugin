@@ -515,6 +515,8 @@ function updateWordsList() {
 
 			const wordLabelRow = document.createElement("div");
 			wordLabelRow.className = "word-label-row";
+			const wordTextGroup = document.createElement("div");
+			wordTextGroup.className = "word-text-group";
 
 			const wordToolbar = document.createElement("div");
 			wordToolbar.className = "word-toolbar";
@@ -630,10 +632,11 @@ function updateWordsList() {
 				}
 			});
 
-			wordLabelRow.appendChild(wordSpan);
+			wordTextGroup.appendChild(wordSpan);
 			if (lemmaSpan) {
-				wordLabelRow.appendChild(lemmaSpan);
+				wordTextGroup.appendChild(lemmaSpan);
 			}
+			wordLabelRow.appendChild(wordTextGroup);
 			wordLabelRow.appendChild(countSpan);
 			wordMain.appendChild(wordLabelRow);
 			wordMain.appendChild(meaningSpan);
