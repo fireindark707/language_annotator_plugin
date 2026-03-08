@@ -26,8 +26,13 @@
       SUPPORTED_LANGUAGES: ["en", "id", "tl"],
       FetchDictionaryFactory: function () {},
       DefaultStrategy: function () {},
-      Lemmatizer: function () { this.lemmatizeAsync = async (text) => text; },
+      Lemmatizer: function () {
+        this.lemmatizeAsync = async (text) => (window.__lemmaMap && window.__lemmaMap[text]) || text;
+        this.getInflectionsAsync = async (lemma) => (window.__familyMap && window.__familyMap[lemma]) || [lemma];
+      },
     };
+    window.__lemmaMap = {};
+    window.__familyMap = {};
   </script>
   <script src="../lib/dictionary-utils.js"></script>
   <script src="../lib/lemma-utils.js"></script>
@@ -73,7 +78,7 @@
                 : { found: true, source: "dictionaryapi", entries: [{ definition: "lemma form" }] }
             ),
           });
-          getLemmaForQuery = () => Promise.resolve({ found: true, lemma: "run", lang: "en" });
+          window.__lemmaMap.running = "run";
 
           const result = await lookupDictionaryWithLemmaFallback("running", "en");
           assertEqual(result.found, true);
@@ -83,6 +88,7 @@
           assertEqual(result.sections[1].mode, "lemma");
           assertEqual(result.sections[1].query, "run");
           DictionaryUtils.buildDictionaryLookup = originalBuilder;
+          window.__lemmaMap = {};
         },
       },
       {
@@ -97,7 +103,7 @@
                 : { found: true, source: "dictionaryapi", entries: [{ definition: "lemma form" }] }
             ),
           });
-          getLemmaForQuery = () => Promise.resolve({ found: true, lemma: "run", lang: "en" });
+          window.__lemmaMap.running = "run";
 
           const result = await lookupDictionaryWithLemmaFallback("running", "en");
           assertEqual(result.found, true);
@@ -106,6 +112,7 @@
           assertEqual(result.sections[0].found, false);
           assertEqual(result.sections[1].found, true);
           DictionaryUtils.buildDictionaryLookup = originalBuilder;
+          window.__lemmaMap = {};
         },
       },
       {
@@ -116,7 +123,7 @@
             sourceName: "dictionaryapi",
             lookupPromise: Promise.resolve({ found: true, source: "dictionaryapi", entries: [{ definition: "surface only" }] }),
           });
-          getLemmaForQuery = () => Promise.resolve({ found: false, lemma: "", lang: "en" });
+          window.__lemmaMap = {};
 
           const result = await lookupDictionaryWithLemmaFallback("run", "en");
           assertEqual(result.sections.length, 1);

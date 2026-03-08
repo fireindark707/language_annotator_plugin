@@ -38,7 +38,7 @@
         },
       },
       {
-        name: "compactWordsForSync level 2 trims examples and keeps lemma data",
+        name: "compactWordsForSync trims heavy dictionary/example fields before dropping words",
         run() {
           const words = {
             alpha: {
@@ -46,6 +46,7 @@
               learned: false,
               createdAt: 10,
               lemma: "alpha",
+              familyForms: ["alpha", "alphas", "alphaing"],
               encounterPageKeys: Array.from({ length: 40 }, (_, i) => `page-${i}`),
               examples: Array.from({ length: 12 }, (_, i) => ({
                 text: `example-${i}`,
@@ -69,13 +70,21 @@
               },
             },
           };
+          const level1 = hooks.compactWordsForSync(words, 1);
           const compacted = hooks.compactWordsForSync(words, 2);
+          assertEqual(level1.alpha.examples.length, 10, "level 1 should cap examples before dropping words");
+          assert(!("entries" in level1.alpha.dictionary), "level 1 should strip heavy dictionary entries");
+          assert(!("translation" in level1.alpha.examples[0]), "level 1 should strip example translations");
+          assertEqual(level1.alpha.encounterPageKeys.length, 40, "level 1 should keep existing page keys when already under cap");
           assertEqual(compacted.alpha.lemma, "alpha");
-          assertEqual(compacted.alpha.examples.length, 8, "level 2 should cap examples to 8");
+          assertEqual(level1.alpha.familyForms.length, 3, "level 1 should keep family forms");
+          assertEqual(compacted.alpha.examples.length, 6, "level 2 should cap examples to 6");
           assert(!("translation" in compacted.alpha.examples[0]), "level 2 should strip example translations");
           assertEqual(compacted.alpha.encounterPageKeys.length, 30, "level 2 should cap page keys to 30");
+          assert(!("entries" in compacted.alpha.dictionary), "level 2 should keep dictionary summary only");
           assertEqual(compacted.alpha.dictionary.lookupLemma, "alpha");
           assertEqual(compacted.alpha.dictionary.usedLemma, true);
+          assertEqual(compacted.alpha.familyForms.length, 3, "level 2 should keep compact family forms");
         },
       },
       {
@@ -105,6 +114,7 @@
               learned: false,
               createdAt: 80,
               lemma: "run",
+              familyForms: ["run", "runs"],
               examples: [{ text: "Run fast", pinned: false }],
               encounterCount: 1,
               pageCount: 1,
@@ -116,6 +126,7 @@
               learned: true,
               createdAt: 30,
               lemma: "running",
+              familyForms: ["running", "ran"],
               examples: [{ text: "Run fast", pinned: true }, { text: "Run daily", pinned: false }],
               encounterCount: 7,
               pageCount: 2,
@@ -127,6 +138,8 @@
           assertEqual(merged.learned, true);
           assertEqual(merged.createdAt, 30);
           assertEqual(merged.lemma, "run");
+          assert(merged.familyForms.includes("run"), "merged family should keep local root");
+          assert(merged.familyForms.includes("ran"), "merged family should include cloud forms");
           assertEqual(merged.examples.length, 2);
           assert(merged.encounterCount >= 2, "encounter count should never be less than example count");
           assert(merged.pageCount >= 2, "page count should reflect merged page keys");

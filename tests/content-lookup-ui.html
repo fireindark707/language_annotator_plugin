@@ -13,6 +13,24 @@
   <script>
     const { assert, assertEqual, runTests } = window.TestHarness;
     const U = window.ContentLookupUi;
+    window.speechSynthesis = {
+      cancel() {},
+      speak() {},
+      getVoices() { return [{ lang: "en" }]; },
+    };
+    window.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) {
+      this.text = text;
+      this.lang = "";
+    };
+
+    async function waitFor(condition, timeout = 1000) {
+      const start = Date.now();
+      while (Date.now() - start < timeout) {
+        if (condition()) return;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      throw new Error("waitFor timeout");
+    }
 
     function createRuntime(handlers) {
       return {
@@ -109,17 +127,132 @@
               translate: () => ({ translation: "快速奔跑" }),
             }),
             TranslationUtilsRef: window.TranslationUtils,
+            contentT(key) {
+              return {
+                examples: "Examples",
+                pronounce: "Pronounce",
+              }[key] || key;
+            },
             getExampleText(entry) {
               return entry.text;
             },
             isCjkText: () => false,
             isBoundaryMatch: () => true,
           });
-          await new Promise((resolve) => setTimeout(resolve, 0));
+          await waitFor(() => {
+            const card = document.querySelector(".la-word-preview");
+            return !!(card && card.textContent.includes("快速奔跑"));
+          });
           const card = document.querySelector(".la-word-preview");
           assert(card, "expected preview card");
-          assert(card.textContent.includes("meaning"), "expected meaning");
-          assert(card.textContent.includes("快速奔跑"), "expected translated example");
+          const primaryWrap = card.querySelector(".la-word-preview-primary");
+          assert(primaryWrap, "expected primary meaning block");
+          assert(primaryWrap.textContent.includes("running"), "expected primary block label");
+          assert(primaryWrap.textContent.includes("meaning"), "expected meaning");
+          const exampleWrap = card.querySelector(".la-word-preview-example-block");
+          assert(exampleWrap, "expected example block");
+          assert(exampleWrap.textContent.includes("Examples"), "expected examples label");
+          assertEqual(exampleWrap.querySelectorAll(".la-word-preview-example-item").length, 1);
+          assert(exampleWrap.textContent.includes("快速奔跑"), "expected translated example");
+          const audioButton = card.querySelector(".la-word-preview-audio");
+          assert(audioButton, "expected pronounce button");
+          assertEqual(audioButton.getAttribute("aria-label"), "Pronounce");
+          U.hideWordPreview(0);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          anchor.remove();
+        },
+      },
+      {
+        name: "showWordPreview family mode shows current-form translation and dictionary, with saved root info below",
+        async run() {
+          const anchor = document.createElement("span");
+          anchor.textContent = "running";
+          anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          document.body.appendChild(anchor);
+          U.showWordPreview(anchor, {
+            mode: "family",
+            currentForm: "running",
+            rootWord: "run",
+            rootMeaning: "move fast",
+            examples: [],
+          }, {
+            document,
+            WordStorage: { getSourceLang: () => Promise.resolve("en") },
+            chromeRuntime: {
+              lastError: null,
+              sendMessage(message, callback) {
+                if (message.action === "translate") {
+                  callback({
+                    translation: message.text === "moving quickly" ? "快速移動中" : "正在跑",
+                  });
+                  return;
+                }
+                if (message.action === "lookupDictionary") {
+                  callback({
+                    found: true,
+                    sections: [{
+                      mode: "surface",
+                      query: "running",
+                      source: "dictionaryapi",
+                      entries: [{ definition: "moving quickly", definitionTranslated: "快速移動中" }],
+                    }, {
+                      mode: "lemma",
+                      query: "run",
+                      source: "dictionaryapi",
+                      entries: [{ definition: "to move fast", definitionTranslated: "快速移動" }],
+                    }],
+                  });
+                  return;
+                }
+                callback({});
+              },
+            },
+            TranslationUtilsRef: window.TranslationUtils,
+            DictionaryUtilsRef: window.DictionaryUtils,
+            normalizeDictionaryQuery: window.DictionaryUtils.normalizeDictionaryQuery,
+            shouldLookupDictionaryQuery: window.DictionaryUtils.shouldLookupDictionaryQuery,
+            supportsDictionaryBySourceLang: window.DictionaryUtils.supportsDictionaryBySourceLang,
+            contentT(key) {
+              return {
+                dict_selected_form: "Selected form",
+                local_saved_words: "Saved word",
+                dictionary: "Dictionary",
+                no_dict_entries: "No entries",
+                examples: "Examples",
+                pronounce: "Pronounce",
+              }[key] || key;
+            },
+            getExampleText(entry) {
+              return entry.text;
+            },
+            isCjkText: () => false,
+            isBoundaryMatch: () => true,
+          });
+          await waitFor(() => {
+            const card = document.querySelector(".la-word-preview");
+            return !!(card && card.textContent.includes("正在跑") && card.textContent.includes("快速移動中"));
+          });
+          const card = document.querySelector(".la-word-preview");
+          assert(card, "expected preview card");
+          const currentWrap = card.querySelector(".la-word-preview-family-current");
+          assert(currentWrap, "expected current-form block");
+          assert(currentWrap.textContent.includes("running"), "expected current-form block label");
+          const familyAudioButton = currentWrap.querySelector(".la-word-preview-audio");
+          assert(familyAudioButton, "expected family pronounce button");
+          assertEqual(familyAudioButton.getAttribute("aria-label"), "Pronounce");
+          assert(!card.textContent.startsWith("Selected form: running"), "preview should not repeat current-form title above the content");
+          assert(card.textContent.includes("正在跑"), "expected translated current form");
+          assert(card.textContent.includes("Dictionary"), "expected dictionary section");
+          assert(card.textContent.includes("快速移動中"), "expected translated dictionary definition");
+          assert(!card.textContent.includes("Lemma: run"), "family preview should not render lemma dictionary section");
+          const dictWrap = card.querySelector(".la-word-preview-dict");
+          assert(dictWrap, "expected preview dictionary wrapper");
+          assert(dictWrap.textContent.includes("Selected form: running · Free Dictionary"), "expected surface dictionary section title");
+          assert(dictWrap.textContent.includes("[") || dictWrap.textContent.includes("快速移動中"), "expected dictionary entry structure");
+          const noteWrap = card.querySelector(".la-word-preview-note");
+          assert(noteWrap, "expected saved-word block");
+          assert(noteWrap.textContent.includes("Saved word"), "expected saved-word label");
+          assert(noteWrap.textContent.includes("run · move fast"), "expected saved root info");
           U.hideWordPreview(0);
           await new Promise((resolve) => setTimeout(resolve, 10));
           anchor.remove();

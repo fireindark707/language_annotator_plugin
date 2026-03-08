@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>content-ui</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="./lib/test-harness.js"></script>
+  <script src="../lib/content-ui.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    runTests([
+      {
+        name: "ensureAddWordModalStyle injects shared modal stylesheet once",
+        run() {
+          ContentUi.ensureAddWordModalStyle(document);
+          ContentUi.ensureAddWordModalStyle(document);
+          const styles = document.querySelectorAll("#laAddWordStyle");
+          assertEqual(styles.length, 1);
+          assert(styles[0].textContent.includes(".la-confirm-modal"), "expected confirm modal styles");
+        },
+      },
+      {
+        name: "button and textarea styling helpers apply expected inline styles",
+        run() {
+          const button = document.createElement("button");
+          const textarea = document.createElement("textarea");
+          ContentUi.applyModalButtonStyle(button, "save");
+          ContentUi.applyModalTextareaStyle(textarea);
+          assertEqual(button.style.display, "inline-flex");
+          assertEqual(button.style.backgroundColor, "rgb(165, 81, 67)");
+          assertEqual(textarea.style.display, "block");
+          assertEqual(textarea.style.minHeight, "92px");
+        },
+      },
+      {
+        name: "showConfirmModal renders and resolves on confirm",
+        async run() {
+          const promise = ContentUi.showConfirmModal({
+            document,
+            t: (key) => key,
+            message: "confirm me",
+          });
+          const overlay = document.querySelector(".la-confirm-overlay");
+          assert(overlay, "expected confirm overlay");
+          overlay.querySelector(".la-confirm-ok").click();
+          const confirmed = await promise;
+          assertEqual(confirmed, true);
+          assert(!document.querySelector(".la-confirm-overlay"), "overlay should be removed");
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

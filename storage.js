@@ -154,7 +154,7 @@
 				await setToArea(chrome.storage.sync, payload);
 				await removeFromArea(chrome.storage.sync, [LEGACY_WORDS_KEY].concat(staleKeys));
 				if (level > 0) {
-					console.warn(`Word sync used compact level ${level} due to sync quota.`);
+					console.info(`Word sync stored a lighter cloud copy (compact level ${level}) to fit sync space.`);
 				}
 				return { compactLevel: level, droppedWords: 0 };
 			} catch (error) {
@@ -197,21 +197,21 @@
 					await setToArea(chrome.storage.sync, payload);
 					await removeFromArea(chrome.storage.sync, [LEGACY_WORDS_KEY].concat(staleKeys));
 					dropped = keepFrom;
-					console.warn(`Word sync dropped ${dropped} oldest words to fit sync quota.`);
+					console.info(`Word sync stored a lighter cloud copy and trimmed ${dropped} oldest cloud words to fit sync space.`);
 					return { compactLevel: level, droppedWords: dropped };
 				} catch (error) {
 					lastError = error;
 				}
 			}
 		}
-		throw lastError || new Error("Failed to write words to sync.");
+		throw lastError || new Error("Unable to fit word data into sync storage.");
 	}
 
 	async function writeWordsToSyncSafe(words) {
 		try {
 			return await writeWordsToSync(words);
 		} catch (error) {
-			console.error("Sync write failed after compaction and trimming:", error);
+			console.info("Cloud sync update was skipped for now; local data remains intact.", error);
 			return { compactLevel: -1, droppedWords: 0, failed: true };
 		}
 	}
@@ -363,7 +363,7 @@
 
 		async saveWords(words) {
 			await setToArea(chrome.storage.local, { [LEGACY_WORDS_KEY]: words });
-			await writeWordsToSyncSafe(words);
+			return await writeWordsToSyncSafe(words);
 		},
 
 		async getSourceLang() {
@@ -484,7 +484,7 @@
 			await this.init();
 			const localWords = await this.getWords();
 			// Push first, then pull and merge.
-			await writeWordsToSyncSafe(localWords);
+			const initialSyncState = await writeWordsToSyncSafe(localWords);
 			const cloudWords = await readWordsFromSync();
 			const merged = Object.assign({}, localWords);
 			let mergedWords = 0;
@@ -502,11 +502,13 @@
 				merged[word] = next;
 				mergedWords += 1;
 			}
-			await this.saveWords(merged);
+			const finalSyncState = await this.saveWords(merged);
 			return {
 				cloudWords: cloudEntries.length,
 				processedWords: mergedWords,
 				totalWords: Object.keys(merged).length,
+				initialSyncState,
+				finalSyncState,
 			};
 		},
 	};

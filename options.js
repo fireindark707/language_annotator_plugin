@@ -30,6 +30,17 @@ document.addEventListener("DOMContentLoaded", function () {
 		return UiI18n.t(uiLang, key);
 	}
 
+	function formatSyncNotice(uiLang, syncState) {
+		if (!syncState || syncState.failed) return t(uiLang, "sync_failed");
+		if (syncState.droppedWords > 0) {
+			return t(uiLang, "sync_trimmed_notice").replace("{count}", String(syncState.droppedWords));
+		}
+		if (syncState.compactLevel > 0) {
+			return t(uiLang, "sync_light_notice");
+		}
+		return t(uiLang, "synced");
+	}
+
 	function startOptionsTour(force) {
 		if (!globalThis.UiTour) return;
 		const run = force ? UiTour.start : UiTour.maybeStartOnce;
@@ -100,6 +111,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		document.getElementById("dictionaryLookupLabel").textContent = t(uiLang, "dictionary_lookup");
 		document.getElementById("dictionaryLookupDesc").textContent = t(uiLang, "dictionary_lookup_desc");
 		document.getElementById("importExportLabel").textContent = t(uiLang, "import_export");
+		document.getElementById("syncStorageHint").textContent = t(uiLang, "sync_storage_hint");
 		document.getElementById("excludedDomainsLabel").textContent = t(uiLang, "excluded_domains");
 		document.getElementById("excludedDomainsDesc").textContent = t(uiLang, "excluded_domains_desc");
 		excludedDomainInput.placeholder = "example.com";
@@ -211,9 +223,11 @@ document.addEventListener("DOMContentLoaded", function () {
 		const uiLanguage = uiLanguageSelect.value || "en";
 		syncBtn.disabled = true;
 		syncBtn.textContent = t(uiLanguage, "syncing");
-		WordStorage.syncFromCloud().then(function () {
-			UiToast.show(t(uiLanguage, "synced"), "success");
-			saveStatus.textContent = t(uiLanguage, "synced");
+		WordStorage.syncFromCloud().then(function (result) {
+			const syncState = result && (result.finalSyncState || result.initialSyncState);
+			const notice = formatSyncNotice(uiLanguage, syncState);
+			UiToast.show(notice, "success");
+			saveStatus.textContent = notice;
 			applyUiLanguage(uiLanguage);
 		}).catch(function (error) {
 			console.error("Manual sync failed:", error);

@@ -48,7 +48,10 @@
       SUPPORTED_LANGUAGES: ['en', 'id', 'tl'],
       FetchDictionaryFactory: function FetchDictionaryFactory() {},
       DefaultStrategy: function DefaultStrategy() {},
-      Lemmatizer: function Lemmatizer() { this.lemmatizeAsync = (text) => Promise.resolve(text === 'running' ? 'run' : text); },
+      Lemmatizer: function Lemmatizer() {
+        this.lemmatizeAsync = (text) => Promise.resolve(text === 'running' ? 'run' : text);
+        this.getInflectionsAsync = (lemma) => Promise.resolve(lemma === 'run' ? ['run', 'runs', 'running', 'ran'] : [lemma]);
+      },
     };
   </script>
   <script src="../lib/lemma-utils.js"></script>
@@ -77,12 +80,15 @@
         },
       },
       {
-        name: 'message listener handles translate, getLemma, and lookupDictionary',
+        name: 'message listener handles translate, getLemma, getLemmaVariations, and lookupDictionary',
         async run() {
           const translateRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'translate', text: 'hello', sourceLang: 'en', targetLang: 'zh-TW' }, null, resolve));
           assertEqual(translateRes.translation, 'translated:hello');
           const lemmaRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'getLemma', text: 'running', sourceLang: 'en' }, null, resolve));
           assertEqual(lemmaRes.lemma, 'run');
+          const variationRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'getLemmaVariations', text: 'running', lemma: 'run', sourceLang: 'en' }, null, resolve));
+          assert(variationRes.familyForms.includes('running'), 'expected family to include query form');
+          assert(variationRes.familyForms.includes('ran'), 'expected family inflections');
           const dictRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'lookupDictionary', text: 'running', sourceLang: 'en' }, null, resolve));
           assert(dictRes.found, 'expected dictionary result');
           assertEqual(Array.isArray(dictRes.sections), true);

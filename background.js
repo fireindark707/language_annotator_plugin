@@ -9,10 +9,12 @@ if (typeof importScripts === "function") {
 }
 
 const SIMPLEMMA_DICTIONARY_BASE_URL = LemmaUtils.SIMPLEMMA_DICTIONARY_BASE_URL;
-let getLemmaForQuery = LemmaUtils.createSimplemmaLemmaProvider({
+const lemmaProvider = LemmaUtils.createSimplemmaLemmaProvider({
 	simplemmaGlobal: globalThis.simplemma,
 	dictionaryBaseUrl: SIMPLEMMA_DICTIONARY_BASE_URL,
 });
+const getLemmaForQuery = lemmaProvider.getLemmaForQuery;
+const getVariationsForLemma = lemmaProvider.getVariationsForLemma;
 
 chrome.runtime.onInstalled.addListener(function () {
 	chrome.contextMenus.create({
@@ -117,6 +119,18 @@ chrome.runtime.onMessage.addListener(function (request, sender, sendResponse) {
 		getLemmaForQuery(request.text, request.sourceLang)
 			.then((result) => sendResponse(result))
 			.catch(() => sendResponse({ found: false, lemma: "", lang: LemmaUtils.normalizeLemmaSourceLang(request.sourceLang) }));
+		return true;
+	}
+
+	if (request.action === "getLemmaVariations") {
+		getVariationsForLemma(request.lemma || request.text, request.sourceLang, request.text)
+			.then((result) => sendResponse(result))
+			.catch(() => sendResponse({
+				found: false,
+				lemma: typeof request.lemma === "string" ? request.lemma.trim() : "",
+				lang: LemmaUtils.normalizeLemmaSourceLang(request.sourceLang),
+				familyForms: [],
+			}));
 		return true;
 	}
 

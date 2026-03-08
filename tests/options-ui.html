@@ -12,6 +12,7 @@
   <span id="autoTranslateDesc"></span>
   <div id="dictionaryLookupRow"><span id="dictionaryLookupLabel"></span><span id="dictionaryLookupDesc"></span><input id="dictionaryLookupEnabled" type="checkbox"></div>
   <span id="importExportLabel"></span>
+  <div id="syncStorageHint"></div>
   <span id="excludedDomainsLabel"></span>
   <span id="excludedDomainsDesc"></span>
   <select id="sourceLang"><option value="auto">auto</option><option value="en">English</option><option value="id">Indonesian</option><option value="zh">Chinese</option></select>
@@ -64,7 +65,7 @@
       saveDictionaryLookupEnabled(value) { saveCalls.push(['dict', value]); return Promise.resolve(); },
       saveUiLanguage(value) { saveCalls.push(['ui', value]); return Promise.resolve(); },
       saveExcludedDomains(value) { saveCalls.push(['excluded', value.slice()]); return Promise.resolve(); },
-      syncFromCloud() { saveCalls.push(['sync']); return Promise.resolve({}); },
+      syncFromCloud() { saveCalls.push(['sync']); return Promise.resolve({ finalSyncState: { compactLevel: 1, droppedWords: 2, failed: false } }); },
       exportData() { return Promise.resolve({ words: { test: { meaning: 'x' } } }); },
       importData(items) { importedItems = items; return Promise.resolve(); },
     };
@@ -123,7 +124,8 @@
         async run() {
           document.getElementById('syncBtn').click();
           await wait(20);
-          assert(toastCalls.some((x) => x.message === 'synced' && x.type === 'success'), 'expected sync success toast');
+          assert(toastCalls.some((x) => x.message === 'sync_trimmed_notice' && x.type === 'success'), 'expected neutral sync notice toast');
+          assertEqual(document.getElementById('saveStatus').textContent, 'sync_trimmed_notice');
           document.getElementById('exportBtn').click();
           await wait(20);
           assertEqual(anchorClicks > 0, true, 'expected export link click');

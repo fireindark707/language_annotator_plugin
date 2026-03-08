@@ -58,6 +58,10 @@ Current coverage mapped to README features:
 - `content-dictionary-utils.html`
   - content dictionary section mapping
   - passive/interactive dictionary rendering
+- `content-ui.html`
+  - content modal/confirm shared style injection
+  - modal button/textarea styling helpers
+  - confirm modal render/resolve flow
 - `content-addword.html`
   - add-word modal DOM builder
   - add-word target word / lemma state

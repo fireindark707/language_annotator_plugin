@@ -54,7 +54,10 @@
       {
         name: "buildHighlightedFragment wraps matched words and leaves learned words alone",
         run() {
-          const fragment = U.buildHighlightedFragment("run and rest", ["run", "rest"], {
+          const fragment = U.buildHighlightedFragment("run and rest", [
+            { form: "run", rootWord: "run", isFamily: false },
+            { form: "rest", rootWord: "rest", isFamily: false },
+          ], {
             run: { meaning: "move fast", learned: false, examples: [] },
             rest: { meaning: "pause", learned: true, examples: [] },
           }, {
@@ -68,6 +71,103 @@
           assertEqual(wrapper.querySelectorAll(".plugin-highlight-word").length, 1);
           assertEqual(wrapper.querySelector(".plugin-highlight-word").textContent, "run");
           assertEqual(wrapper.textContent, "run and rest");
+        },
+      },
+      {
+        name: "buildHighlightTargets includes family forms and marks them secondary",
+        run() {
+          const targets = U.buildHighlightTargets(["run"], {
+            run: {
+              learned: false,
+              familyForms: ["running", "ran", "run"],
+            },
+          });
+          assertEqual(targets[0].form, "running");
+          assert(targets.some((item) => item.form === "run" && item.isFamily === false), "expected root target");
+          assert(targets.some((item) => item.form === "running" && item.isFamily === true), "expected family target");
+        },
+      },
+      {
+        name: "buildHighlightedFragment renders family matches with family highlight class",
+        run() {
+          const fragment = U.buildHighlightedFragment("running fast", [
+            { form: "running", rootWord: "run", isFamily: true },
+            { form: "run", rootWord: "run", isFamily: false },
+          ], {
+            run: { meaning: "move fast", learned: false, examples: [] },
+          }, {
+            document,
+            showWordPreview() {},
+            hideWordPreview() {},
+          });
+          assert(fragment, "expected fragment");
+          const wrapper = document.createElement("div");
+          wrapper.appendChild(fragment);
+          const familyEl = wrapper.querySelector(".plugin-highlight-family-word");
+          assert(familyEl, "expected family highlight");
+          assertEqual(familyEl.textContent, "running");
+        },
+      },
+      {
+        name: "family highlight hover sends current form plus saved root metadata",
+        run() {
+          let previewPayload = null;
+          const fragment = U.buildHighlightedFragment("running fast", [
+            { form: "running", rootWord: "run", isFamily: true },
+          ], {
+            run: { meaning: "move fast", learned: false, examples: [{ text: "run daily" }] },
+          }, {
+            document,
+            showWordPreview(anchor, payload) {
+              previewPayload = { anchorText: anchor.textContent, payload };
+            },
+            hideWordPreview() {},
+          });
+          const wrapper = document.createElement("div");
+          wrapper.appendChild(fragment);
+          const familyEl = wrapper.querySelector(".plugin-highlight-family-word");
+          assert(familyEl, "expected family highlight");
+          familyEl.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+          assert(previewPayload, "expected preview payload");
+          assertEqual(previewPayload.anchorText, "running");
+          assertEqual(previewPayload.payload.mode, "family");
+          assertEqual(previewPayload.payload.currentForm, "running");
+          assertEqual(previewPayload.payload.rootWord, "run");
+          assertEqual(previewPayload.payload.rootMeaning, "move fast");
+        },
+      },
+      {
+        name: "clicking root highlight marks learned, clicking family highlight opens add-word flow",
+        run() {
+          const calls = [];
+          const fragment = U.buildHighlightedFragment("run while running", [
+            { form: "running", rootWord: "run", isFamily: true },
+            { form: "run", rootWord: "run", isFamily: false },
+          ], {
+            run: { meaning: "move fast", learned: false, examples: [] },
+          }, {
+            document,
+            showWordPreview() {},
+            hideWordPreview() {},
+          });
+          const wrapper = document.createElement("div");
+          wrapper.appendChild(fragment);
+          document.body.appendChild(wrapper);
+          U.addClickEventToHighlightedWords(document, {
+            onRootClick(text) {
+              calls.push(`root:${text}`);
+            },
+            onFamilyClick(text) {
+              calls.push(`family:${text}`);
+            },
+          });
+          const highlights = wrapper.querySelectorAll(".plugin-highlight-word");
+          highlights[0].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+          highlights[1].dispatchEvent(new MouseEvent("click", { bubbles: true }));
+          assertEqual(calls.length, 2);
+          assertEqual(calls[0], "root:run");
+          assertEqual(calls[1], "family:running");
+          wrapper.remove();
         },
       },
       {
@@ -95,6 +195,103 @@
           assertEqual(result.running[0].text, "He was running quickly");
           assertEqual(result.runner, undefined);
           container.remove();
+        },
+      },
+      {
+        name: "collectExampleCandidates captures highlighted paragraph context for Kendati",
+        run() {
+          const host = document.createElement("div");
+          host.innerHTML = `
+            <p><span class="plugin-highlight-word">Kendati</span> mengusung fungsi serupa, Xiaomi Tag tampil dengan pendekatan desain yang sedikit berbeda. Perangkat ini berbentuk elips tipis dengan ukuran ringkas dan bobot sekitar 10 gram.</p>
+          `;
+          document.body.appendChild(host);
+          const nodes = U.findTextNodes(host, {
+            Node,
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement(element) {
+              return !!(element && element.classList && element.classList.contains("plugin-highlight-word"));
+            },
+          });
+          const result = U.collectExampleCandidates(nodes, ["kendati"], {
+            kendati: { learned: false },
+          }, {
+            splitIntoSentences: window.ExampleUtils.splitIntoSentences,
+            isLowInformationExample: window.ExampleUtils.isLowInformationExample,
+            normalizeText: window.ExampleUtils.normalizeText,
+            currentHref: "https://example.com/page",
+          });
+          assertEqual(Array.isArray(result.kendati), true);
+          assertEqual(result.kendati.length >= 1, true);
+          assertEqual(result.kendati[0].text.includes("Kendati mengusung fungsi serupa"), true);
+          host.remove();
+        },
+      },
+      {
+        name: "collectExampleCandidates keeps long Indonesian news sentence under relaxed limit",
+        run() {
+          const textNode = document.createTextNode("Pangkalpinang, InfoPublik - Kendati tidak ditemukan anak dengan kondisi stunting di Kelurahan Bacang Pangkalpinang, Penjabat (Pj) Gubernur Kepulauan Bangka Belitung (Kep. Babel) Suganda Pandapotan Pasaribu, meminta agar ibu hamil, dan orang tua dengan anak balita, untuk senantiasa memperhatikan asupan gizi.");
+          const container = document.createElement("p");
+          container.appendChild(textNode);
+          document.body.appendChild(container);
+          const result = U.collectExampleCandidates([textNode], ["kendati"], {
+            kendati: { learned: false },
+          }, {
+            splitIntoSentences: window.ExampleUtils.splitIntoSentences,
+            isLowInformationExample: window.ExampleUtils.isLowInformationExample,
+            normalizeText: window.ExampleUtils.normalizeText,
+            currentHref: "https://example.com/page",
+          });
+          assertEqual(Array.isArray(result.kendati), true);
+          assertEqual(result.kendati.length, 1);
+          assertEqual(result.kendati[0].text.includes("Kendati tidak ditemukan"), true);
+          container.remove();
+        },
+      },
+      {
+        name: "enqueueExampleCandidates counts the current page only once for new words",
+        async run() {
+          const savedPayloads = [];
+          const wordsData = {
+            berjalan: {
+              learned: false,
+              meaning: "walk",
+              examples: [],
+              encounterCount: 0,
+              pageCount: 0,
+              encounterPageKeys: [],
+            },
+          };
+          const state = { pendingExampleMap: {}, exampleMergeTimer: null };
+          U.enqueueExampleCandidates({
+            berjalan: [
+              { text: "Ia berjalan ke pasar.", sourceUrl: "https://example.com/a", capturedAt: 100 },
+              { text: "Mereka berjalan pulang.", sourceUrl: "https://example.com/a", capturedAt: 101 },
+            ],
+          }, state, {
+            WordStorage: {
+              getWords() { return Promise.resolve(JSON.parse(JSON.stringify(wordsData))); },
+              saveWords(next) {
+                savedPayloads.push(next);
+                return Promise.resolve();
+              },
+            },
+            normalizeExampleList: window.ExampleUtils.normalizeExampleList,
+            normalizeText(text) { return (text || "").replace(/\s+/g, " ").trim(); },
+            isLowInformationExample: window.ExampleUtils.isLowInformationExample,
+            hasContainmentRelation: window.ExampleUtils.hasContainmentRelation,
+            isTooSimilarToAny: window.ExampleUtils.isTooSimilarToAny,
+            sortExamples: window.ExampleUtils.sortExamples,
+            enforceExampleLimit: window.ExampleUtils.enforceExampleLimit,
+            maxExamplesPerWord: 20,
+            currentHref: "https://example.com/a?ref=1",
+            onError(error) { throw error; },
+          });
+          await new Promise((resolve) => setTimeout(resolve, 1300));
+          assertEqual(savedPayloads.length, 1);
+          const saved = savedPayloads[0].berjalan;
+          assertEqual(saved.pageCount, 1);
+          assertEqual(saved.encounterPageKeys.length, 1);
+          assertEqual(saved.encounterCount, 2);
         },
       },
     ]);

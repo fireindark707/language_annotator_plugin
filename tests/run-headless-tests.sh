@@ -20,6 +20,7 @@ TEST_FILES=(
   "$ROOT_DIR/tests/ui-toast.html"
   "$ROOT_DIR/tests/example-utils.html"
   "$ROOT_DIR/tests/content-dictionary-utils.html"
+  "$ROOT_DIR/tests/content-ui.html"
   "$ROOT_DIR/tests/content-addword.html"
   "$ROOT_DIR/tests/content-lookup-ui.html"
   "$ROOT_DIR/tests/content-page-processing.html"

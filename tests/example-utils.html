@@ -83,6 +83,19 @@
           assertEqual(U.splitIntoSentences(normal, "en").length >= 2, true);
         },
       },
+      {
+        name: "splitIntoSentences applies length limit to split sentences, not whole raw paragraph",
+        run() {
+          const longParagraph = "Pangkalpinang, InfoPublik - Kendati tidak ditemukan anak dengan kondisi stunting di Kelurahan Bacang Pangkalpinang, Penjabat (Pj) Gubernur Kepulauan Bangka Belitung (Kep. Babel) Suganda Pandapotan Pasaribu, meminta agar ibu hamil, dan orang tua dengan anak balita, untuk senantiasa memperhatikan asupan gizi.";
+          const singleOverlongSentence = "A".repeat(281);
+          const split = U.splitIntoSentences(longParagraph, "id");
+          assertEqual(split.length >= 1, true);
+          assertEqual(split.some((item) => item.includes("Kendati tidak ditemukan")), true);
+          assertEqual(split.every((item) => U.isReasonableExampleSentence(item)), true);
+          assertEqual(U.isReasonableExampleSentence(singleOverlongSentence), false);
+          assertEqual(U.splitIntoSentences(singleOverlongSentence, "en").length, 0);
+        },
+      },
     ]);
   </script>
 </body>

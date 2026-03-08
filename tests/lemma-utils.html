@@ -11,6 +11,10 @@
       runtime: {
         sendMessage(message, callback) {
           const lemmaMap = { berjalan: "jalan", cars: "car" };
+          if (message.action === "getLemmaVariations") {
+            callback({ lemma: message.lemma || "jalan", familyForms: ["jalan", "berjalan", "jalanan"] });
+            return;
+          }
           callback({ found: !!lemmaMap[message.text], lemma: lemmaMap[message.text] || "" });
         },
       },
@@ -21,6 +25,7 @@
       DefaultStrategy: function DefaultStrategy(options) { this.options = options; },
       Lemmatizer: function Lemmatizer() {
         this.lemmatizeAsync = async (text) => ({ running: "run", berjalan: "jalan" }[text] || text);
+        this.getInflectionsAsync = async (lemma) => ({ run: ["run", "running", "runs"], jalan: ["jalan", "berjalan"] }[lemma] || [lemma]);
       },
     };
   </script>
@@ -63,15 +68,38 @@
         },
       },
       {
+        name: "createRuntimeLemmaVariationsResolver normalizes and caches family forms",
+        async run() {
+          let calls = 0;
+          const resolver = LemmaUtils.createRuntimeLemmaVariationsResolver({
+            normalizeQuery(text) { return (text || "").trim().replace(/^\"|\"$/g, ""); },
+            sendMessage(message, callback) {
+              calls += 1;
+              chrome.runtime.sendMessage(message, callback);
+            },
+            cache: new Map(),
+          });
+          const first = await resolver('"berjalan"', "jalan", "id-ID");
+          const second = await resolver('"berjalan"', "jalan", "id-ID");
+          assertEqual(first.lang, "id");
+          assertEqual(first.familyForms.includes("berjalan"), true);
+          assertEqual(first.familyForms.includes("jalan"), true);
+          assertEqual(calls, 1);
+          assertEqual(second.familyForms.includes("jalanan"), true);
+        },
+      },
+      {
         name: "createSimplemmaLemmaProvider returns normalized lemma payloads",
         async run() {
           const provider = LemmaUtils.createSimplemmaLemmaProvider({
             simplemmaGlobal: window.simplemma,
           });
-          const result = await provider("running", "en-US");
+          const result = await provider.getLemmaForQuery("running", "en-US");
           assertEqual(result.found, true);
           assertEqual(result.lemma, "run");
           assertEqual(result.lang, "en");
+          const family = await provider.getVariationsForLemma("run", "en-US", "running");
+          assertEqual(family.familyForms.includes("running"), true);
         },
       },
     ]);

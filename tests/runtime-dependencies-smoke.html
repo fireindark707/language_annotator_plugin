@@ -29,6 +29,7 @@
         await loadScript("../lib/storage-merge-utils.js");
         await loadScript("../lib/practice-utils.js");
         await loadScript("../lib/translation-utils.js");
+        await loadScript("../lib/content-ui.js");
       } catch (error) {
         loadError = error;
       }
@@ -49,6 +50,7 @@
           assert(!!globalThis.StorageMergeUtils, "StorageMergeUtils should exist");
           assert(!!globalThis.PracticeUtils, "PracticeUtils should exist");
           assert(!!globalThis.TranslationUtils, "TranslationUtils should exist");
+          assert(!!globalThis.ContentUi, "ContentUi should exist");
           },
         },
         {
@@ -62,6 +64,7 @@
           assert(typeof globalThis.PracticeUtils.getQuestionPool === "function", "getQuestionPool");
           assert(typeof globalThis.TranslationUtils.requestRuntimeTranslation === "function", "requestRuntimeTranslation");
           assert(typeof globalThis.TranslationUtils.createTaskQueue === "function", "createTaskQueue");
+          assert(typeof globalThis.ContentUi.showConfirmModal === "function", "showConfirmModal");
           },
         },
       ]);
