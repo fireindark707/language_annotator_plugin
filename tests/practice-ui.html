@@ -80,11 +80,32 @@
         async run() {
           selectedLearnedWords = new Set(['alpha']);
           reviewedWordsThisRound = ['alpha'];
+          roundWordOutcomes = new Map([
+            ['alpha', { firstAttemptCorrect: true }],
+          ]);
           renderSummaryReviewedWords();
           applySummaryLearnedWords();
           await wait(30);
           assert(savedSnapshots.some((snapshot) => snapshot.alpha && snapshot.alpha.learned === true), 'expected learned word saved');
           assert(document.getElementById('applyLearnedWordsBtn').textContent.includes('saved'), 'expected apply button updated');
+        },
+      },
+      {
+        name: 'summary list only renders words answered correctly on first appearance',
+        async run() {
+          setWordState('enough');
+          await init();
+          reviewedWordsThisRound = ['alpha', 'beta'];
+          roundWordOutcomes = new Map([
+            ['alpha', { firstAttemptCorrect: true }],
+            ['beta', { firstAttemptCorrect: false }],
+          ]);
+          selectedLearnedWords = new Set(['beta']);
+          renderSummaryReviewedWords();
+          const items = Array.from(document.querySelectorAll('#summaryReviewedList .reviewed-item-word')).map((el) => el.textContent.trim());
+          assertEqual(items.length, 1);
+          assertEqual(items[0], 'alpha');
+          assertEqual(selectedLearnedWords.size, 0, 'expected ineligible selection to be removed');
         },
       },
       {
@@ -96,6 +117,30 @@
           document.getElementById('clozeTranslateBtn').click();
           await wait(30);
           assertEqual(document.getElementById('clozeTranslateText').textContent, 'translated stimulus');
+        },
+      },
+      {
+        name: 'overtime question generation skips words already answered correctly but allows previously missed words',
+        async run() {
+          allWords = [
+            { word: 'alpha', meaning: 'A', learned: false, examples: [] },
+            { word: 'beta', meaning: 'B', learned: false, examples: [] },
+            { word: 'gamma', meaning: 'C', learned: false, examples: [] },
+          ];
+          reviewedWordsThisRound = ['alpha', 'beta'];
+          roundWordOutcomes = new Map([
+            ['alpha', { firstAttemptCorrect: true }],
+            ['beta', { firstAttemptCorrect: false }],
+          ]);
+          correctWordsThisRound = new Set(['alpha', 'gamma']);
+          overtimeActive = true;
+          streak = 1;
+          deck = [];
+          qIndex = 0;
+          renderQuestion();
+          assertEqual(deck.length, 1);
+          assertEqual(deck[0].word, 'beta');
+          assert(deck[0].answer === 'beta' || deck[0].answer === 'B', 'expected overtime question for beta');
         },
       },
     ]);

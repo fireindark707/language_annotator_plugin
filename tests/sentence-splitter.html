@@ -50,6 +50,23 @@
     (async () => {
       let failed = false;
       const tests = [
+        async function testFallbackAndCache() {
+          window.SentenceSplitter.__resetCacheForTests();
+          let fallbackCalls = 0;
+          const text = "Fallback path example.";
+          const first = window.SentenceSplitter.splitIntoSentences(text, "en", (normalized) => {
+            fallbackCalls += 1;
+            return [normalized, "extra"];
+          });
+          const second = window.SentenceSplitter.splitIntoSentences(text, "en", () => {
+            fallbackCalls += 1;
+            return ["should not run"];
+          });
+          assertEqual(fallbackCalls, 1, "fallback splitter should be cached");
+          assertEqual(first.length, 2, "fallback result length");
+          assertEqual(second.length, 2, "cached fallback result length");
+          assertEqual(second[1], "extra", "cached fallback result content");
+        },
         async function testInit() {
           const api = await window.SentenceSplitter.init();
           assertEqual(!!api, true, "sentence splitter initializes");
@@ -83,6 +100,15 @@
           const result = window.SentenceSplitter.splitIntoSentences(text, "ja", () => []);
           assertEqual(result.length, 2, "japanese A.I. count");
           assertContainsIgnoringSpaces(result[0], "A.I.技術", "japanese A.I. content");
+        },
+        async function testRepairSegmentsMergesAbbreviations() {
+          const repaired = window.SentenceSplitter.repairSegments([
+            "El Sr.",
+            "Gómez llegó temprano.",
+            "Luego habló con todos.",
+          ], "es");
+          assertEqual(repaired.length, 2, "repairSegments merges split honorific");
+          assertContainsIgnoringSpaces(repaired[0], "Sr. Gómez llegó temprano.", "repairSegments content");
         },
       ];
 

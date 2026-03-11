@@ -147,9 +147,11 @@
             },
           };
           let savedWordsPayload = null;
+          let saveWordsOptions = null;
           WordStorage.getWords = () => Promise.resolve(JSON.parse(JSON.stringify(store)));
-          WordStorage.saveWords = (words) => {
+          WordStorage.saveWords = (words, options) => {
             savedWordsPayload = JSON.parse(JSON.stringify(words));
+            saveWordsOptions = options || null;
             Object.assign(store, JSON.parse(JSON.stringify(words)));
             return Promise.resolve();
           };
@@ -167,8 +169,42 @@
           await wait(25);
           assert(savedWordsPayload && savedWordsPayload.vulgar, "expected saveWords to persist updated meaning");
           assertEqual(savedWordsPayload.vulgar.meaning, "new meaning");
+          assertEqual(saveWordsOptions.syncMode, "immediate");
           assertEqual(meaningEl.textContent, "new meaning");
           assert(toastCalls.some((entry) => entry.message === "saved"), "expected saved toast");
+          meaningEl.remove();
+        },
+      },
+      {
+        name: "fullscreen inline meaning edit cancels on escape without saving",
+        async run() {
+          let saveCalls = 0;
+          WordStorage.getWords = () => Promise.resolve({
+            vulgar: {
+              meaning: "old meaning",
+              learned: false,
+              createdAt: 1,
+              examples: [],
+            },
+          });
+          WordStorage.saveWords = () => {
+            saveCalls += 1;
+            return Promise.resolve();
+          };
+          const meaningEl = document.createElement("div");
+          meaningEl.className = "word-meaning is-editable";
+          meaningEl.textContent = "old meaning";
+          document.body.appendChild(meaningEl);
+
+          startMeaningEdit("vulgar", meaningEl, "old meaning");
+          await wait(25);
+          const editor = meaningEl.querySelector(".word-meaning-editor");
+          assert(editor, "expected inline editor");
+          editor.value = "discarded";
+          editor.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+          await wait(25);
+          assertEqual(saveCalls, 0);
+          assertEqual(meaningEl.textContent, "old meaning");
           meaningEl.remove();
         },
       },

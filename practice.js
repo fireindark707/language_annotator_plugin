@@ -200,9 +200,6 @@ function collectReviewedWord(word) {
 	if (!word) return;
 	if (!roundWordOutcomes.has(word)) {
 		reviewedWordsThisRound.push(word);
-		roundWordOutcomes.set(word, {
-			firstAttemptCorrect: false,
-		});
 	}
 }
 
@@ -214,9 +211,6 @@ function registerQuestionResult(word, isCorrect) {
 	}
 	const outcome = roundWordOutcomes.get(word);
 	if (outcome) {
-		if (typeof outcome.firstAttemptCorrect !== "boolean") {
-			outcome.firstAttemptCorrect = !!isCorrect;
-		}
 		return;
 	}
 	roundWordOutcomes.set(word, {

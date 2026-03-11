@@ -12,12 +12,14 @@ Current coverage mapped to README features:
   - export/import public API
   - UI language fallback
   - excluded domain normalization
+  - deferred vs immediate word-sync behavior
 - `runtime-dependencies-smoke.html`
   - shared globals required by entry scripts are present
   - required methods exist before hard dependency cleanup
 - `sentence-splitter.html`
   - `sentencex-wasm` initialization
   - multilingual abbreviation repair (`Kep.`, `Sr.`, `z. B.`, `A.I.`)
+  - fallback splitter caching before wasm is ready
 - `translation-utils.html`
   - runtime translation requests
   - Google Translate request composition
@@ -38,6 +40,7 @@ Current coverage mapped to README features:
   - dictionary / lemma language support
   - word count formatting
   - lemma backfill flow
+  - fullscreen inline edit save/cancel behavior
 - `example-utils.html`
   - example normalization
   - pinned/unpinned sorting
@@ -82,6 +85,7 @@ Current coverage mapped to README features:
   - highlight fragment building
   - word-boundary matching
   - example candidate collection
+  - family/root click wiring during full highlight pass
 - `content-bootstrap.html`
   - content.js bootstrap with required globals
   - content.js delegation into translation/page-processing modules
@@ -95,6 +99,7 @@ Current coverage mapped to README features:
   - autosave flows
   - excluded-domain editing
   - sync / export / import / help actions
+  - simple import immediate queue + deferred enrichment saves
 - `popup-dependencies-smoke.html`
   - popup shared example/translation dependencies are present
 - `popup-ui.html`
@@ -109,7 +114,9 @@ Current coverage mapped to README features:
   - low-word onboarding
   - question answer flow
   - summary learned-word apply
+  - summary first-attempt-correct filtering
   - cloze translate action
+  - overtime repeat guard for correctly answered words
 - `dictionary-url-smoke.html`
   - remote dictionary assets are actual JSON, not Git LFS pointer text
 

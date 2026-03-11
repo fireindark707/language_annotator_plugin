@@ -41,6 +41,7 @@
     const toastCalls = [];
     const tourCalls = [];
     const saveCalls = [];
+    const saveWordCalls = [];
     let importedItems = null;
     let savedWords = {};
     let anchorClicks = 0;
@@ -77,7 +78,16 @@
       getUiLanguage() { return Promise.resolve('en'); },
       getExcludedDomains() { return Promise.resolve(['google.com']); },
       getWords() { return Promise.resolve(JSON.parse(JSON.stringify(savedWords))); },
-      saveWords(words) { savedWords = JSON.parse(JSON.stringify(words)); saveCalls.push(['words', Object.keys(words).length]); return Promise.resolve({ compactLevel: 0, droppedWords: 0 }); },
+      saveWords(words, options) {
+        savedWords = JSON.parse(JSON.stringify(words));
+        saveCalls.push(['words', Object.keys(words).length]);
+        saveWordCalls.push({
+          count: Object.keys(words).length,
+          syncMode: options && options.syncMode ? options.syncMode : null,
+          snapshot: JSON.parse(JSON.stringify(words)),
+        });
+        return Promise.resolve({ compactLevel: 0, droppedWords: 0 });
+      },
       saveSourceLang(value) { saveCalls.push(['source', value]); return Promise.resolve(); },
       saveAutoTranslateOnSelect(value) { saveCalls.push(['auto', value]); return Promise.resolve(); },
       saveDictionaryLookupEnabled(value) { saveCalls.push(['dict', value]); return Promise.resolve(); },
@@ -187,20 +197,27 @@
       {
         name: 'simple import parses word and meaning, then enriches asynchronously',
         async run() {
+          saveWordCalls.length = 0;
+          savedWords = {};
           const input = document.getElementById('simpleImportInput');
           input.value = 'mobilnya,他的車\n"dinas",服務,ignored\n\nMOBILNYA';
           document.getElementById('simpleImportBtn').click();
-          await wait(120);
+          await wait(80);
           assert(savedWords.mobilnya, 'expected first word imported');
           assert(savedWords.dinas, 'expected csv first column imported');
           assertEqual(savedWords.mobilnya.meaning, '他的車');
           assertEqual(savedWords.dinas.meaning, '服務');
           assertEqual(Object.keys(savedWords).length >= 2, true);
+          assertEqual(saveWordCalls.length >= 1, true);
+          assertEqual(saveWordCalls[0].syncMode, 'immediate');
+          assertEqual(saveWordCalls[0].snapshot.mobilnya.lemma || '', '');
+          assertEqual(saveWordCalls[0].snapshot.mobilnya.dictionary || null, null);
           await wait(220);
+          assert(saveWordCalls.some((entry) => entry.syncMode === 'deferred'), 'expected deferred enrichment save');
           assertEqual(savedWords.mobilnya.lemma, 'mobil');
           assert(savedWords.mobilnya.familyForms.includes('mobilnya'), 'expected family forms');
           assertEqual(savedWords.mobilnya.dictionary.source, 'kateglo');
-          assert(document.getElementById('simpleImportStatus').textContent.includes('simple_import'), 'expected import status text');
+          assert(document.getElementById('simpleImportStatus').textContent.includes('simple_import_enriched'), 'expected import status text');
         },
       },
     ]);

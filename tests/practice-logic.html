@@ -115,6 +115,34 @@
         },
       },
       {
+        name: "summary learned list only keeps words answered correctly on first appearance",
+        run() {
+          reviewedWordsThisRound = ["alpha", "beta", "gamma"];
+          roundWordOutcomes = new Map([
+            ["alpha", { firstAttemptCorrect: true }],
+            ["beta", { firstAttemptCorrect: false }],
+            ["gamma", { firstAttemptCorrect: true }],
+          ]);
+          const eligible = getSummaryEligibleWords();
+          assertEqual(eligible.length, 2);
+          assertEqual(eligible[0], "alpha");
+          assertEqual(eligible[1], "gamma");
+        },
+      },
+      {
+        name: "overtime picker excludes words already answered correctly this round",
+        run() {
+          allWords = [
+            { word: "alpha", meaning: "A", learned: false },
+            { word: "beta", meaning: "B", learned: false },
+            { word: "gamma", meaning: "G", learned: false },
+          ];
+          correctWordsThisRound = new Set(["alpha", "gamma"]);
+          const picked = pickQuestionItem();
+          assertEqual(picked.word, "beta");
+        },
+      },
+      {
         name: "init shows low-word reminder instead of starting practice when fewer than four words exist",
         async run() {
           WordStorage.getUiLanguage = () => Promise.resolve("en");
