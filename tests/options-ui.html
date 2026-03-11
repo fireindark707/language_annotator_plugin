@@ -185,19 +185,20 @@
         },
       },
       {
-        name: 'simple import parses first column and enriches imported words asynchronously',
+        name: 'simple import parses word and meaning, then enriches asynchronously',
         async run() {
           const input = document.getElementById('simpleImportInput');
-          input.value = 'mobilnya,extra\n"dinas",foo\n\nMOBILNYA';
+          input.value = 'mobilnya,他的車\n"dinas",服務,ignored\n\nMOBILNYA';
           document.getElementById('simpleImportBtn').click();
           await wait(120);
           assert(savedWords.mobilnya, 'expected first word imported');
           assert(savedWords.dinas, 'expected csv first column imported');
+          assertEqual(savedWords.mobilnya.meaning, '他的車');
+          assertEqual(savedWords.dinas.meaning, '服務');
           assertEqual(Object.keys(savedWords).length >= 2, true);
           await wait(220);
           assertEqual(savedWords.mobilnya.lemma, 'mobil');
           assert(savedWords.mobilnya.familyForms.includes('mobilnya'), 'expected family forms');
-          assertEqual(savedWords.mobilnya.meaning, '陸上交通工具');
           assertEqual(savedWords.mobilnya.dictionary.source, 'kateglo');
           assert(document.getElementById('simpleImportStatus').textContent.includes('simple_import'), 'expected import status text');
         },

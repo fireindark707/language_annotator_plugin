@@ -9,6 +9,8 @@ let bestStreak = 0;
 let overtimeActive = false;
 let answered = false;
 let reviewedWordsThisRound = [];
+let roundWordOutcomes = new Map();
+let correctWordsThisRound = new Set();
 let selectedLearnedWords = new Set();
 
 const MAX_QUESTIONS = 10;
@@ -113,6 +115,13 @@ function getReviewedWordsUnique() {
 	return PracticeUtilsRef.getReviewedWordsUnique(reviewedWordsThisRound);
 }
 
+function getSummaryEligibleWords() {
+	return getReviewedWordsUnique().filter((word) => {
+		const outcome = roundWordOutcomes.get(word);
+		return !!(outcome && outcome.firstAttemptCorrect);
+	});
+}
+
 function updateApplyLearnedWordsBtn() {
 	if (!applyLearnedWordsBtn) return;
 	const hasSelection = selectedLearnedWords.size > 0;
@@ -134,7 +143,12 @@ function toggleSummaryLearnedWord(word) {
 
 function renderSummaryReviewedWords() {
 	if (!summaryReviewedEl || !summaryReviewedListEl) return;
-	const reviewed = getReviewedWordsUnique();
+	const reviewed = getSummaryEligibleWords();
+	selectedLearnedWords.forEach((word) => {
+		if (!reviewed.includes(word)) {
+			selectedLearnedWords.delete(word);
+		}
+	});
 	if (!reviewed.length) {
 		summaryReviewedEl.hidden = true;
 		summaryReviewedListEl.innerHTML = "";
@@ -184,7 +198,30 @@ function renderSummaryReviewedWords() {
 
 function collectReviewedWord(word) {
 	if (!word) return;
-	reviewedWordsThisRound.push(word);
+	if (!roundWordOutcomes.has(word)) {
+		reviewedWordsThisRound.push(word);
+		roundWordOutcomes.set(word, {
+			firstAttemptCorrect: false,
+		});
+	}
+}
+
+function registerQuestionResult(word, isCorrect) {
+	if (!word) return;
+	collectReviewedWord(word);
+	if (isCorrect) {
+		correctWordsThisRound.add(word);
+	}
+	const outcome = roundWordOutcomes.get(word);
+	if (outcome) {
+		if (typeof outcome.firstAttemptCorrect !== "boolean") {
+			outcome.firstAttemptCorrect = !!isCorrect;
+		}
+		return;
+	}
+	roundWordOutcomes.set(word, {
+		firstAttemptCorrect: !!isCorrect,
+	});
 }
 
 function showAnswerFlash(word, meaning, isCorrect) {
@@ -209,7 +246,7 @@ function getQuestionPool() {
 }
 
 function pickQuestionItem() {
-	const pool = getQuestionPool();
+	const pool = getQuestionPool().filter((item) => !correctWordsThisRound.has(item.word));
 	if (!pool.length) return null;
 	return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -411,8 +448,19 @@ function burstSummary() {
 
 function buildQuestion(item) {
 	const clozeStimulus = buildClozeStimulus(item.word, item.examples);
-	const modes = clozeStimulus ? ["word2meaning", "meaning2word", "cloze"] : ["word2meaning", "meaning2word"];
-	const pickedMode = modes[Math.floor(Math.random() * modes.length)];
+	let pickedMode = "word2meaning";
+	if (clozeStimulus) {
+		const roll = Math.random();
+		if (roll < 0.2) {
+			pickedMode = "cloze";
+		} else if (roll < 0.6) {
+			pickedMode = "word2meaning";
+		} else {
+			pickedMode = "meaning2word";
+		}
+	} else {
+		pickedMode = Math.random() < 0.5 ? "word2meaning" : "meaning2word";
+	}
 
 	if (pickedMode === "cloze") {
 		const answer = item.word;
@@ -502,8 +550,8 @@ function renderQuestion() {
 		btn.addEventListener("click", () => {
 			if (answered) return;
 			answered = true;
-			collectReviewedWord(q.word);
 			const isOk = choice === q.answer;
+			registerQuestionResult(q.word, isOk);
 			if (isOk) {
 				score += 10;
 				correctCount += 1;
@@ -620,6 +668,8 @@ function finishRound() {
 function startRound() {
 	const pool = getQuestionPool();
 	reviewedWordsThisRound = [];
+	roundWordOutcomes = new Map();
+	correctWordsThisRound = new Set();
 	selectedLearnedWords = new Set();
 	if (pool.length < CHOICE_COUNT) {
 		cardEl.style.display = "";

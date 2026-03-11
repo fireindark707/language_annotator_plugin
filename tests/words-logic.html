@@ -20,6 +20,7 @@
   <button id="helpBtn"></button>
   <pre id="test-output"></pre>
   <script>
+    const toastCalls = [];
     window.chrome = {
       runtime: {
         lastError: null,
@@ -37,7 +38,7 @@
     };
     window.UiI18n = { t(lang, key) { return key; } };
     window.UiTour = { maybeStartOnce() {}, start() {}, reset() { return Promise.resolve(); } };
-    window.UiToast = { show() {} };
+    window.UiToast = { show(message, level) { toastCalls.push({ message, level }); } };
     window.WordStorage = {
       getUiLanguage() { return Promise.resolve("en"); },
       getSourceLang() { return Promise.resolve("id"); },
@@ -55,6 +56,9 @@
   <script src="./lib/test-harness.js"></script>
   <script>
     const { assert, assertEqual, runTests } = window.TestHarness;
+    function wait(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
 
     runTests([
       {
@@ -129,6 +133,43 @@
           assert(saved && saved.berjalan && saved.berjalan.lemma === "jalan", "expected missing lemma to be filled");
           assertEqual(saved.rumah.lemma, "rumah");
           assertEqual(updateCalls, 1);
+        },
+      },
+      {
+        name: "word meaning can be edited inline in fullscreen words view",
+        async run() {
+          const store = {
+            vulgar: {
+              meaning: "old meaning",
+              learned: false,
+              createdAt: 1,
+              examples: [],
+            },
+          };
+          let savedWordsPayload = null;
+          WordStorage.getWords = () => Promise.resolve(JSON.parse(JSON.stringify(store)));
+          WordStorage.saveWords = (words) => {
+            savedWordsPayload = JSON.parse(JSON.stringify(words));
+            Object.assign(store, JSON.parse(JSON.stringify(words)));
+            return Promise.resolve();
+          };
+          const meaningEl = document.createElement("div");
+          meaningEl.className = "word-meaning is-editable";
+          meaningEl.textContent = "old meaning";
+          document.body.appendChild(meaningEl);
+
+          startMeaningEdit("vulgar", meaningEl, "old meaning");
+          await wait(25);
+          const editor = meaningEl.querySelector(".word-meaning-editor");
+          assert(editor, "expected inline editor");
+          editor.value = "new meaning";
+          editor.dispatchEvent(new Event("blur"));
+          await wait(25);
+          assert(savedWordsPayload && savedWordsPayload.vulgar, "expected saveWords to persist updated meaning");
+          assertEqual(savedWordsPayload.vulgar.meaning, "new meaning");
+          assertEqual(meaningEl.textContent, "new meaning");
+          assert(toastCalls.some((entry) => entry.message === "saved"), "expected saved toast");
+          meaningEl.remove();
         },
       },
     ]);

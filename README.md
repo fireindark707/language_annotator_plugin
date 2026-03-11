@@ -1,6 +1,6 @@
 # Language Annotator
 
-[![Version](https://img.shields.io/badge/version-1.4.1-d91f26)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-1.4.2-d91f26)](./manifest.json)
 [![Chrome](https://img.shields.io/badge/Chrome-Extension-1a73e8?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/language-annotator/pplocadbndpadfenglgleehcfjaciobg)
 [![Firefox](https://img.shields.io/badge/Firefox-Add--on-ff7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/zh-TW/firefox/addon/language-annotator/)
 [![Manifest](https://img.shields.io/badge/manifest-Chrome%20MV3%20%7C%20Firefox%20MV2-6b7280)](./manifests)
@@ -15,6 +15,8 @@ It turns everyday reading into an active study loop:
 - add new words from the page,
 - accumulate example sentences automatically,
 - enrich entries with dictionary data,
+- map words to their base forms,
+- highlight related inflected forms from the same word family,
 - and review everything again in practice mode.
 
 - [Chrome Web Store](https://chromewebstore.google.com/detail/language-annotator/pplocadbndpadfenglgleehcfjaciobg)
@@ -31,6 +33,28 @@ Language Annotator does the opposite:
 - and helps you turn repeated encounters into durable memory.
 
 This makes it useful for language learners, migrant workers, bilingual readers, researchers, and anyone building vocabulary through real-world reading instead of isolated word lists.
+
+## What’s New (v1.4.2)
+
+- Lemma-aware learning pipeline:
+  - saved words now store a base form when supported,
+  - related inflected forms can be grouped into the same word family,
+  - word-family highlights now appear on web pages with a secondary visual style.
+- Hover learning cards were upgraded:
+  - normal hover cards now use the same structured UI language as family hover cards,
+  - family hover prioritizes the current surface form's translation and dictionary result,
+  - pronunciation is available directly inside hover cards.
+- Sentence extraction upgraded with `sentencex-wasm` plus repair rules:
+  - better handling for abbreviation-heavy news text,
+  - improved sentence quality for automatic example collection.
+- Simple import added to settings:
+  - paste a newline-separated word list,
+  - or import a `.txt` / first-column `.csv`,
+  - then let the extension enrich entries asynchronously with meaning, lemma, family forms, and dictionary data.
+- Sync behavior refined:
+  - important word changes sync immediately,
+  - high-frequency enrichment changes sync in a deferred batch,
+  - cloud copy is compacted more intelligently before older words are trimmed.
 
 ## What’s New (v1.4.1)
 
@@ -84,9 +108,12 @@ This makes it useful for language learners, migrant workers, bilingual readers, 
 - Popup + full-page manager (`popup.html`, `words.html`).
 - Mark learned / unmark / pronounce / delete.
 - Automatic translation overlay for selected text (optional).
+- Lemma / base-form detection for supported languages.
+- Word-family highlighting for related inflected forms.
 - Multi-language UI.
 - Sync across devices via sharded `storage.sync`.
 - Import/export vocabulary data.
+- Simple import from plain text or CSV first column.
 - Editable excluded-domain list.
 - Guided onboarding and replayable product tours.
 
@@ -121,6 +148,15 @@ This makes it useful for language learners, migrant workers, bilingual readers, 
   - default still uses Google translation in input,
   - dictionary appears as selectable alternatives,
   - clicking "帶入" replaces input with selected dictionary definition.
+
+## Lemma & Word Family Support
+
+- Supported languages can resolve a saved word to its base form.
+- Newly added words can also store related inflected forms from the same word family.
+- On-page highlighting distinguishes:
+  - directly saved words,
+  - related family forms.
+- Family hover cards focus on the currently visible surface form while still reminding the learner which saved word it belongs to.
 
 ## Guided Onboarding
 
@@ -205,6 +241,24 @@ Current tutorial UI-language coverage:
   - meta key: `words_meta_v2`
   - shard keys: `words_shard_v2_*`
 - Automatic compact levels are applied if sync quota is tight.
+- Important changes such as adding, deleting, or marking words as learned sync immediately.
+- High-frequency enrichment updates such as examples, lemma backfill, and dictionary enrichment are batched and synced later.
+- When sync storage is tight, the extension first trims heavy cloud-only payloads before trimming the oldest cloud entries.
+
+## Privacy & Data Handling
+
+- Vocabulary data is stored locally in the browser.
+- A compact copy is also written to `chrome.storage.sync` for cross-device sync when available.
+- Selected text or words may be sent to third-party services only when required for:
+  - translation,
+  - dictionary lookup,
+  - lemma dictionary download for supported languages.
+- The extension does not download and execute remote JavaScript code.
+
+See:
+
+- [PRIVACY.md](./PRIVACY.md)
+- [docs/store-review-notes.md](./docs/store-review-notes.md)
 
 ## Build & Packaging
 
@@ -246,4 +300,4 @@ Outputs:
 
 ## Version
 
-Current manifest version: `1.4.1`.
+Current manifest version: `1.4.2`.

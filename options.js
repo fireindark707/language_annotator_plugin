@@ -183,15 +183,9 @@ document.addEventListener("DOMContentLoaded", function () {
 		return unquoted;
 	}
 
-	function extractFirstColumn(line) {
-		const raw = (line || "").trim();
-		if (!raw) return "";
-		let delimiter = "";
-		if (raw.includes("\t")) delimiter = "\t";
-		else if (raw.includes(",")) delimiter = ",";
-		else if (raw.includes(";")) delimiter = ";";
-		if (!delimiter) return normalizeImportedWord(raw);
-
+	function splitDelimitedColumns(line, delimiter) {
+		const raw = String(line || "");
+		const cells = [];
 		let inQuotes = false;
 		let cell = "";
 		for (let i = 0; i < raw.length; i += 1) {
@@ -205,25 +199,46 @@ document.addEventListener("DOMContentLoaded", function () {
 				inQuotes = !inQuotes;
 				continue;
 			}
-			if (ch === delimiter && !inQuotes) break;
+			if (ch === delimiter && !inQuotes) {
+				cells.push(cell);
+				cell = "";
+				continue;
+			}
 			cell += ch;
 		}
-		return normalizeImportedWord(cell);
+		cells.push(cell);
+		return cells;
+	}
+
+	function parseSimpleImportLine(line) {
+		const raw = (line || "").trim();
+		if (!raw) return null;
+		if (!raw.includes(",")) {
+			const wordOnly = normalizeImportedWord(raw);
+			return wordOnly ? { word: wordOnly, meaning: "" } : null;
+		}
+		const columns = splitDelimitedColumns(raw, ",");
+		const word = normalizeImportedWord(columns[0] || "");
+		if (!word) return null;
+		const meaning = columns.length > 1
+			? normalizeImportedWord(columns[1] || "")
+			: "";
+		return { word, meaning };
 	}
 
 	function parseSimpleImportText(rawText) {
 		const lines = String(rawText || "").split(/\r?\n/);
 		const seen = new Set();
-		const words = [];
+		const items = [];
 		lines.forEach(function (line) {
-			const word = extractFirstColumn(line);
-			if (!word) return;
-			const key = word.toLocaleLowerCase();
+			const parsed = parseSimpleImportLine(line);
+			if (!parsed || !parsed.word) return;
+			const key = parsed.word.toLocaleLowerCase();
 			if (seen.has(key)) return;
 			seen.add(key);
-			words.push(word);
+			items.push(parsed);
 		});
-		return words;
+		return items;
 	}
 
 	function createSimpleImportedEntry(existing, createdAt) {
@@ -281,8 +296,8 @@ document.addEventListener("DOMContentLoaded", function () {
 		};
 	}
 
-	async function enrichImportedWords(importedWords) {
-		if (!importedWords.length) return;
+	async function enrichImportedWords(importedItems) {
+		if (!importedItems.length) return;
 		const sourceLang = await WordStorage.getSourceLang();
 		const dictionaryEnabled = await WordStorage.getDictionaryLookupEnabled().catch(function () {
 			return true;
@@ -291,8 +306,9 @@ document.addEventListener("DOMContentLoaded", function () {
 		const canLemma = globalThis.LemmaUtils && globalThis.LemmaUtils.supportsLemmaBySourceLang(sourceLang);
 
 		let words = await WordStorage.getWords();
-		for (let index = 0; index < importedWords.length; index += 1) {
-			const word = importedWords[index];
+		for (let index = 0; index < importedItems.length; index += 1) {
+			const item = importedItems[index];
+			const word = item.word;
 			const current = words[word];
 			if (!current) continue;
 
@@ -349,22 +365,22 @@ document.addEventListener("DOMContentLoaded", function () {
 			}
 
 			words[word] = next;
-			if ((index + 1) % 3 === 0 || index === importedWords.length - 1) {
+			if ((index + 1) % 3 === 0 || index === importedItems.length - 1) {
 				await WordStorage.saveWords(words, { syncMode: "deferred" });
 				setSimpleImportStatus("simple_import_progress", {
 					current: index + 1,
-					total: importedWords.length,
+					total: importedItems.length,
 				});
 			}
 		}
 
-		setSimpleImportStatus("simple_import_enriched", { count: importedWords.length });
+		setSimpleImportStatus("simple_import_enriched", { count: importedItems.length });
 	}
 
 	async function runSimpleImport(rawText) {
 		const uiLanguage = uiLanguageSelect.value || "en";
-		const importedWords = parseSimpleImportText(rawText);
-		if (importedWords.length === 0) {
+		const importedItems = parseSimpleImportText(rawText);
+		if (importedItems.length === 0) {
 			UiToast.show(t(uiLanguage, "simple_import_empty"), "error");
 			setSimpleImportStatus("simple_import_empty");
 			return;
@@ -373,21 +389,26 @@ document.addEventListener("DOMContentLoaded", function () {
 		const words = await WordStorage.getWords();
 		let addedCount = 0;
 		const now = Date.now();
-		importedWords.forEach(function (word, index) {
+		importedItems.forEach(function (item, index) {
+			const word = item.word;
 			const existing = words[word];
 			if (!existing) addedCount += 1;
-			words[word] = createSimpleImportedEntry(existing, now + index);
+			const next = createSimpleImportedEntry(existing, now + index);
+			if (item.meaning && !next.meaning) {
+				next.meaning = item.meaning;
+			}
+			words[word] = next;
 		});
 		await WordStorage.saveWords(words, { syncMode: "immediate" });
 
-		UiToast.show(t(uiLanguage, "simple_import_done").replace("{count}", String(importedWords.length)), "success");
+		UiToast.show(t(uiLanguage, "simple_import_done").replace("{count}", String(importedItems.length)), "success");
 		setSimpleImportStatus("simple_import_queued", {
-			count: importedWords.length,
+			count: importedItems.length,
 			added: addedCount,
 		});
 
 		window.setTimeout(function () {
-			enrichImportedWords(importedWords).catch(function (error) {
+			enrichImportedWords(importedItems).catch(function (error) {
 				console.error("Simple import enrichment failed:", error);
 				setSimpleImportStatus("simple_import_partial");
 			});

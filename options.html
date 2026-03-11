@@ -454,7 +454,7 @@
                 <label id="excludedDomainsLabel" for="excludedDomainInput">排除網域</label>
                 <div class="switch-desc" id="excludedDomainsDesc">這些網域不啟用高亮與例句功能。</div>
                 <div class="domain-row">
-                    <input id="excludedDomainInput" type="text" placeholder="example.com" />
+                    <input id="excludedDomainInput" type="text" placeholder="" />
                     <button id="addExcludedDomainBtn" type="button">加入</button>
                 </div>
                 <div class="domain-list" id="excludedDomainList"></div>
@@ -472,8 +472,8 @@
             </div>
             <div class="simple-import">
                 <div class="switch-title" id="simpleImportLabel">簡易匯入</div>
-                <div class="switch-desc" id="simpleImportDesc">貼上純文字單詞清單，或匯入 txt / csv。系統會先快速建立單詞，再逐步補上原型與詞典。</div>
-                <textarea id="simpleImportInput" rows="6" placeholder="apple&#10;banana&#10;orange"></textarea>
+                <div class="switch-desc" id="simpleImportDesc">貼上「單字, 意思」清單，或匯入 txt / csv。其餘資料會稍後自動補齊。</div>
+                <textarea id="simpleImportInput" rows="6" placeholder=""></textarea>
                 <div class="io-actions">
                     <button id="simpleImportBtn" class="btn-secondary" type="button">開始簡易匯入</button>
                     <button id="simpleImportFileBtn" class="btn-secondary" type="button">匯入 txt / csv</button>

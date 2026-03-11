@@ -317,6 +317,44 @@
             line-height: 1.5;
             word-break: break-word;
         }
+        .word-meaning.is-editable {
+            display: inline-block;
+            border-bottom: 1px dashed #b88f79;
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cpath fill='%23915D4A' d='M13.92 2.5a1.5 1.5 0 0 1 2.121 0l1.459 1.459a1.5 1.5 0 0 1 0 2.121l-8.91 8.91-3.513.879.878-3.514 8.91-8.91Z'/%3E%3Cpath fill='%23FFF7F0' d='m6.61 12.355.998.998-.42 1.683-1.26-.423.682-2.258Z'/%3E%3C/g%3E%3C/svg%3E") 2 18, text;
+            transition: border-color 0.16s ease, color 0.16s ease, background-color 0.16s ease;
+        }
+        .word-meaning.is-editable:hover,
+        .word-meaning.is-editable:focus-visible {
+            border-bottom-color: #9b5946;
+            color: #5f4035;
+            background: rgba(247, 237, 226, 0.7);
+            outline: none;
+        }
+        .word-meaning.is-editing {
+            display: block;
+            border-bottom: none;
+            background: transparent;
+            cursor: text;
+        }
+        .word-meaning-editor {
+            width: 100%;
+            min-height: 54px;
+            resize: vertical;
+            margin-top: 2px;
+            padding: 10px 12px;
+            border: 1px solid #d6b8a4;
+            border-radius: 12px 10px 14px 10px;
+            background: #fffdf9;
+            color: #5d463c;
+            font: inherit;
+            line-height: 1.5;
+            box-shadow: inset 0 1px 2px rgba(106, 80, 67, 0.05);
+            outline: none;
+        }
+        .word-meaning-editor:focus {
+            border-color: #b76d57;
+            box-shadow: 0 0 0 3px rgba(183, 109, 87, 0.12);
+        }
         .word-lemma {
             display: inline;
             color: #8a756a;
@@ -784,7 +822,7 @@
                     </select>
                 </div>
                 <div class="search-row">
-                    <input id="searchInput" type="text" placeholder="搜尋單詞、意思、詞典解釋" />
+                    <input id="searchInput" type="text" placeholder="" />
                 </div>
                 </div>
             </div>

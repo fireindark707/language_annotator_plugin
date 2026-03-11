@@ -510,6 +510,74 @@ function enqueueWordWrite(word, task) {
 	});
 }
 
+function saveWordMeaning(word, nextMeaning) {
+	return enqueueWordWrite(word, () => WordStorage.getWords().then((words) => {
+		if (!words[word]) return false;
+		const normalizedMeaning = typeof nextMeaning === "string" ? nextMeaning.trim() : "";
+		if ((words[word].meaning || "") === normalizedMeaning) return true;
+		words[word].meaning = normalizedMeaning;
+		return WordStorage.saveWords(words, { syncMode: "immediate" }).then(() => true);
+	}));
+}
+
+function startMeaningEdit(word, meaningSpan, initialMeaning) {
+	if (!meaningSpan || meaningSpan.dataset.editing === "true") return;
+	meaningSpan.dataset.editing = "true";
+	meaningSpan.classList.add("is-editing");
+	const originalMeaning = typeof initialMeaning === "string" ? initialMeaning : "";
+	const editor = document.createElement("textarea");
+	editor.className = "word-meaning-editor";
+	editor.value = originalMeaning;
+	editor.setAttribute("aria-label", word);
+	meaningSpan.textContent = "";
+	meaningSpan.appendChild(editor);
+
+	let finished = false;
+	function finish() {
+		meaningSpan.dataset.editing = "false";
+		meaningSpan.classList.remove("is-editing");
+	}
+	function restore(value) {
+		finished = true;
+		finish();
+		meaningSpan.textContent = value;
+	}
+	function commit() {
+		if (finished) return;
+		finished = true;
+		const nextMeaning = editor.value.trim();
+		saveWordMeaning(word, nextMeaning).then(() => {
+			finish();
+			meaningSpan.textContent = nextMeaning;
+			UiToast.show(t("saved"), "success");
+		}).catch(() => {
+			restore(originalMeaning);
+			UiToast.show(t("save_failed"), "error");
+		});
+	}
+
+	editor.addEventListener("keydown", function (event) {
+		if (event.key === "Escape") {
+			event.preventDefault();
+			finished = true;
+			restore(originalMeaning);
+			return;
+		}
+		if (event.key === "Enter" && !event.shiftKey) {
+			event.preventDefault();
+			commit();
+		}
+	});
+	editor.addEventListener("blur", function () {
+		if (!finished) commit();
+	});
+
+	window.setTimeout(() => {
+		editor.focus();
+		editor.setSelectionRange(editor.value.length, editor.value.length);
+	}, 0);
+}
+
 function saveExampleTranslation(word, example, translation) {
 	return updateExamplesForWord(word, (listItems) => {
 		const idx = findExampleIndexByIdentity(listItems, example);
@@ -803,9 +871,19 @@ function updateWordsList() {
 					lemmaSpan.textContent = `${t("lemma_label")}: ${lemmaValue}`;
 				}
 				const meaningSpan = document.createElement("div");
-				meaningSpan.className = "word-meaning";
+				meaningSpan.className = "word-meaning is-editable";
+				meaningSpan.tabIndex = 0;
 				const meaningText = words[word].meaning || "";
 				meaningSpan.appendChild(document.createTextNode(meaningText));
+				meaningSpan.addEventListener("click", function () {
+					startMeaningEdit(word, meaningSpan, meaningSpan.textContent || "");
+				});
+				meaningSpan.addEventListener("keydown", function (event) {
+					if (event.key === "Enter" || event.key === " ") {
+						event.preventDefault();
+						startMeaningEdit(word, meaningSpan, meaningSpan.textContent || "");
+					}
+				});
 
 				const actionWrap = document.createElement("div");
 				actionWrap.className = "word-actions";
