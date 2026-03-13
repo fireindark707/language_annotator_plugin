@@ -69,7 +69,7 @@
           selection.removeAllRanges();
           selection.addRange(range);
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-          await wait(120);
+          await wait(220);
           assert(document.getElementById('translationBox'), 'expected translation box');
           assert(tourCalls.includes('content_selection_v1'), 'expected content selection tour on first translation box');
           assert(document.getElementById('translationDictionary').textContent.includes('dict_selected_form'), 'expected dictionary section label');
@@ -123,6 +123,32 @@
           document.getElementById('fixture').textContent = 'running words stay visible';
           await window.highlightWords();
           assert(document.querySelector('.plugin-highlight-word'), 'expected highlighted word');
+        },
+      },
+      {
+        name: 'highlightWords uses browser language detection hint for compact-script matching',
+        async run() {
+          wordsState = { '学校': { meaning: 'school', learned: false, examples: [] } };
+          document.querySelectorAll('.plugin-highlight-word').forEach((node) => {
+            node.replaceWith(document.createTextNode(node.textContent || ''));
+          });
+          document.getElementById('fixture').textContent = '今日は学校へ行きます。今日は小学校にも寄ります。';
+          const originalDetectLanguage = window.chrome.i18n.detectLanguage;
+          if (typeof window.__resetContentLanguageHintForTests === 'function') {
+            window.__resetContentLanguageHintForTests();
+          }
+          window.chrome.i18n.detectLanguage = (_text, callback) => {
+            callback({ languages: [{ language: 'ja', percentage: 100 }] });
+          };
+          try {
+            await window.highlightWords();
+            await wait(80);
+            const highlights = Array.from(document.getElementById('fixture').querySelectorAll('.plugin-highlight-word'));
+            assertEqual(highlights.length, 1);
+            assertEqual(highlights[0].textContent, '学校');
+          } finally {
+            window.chrome.i18n.detectLanguage = originalDetectLanguage;
+          }
         },
       },
     ]);

@@ -12,7 +12,10 @@
   <script>
     const tourCalls = [];
     const savedSnapshots = [];
+    const translationRequests = [];
     let wordsState = {};
+    let sourceLangState = 'en';
+    let detectedLanguageResponse = 'en';
     function setWordState(mode) {
       wordsState = mode === 'small'
         ? { a: { meaning: 'A', learned: false }, b: { meaning: 'B', learned: false }, c: { meaning: 'C', learned: false } }
@@ -36,9 +39,38 @@
       getUiLanguage() { return Promise.resolve('en'); },
       getWords() { return Promise.resolve(JSON.parse(JSON.stringify(wordsState))); },
       saveWords(words) { wordsState = JSON.parse(JSON.stringify(words)); savedSnapshots.push(wordsState); return Promise.resolve(); },
-      getSourceLang() { return Promise.resolve('en'); },
+      getSourceLang() { return Promise.resolve(sourceLangState); },
     };
-    window.chrome = { runtime: { lastError: null, sendMessage(message, callback) { callback({ translation: 'translated stimulus' }); } } };
+    window.chrome = {
+      i18n: {
+        detectLanguage(_text, callback) {
+          callback({
+            languages: detectedLanguageResponse
+              ? [{ language: detectedLanguageResponse, percentage: 100 }]
+              : [],
+          });
+        },
+      },
+      runtime: {
+        lastError: null,
+        sendMessage(message, callback) {
+          translationRequests.push({ text: message.text, sourceLang: message.sourceLang });
+          if (message.text === 'alpha example') {
+            callback({ translation: 'translated stimulus' });
+            return;
+          }
+          if (message.text === 'Ruang (isi jawaban) gajah di TN Bukit Tigapuluh makin sempit') {
+            callback({ translation: 'Ruang (待填入回答) gajah di TN Bukit Tigapuluh makin sempit' });
+            return;
+          }
+          if (message.text === 'Space (fill in the answer) is shrinking.') {
+            callback({ translation: 'Space（待填入回答） is shrinking.' });
+            return;
+          }
+          callback({ translation: `translated:${message.text}` });
+        },
+      },
+    };
     window.speechSynthesis = { speak() {}, getVoices() { return []; } };
     window.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; };
   </script>
@@ -111,12 +143,47 @@
       {
         name: 'cloze translate button loads translated stimulus',
         async run() {
+          translationRequests.length = 0;
+          sourceLangState = 'en';
+          detectedLanguageResponse = 'en';
           deck = [{ mode: 'cloze', word: 'alpha', stimulus: 'alpha example', answer: 'alpha', choices: ['alpha', 'beta', 'gamma', 'delta'] }];
           qIndex = 0;
           renderQuestion();
           document.getElementById('clozeTranslateBtn').click();
           await wait(30);
           assertEqual(document.getElementById('clozeTranslateText').textContent, 'translated stimulus');
+        },
+      },
+      {
+        name: 'cloze translate detects source language and sends localized exercise prompt',
+        async run() {
+          translationRequests.length = 0;
+          sourceLangState = 'en';
+          detectedLanguageResponse = 'id';
+          deck = [{ mode: 'cloze', word: 'jelajah', stimulus: 'Ruang _____ gajah di TN Bukit Tigapuluh makin sempit', answer: 'jelajah', choices: ['tempa', 'pengupahan', 'jelajah', 'pameran'] }];
+          qIndex = 0;
+          renderQuestion();
+          document.getElementById('clozeTranslateBtn').click();
+          await wait(30);
+          assertEqual(translationRequests[0].sourceLang, 'id');
+          assertEqual(translationRequests[0].text, 'Ruang (isi jawaban) gajah di TN Bukit Tigapuluh makin sempit');
+          assertEqual(document.getElementById('clozeTranslateText').textContent, 'Ruang (待填入回答) gajah di TN Bukit Tigapuluh makin sempit');
+        },
+      },
+      {
+        name: 'cloze translate falls back to configured source language when detection is unavailable',
+        async run() {
+          translationRequests.length = 0;
+          sourceLangState = 'en';
+          detectedLanguageResponse = '';
+          deck = [{ mode: 'cloze', word: 'answer', stimulus: 'Space _____ is shrinking.', answer: 'answer', choices: ['answer', 'beta', 'gamma', 'delta'] }];
+          qIndex = 0;
+          renderQuestion();
+          document.getElementById('clozeTranslateBtn').click();
+          await wait(30);
+          assertEqual(translationRequests[0].sourceLang, 'en');
+          assertEqual(translationRequests[0].text, 'Space (fill in the answer) is shrinking.');
+          assertEqual(document.getElementById('clozeTranslateText').textContent, 'Space（待填入回答） is shrinking.');
         },
       },
       {

@@ -76,6 +76,18 @@
         },
       },
       {
+        name: "segmenter-backed tokenization and whole-word matching work for compact scripts",
+        run() {
+          const zhTokens = U.tokenizeForSimilarity("今天去圖書館學中文", "zh-TW");
+          const jaMatch = U.findWholeWordMatch("今日は学校へ行きます。", "学校", "ja");
+          const jaNoMatch = U.findWholeWordMatch("今日は小学校へ行きます。", "学校", "ja");
+          assert(zhTokens.length >= 2, "expected zh tokenization to produce multiple tokens");
+          assertEqual(!!jaMatch, true);
+          assertEqual(jaMatch.index, 3);
+          assertEqual(jaNoMatch, null);
+        },
+      },
+      {
         name: "splitIntoSentences filters obvious code-like garbage",
         run() {
           const codey = "document.getElementById('x').addEventListener('click', function() { return 1; });";

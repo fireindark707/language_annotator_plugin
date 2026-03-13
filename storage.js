@@ -321,6 +321,27 @@
 			}
 		}
 
+		const localTranslationEngineResult = await getFromArea(chrome.storage.local, {
+			[TRANSLATION_ENGINE_KEY]: null,
+		});
+		if (localTranslationEngineResult[TRANSLATION_ENGINE_KEY] === null) {
+			const syncTranslationEngineResult = await getFromArea(chrome.storage.sync, {
+				[TRANSLATION_ENGINE_KEY]: null,
+			});
+			const syncTranslationEngine =
+				syncTranslationEngineResult[TRANSLATION_ENGINE_KEY] === "browser"
+					? "browser"
+					: "online";
+			await setToArea(chrome.storage.local, {
+				[TRANSLATION_ENGINE_KEY]: syncTranslationEngine,
+			});
+			if (syncTranslationEngineResult[TRANSLATION_ENGINE_KEY] === null) {
+				await setToArea(chrome.storage.sync, {
+					[TRANSLATION_ENGINE_KEY]: syncTranslationEngine,
+				});
+			}
+		}
+
 		const localUiLangResult = await getFromArea(chrome.storage.local, {
 			[UI_LANGUAGE_KEY]: null,
 		});
@@ -469,20 +490,29 @@
 
 		async importData(items) {
 			const words = items.words || {};
-			const sourceLang = items.sourceLang || "auto";
-			const translationEngine = items.translationEngine === "browser" ? "browser" : "online";
+			const sourceLang =
+				typeof items.sourceLang === "string" && items.sourceLang
+					? items.sourceLang
+					: await this.getSourceLang();
+			const translationEngine =
+				items.translationEngine === "browser" || items.translationEngine === "online"
+					? items.translationEngine
+					: await this.getTranslationEngine();
 			const autoTranslateOnSelect =
 				typeof items.autoTranslateOnSelect === "boolean"
 					? items.autoTranslateOnSelect
-					: true;
+					: await this.getAutoTranslateOnSelect();
 			const dictionaryLookupEnabled =
 				typeof items.dictionaryLookupEnabled === "boolean"
 					? items.dictionaryLookupEnabled
-					: true;
-			const uiLanguage = items.uiLanguage || "zh-TW";
+					: await this.getDictionaryLookupEnabled();
+			const uiLanguage =
+				typeof items.uiLanguage === "string" && items.uiLanguage
+					? items.uiLanguage
+					: await this.getUiLanguage();
 			const excludedDomains = Array.isArray(items.excludedDomains)
 				? items.excludedDomains
-				: DEFAULT_EXCLUDED_DOMAINS;
+				: await this.getExcludedDomains();
 			await this.saveWords(words, { syncMode: "immediate" });
 			await this.saveSourceLang(sourceLang);
 			await this.saveTranslationEngine(translationEngine);

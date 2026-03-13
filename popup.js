@@ -6,6 +6,7 @@ const TranslationUtilsRef = globalThis.TranslationUtils;
 const enqueueTranslationJob = TranslationUtilsRef.createTaskQueue(2);
 
 let cachedSourceLangPromise = null;
+let currentSourceLang = "auto";
 const translateInflight = new Set();
 const translationMemoryCache = new Map();
 const exampleObservers = new WeakMap();
@@ -156,19 +157,15 @@ function createHighlightedSentenceElement(sentence, word) {
 		wrapper.textContent = sentence;
 		return wrapper;
 	}
-	const isCjkWord = isCjkText(rawWord);
-	const lowerSentence = sentence.toLowerCase();
-	const lowerWord = rawWord.toLowerCase();
 	let cursor = 0;
 	let matched = false;
 	while (cursor < sentence.length) {
-		const start = lowerSentence.indexOf(lowerWord, cursor);
+		const match = ExampleUtilsRef.findWholeWordMatch
+			? ExampleUtilsRef.findWholeWordMatch(sentence, rawWord, currentSourceLang, cursor)
+			: null;
+		const start = match ? match.index : -1;
 		if (start === -1) break;
-		const end = start + rawWord.length;
-		if (!isBoundaryMatch(sentence, start, end, isCjkWord)) {
-			cursor = start + 1;
-			continue;
-		}
+		const end = start + (match ? match.length : rawWord.length);
 		if (start > cursor) {
 			wrapper.appendChild(document.createTextNode(sentence.slice(cursor, start)));
 		}
@@ -486,10 +483,12 @@ function applyUiText() {
 
 function refreshLanguageChip() {
 	WordStorage.getSourceLang().then((sourceLang) => {
+		currentSourceLang = sourceLang || "auto";
 		languageStats.textContent = `${t("source_lang")}：${sourceLang}`;
 		autoLangHint.style.display = sourceLang === "auto" ? "block" : "none";
 	}).catch((error) => {
 		console.error("Failed to load source language:", error);
+		currentSourceLang = "auto";
 		languageStats.textContent = `${t("source_lang")}：auto`;
 		autoLangHint.style.display = "block";
 	});

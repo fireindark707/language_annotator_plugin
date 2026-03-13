@@ -99,47 +99,115 @@
           const text = buildClozeStimulus("run", [
             "I run every morning.",
             "Running is healthy.",
-          ]);
+          ], "en");
           assert(text.includes("_____"), "expected blanked cloze");
-          assertEqual(buildClozeStimulus("run", ["Running is healthy."]), "");
+          assertEqual(buildClozeStimulus("run", ["Running is healthy."], "en"), "");
         },
       },
       {
-        name: "buildQuestion only uses cloze within the lower cloze probability band",
+        name: "buildClozeStimulus supports compact-script matching when given a language hint",
+        run() {
+          const text = buildClozeStimulus("学校", [
+            "今日は学校へ行きます。",
+            "学校",
+          ], "ja");
+          assertEqual(text, "今日は_____へ行きます。");
+        },
+      },
+      {
+        name: "isSuitableClozeSentence rejects too-short too-long and noisy examples",
+        run() {
+          assertEqual(PracticeUtils.isSuitableClozeSentence("run now", "run"), false);
+          assertEqual(PracticeUtils.isSuitableClozeSentence("I run every morning before breakfast with my neighbor near the river and then continue through the old market before heading back home for coffee and another short walk.", "run"), false);
+          assertEqual(PracticeUtils.isSuitableClozeSentence("run >>> ### $$$ %% ^^ &&", "run"), false);
+          assertEqual(PracticeUtils.isSuitableClozeSentence("I run 12345 >>> 67890 every day.", "run"), false);
+          assertEqual(PracticeUtils.isSuitableClozeSentence("I run every morning before breakfast.", "run", "en"), true);
+          assertEqual(PracticeUtils.isSuitableClozeSentence("今日は学校へ行きます。", "学校", "ja"), true);
+        },
+      },
+      {
+        name: "buildClozeStimulus skips unsuitable candidates before picking a usable sentence",
+        run() {
+          const text = buildClozeStimulus("run", [
+            "run now",
+            "run >>> ### $$$ %% ^^ &&",
+            "I run every morning before breakfast.",
+          ], "en");
+          assertEqual(text, "I _____ every morning before breakfast.");
+        },
+      },
+      {
+        name: "buildQuestion only uses cloze within the configured probability band",
         run() {
           const originalRandom = Math.random;
           allWords = [
-            { word: "alpha", meaning: "A", learned: false, examples: ["alpha appears here."] },
-            { word: "beta", meaning: "B", learned: false, examples: ["beta appears here."] },
-            { word: "gamma", meaning: "G", learned: false, examples: ["gamma appears here."] },
-            { word: "delta", meaning: "D", learned: false, examples: ["delta appears here."] },
+            { word: "alpha", meaning: "A", learned: false, examples: ["alpha appears right here today."] },
+            { word: "beta", meaning: "B", learned: false, examples: ["beta appears right here today."] },
+            { word: "gamma", meaning: "G", learned: false, examples: ["gamma appears right here today."] },
+            { word: "delta", meaning: "D", learned: false, examples: ["delta appears right here today."] },
           ];
-          Math.random = () => 0.15;
+          Math.random = () => Math.min(CLOZE_PROBABILITY + 0.05, 0.95);
           try {
             const q = buildQuestion(allWords[0]);
-            assertEqual(q.mode, "word2meaning");
+            assertEqual(q.mode === "cloze", false);
           } finally {
             Math.random = originalRandom;
           }
         },
       },
       {
-        name: "buildQuestion still allows cloze inside the reduced probability band",
+        name: "buildQuestion still allows cloze inside the configured probability band",
         run() {
           const originalRandom = Math.random;
           allWords = [
-            { word: "alpha", meaning: "A", learned: false, examples: ["alpha appears here."] },
-            { word: "beta", meaning: "B", learned: false, examples: ["beta appears here."] },
-            { word: "gamma", meaning: "G", learned: false, examples: ["gamma appears here."] },
-            { word: "delta", meaning: "D", learned: false, examples: ["delta appears here."] },
+            { word: "alpha", meaning: "A", learned: false, examples: ["alpha appears right here today."] },
+            { word: "beta", meaning: "B", learned: false, examples: ["beta appears right here today."] },
+            { word: "gamma", meaning: "G", learned: false, examples: ["gamma appears right here today."] },
+            { word: "delta", meaning: "D", learned: false, examples: ["delta appears right here today."] },
           ];
-          Math.random = () => 0.05;
+          Math.random = () => Math.max(CLOZE_PROBABILITY - 0.05, 0);
           try {
             const q = buildQuestion(allWords[0]);
             assertEqual(q.mode, "cloze");
           } finally {
             Math.random = originalRandom;
           }
+        },
+      },
+      {
+        name: "buildQuestion splits remaining probability evenly across non-cloze modes",
+        run() {
+          const originalRandom = Math.random;
+          const word2MeaningRoll = CLOZE_PROBABILITY + (((1 - CLOZE_PROBABILITY) / 2) / 2);
+          const meaning2WordRoll = CLOZE_PROBABILITY + (((1 - CLOZE_PROBABILITY) / 2) + 0.01);
+          allWords = [
+            { word: "alpha", meaning: "A", learned: false, examples: ["alpha appears right here today."] },
+            { word: "beta", meaning: "B", learned: false, examples: ["beta appears right here today."] },
+            { word: "gamma", meaning: "G", learned: false, examples: ["gamma appears right here today."] },
+            { word: "delta", meaning: "D", learned: false, examples: ["delta appears right here today."] },
+          ];
+          try {
+            Math.random = () => word2MeaningRoll;
+            assertEqual(buildQuestion(allWords[0]).mode, "word2meaning");
+            Math.random = () => meaning2WordRoll;
+            assertEqual(buildQuestion(allWords[0]).mode, "meaning2word");
+          } finally {
+            Math.random = originalRandom;
+          }
+        },
+      },
+      {
+        name: "cloze exercise prompt coverage includes every configured source language base",
+        run() {
+          const expectedBases = [
+            "ar", "bn", "cs", "de", "el", "en", "es", "fa", "fr", "he", "hi", "hu",
+            "id", "it", "ja", "jv", "km", "ko", "lo", "ms", "my", "nl", "pl", "pt",
+            "ro", "ru", "su", "sv", "sw", "ta", "te", "th", "tl", "tr", "ur", "vi", "zh",
+          ];
+          expectedBases.forEach((base) => {
+            assert(!!CLOZE_EXERCISE_PROMPTS[base], `missing cloze prompt for ${base}`);
+            assert(typeof CLOZE_EXERCISE_PROMPTS[base].blank === "string" && CLOZE_EXERCISE_PROMPTS[base].blank.length > 0, `missing blank text for ${base}`);
+          });
         },
       },
       {

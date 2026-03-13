@@ -26,6 +26,16 @@
         },
       },
       {
+        name: "compact-script matching respects segment boundaries instead of raw substrings",
+        run() {
+          const text = "今日は学校へ行きます。今日は小学校にも寄ります。";
+          const lower = text.toLowerCase();
+          assertEqual(U.findNextWholeWordIndex(text, lower, "学校", 0, "ja"), 3);
+          assertEqual(U.containsWord("今日は学校へ行きます。", "学校", "ja"), true);
+          assertEqual(U.containsWord("今日は小学校へ行きます。", "学校", "ja"), false);
+        },
+      },
+      {
         name: "findTextNodes skips script tags and extension ui",
         run() {
           const host = document.createElement("div");
@@ -107,6 +117,22 @@
           const familyEl = wrapper.querySelector(".plugin-highlight-family-word");
           assert(familyEl, "expected family highlight");
           assertEqual(familyEl.textContent, "running");
+        },
+      },
+      {
+        name: "buildHighlightedFragment avoids compact-script substring false positives",
+        run() {
+          const fragment = U.buildHighlightedFragment("今日は小学校へ行きます。", [
+            { form: "学校", rootWord: "学校", isFamily: false },
+          ], {
+            学校: { meaning: "school", learned: false, examples: [] },
+          }, {
+            document,
+            languageHint: "ja",
+            showWordPreview() {},
+            hideWordPreview() {},
+          });
+          assertEqual(fragment, null);
         },
       },
       {

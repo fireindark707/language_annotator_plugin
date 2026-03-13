@@ -5,6 +5,9 @@ let contentUiLang = "en";
 let contentTourAttempted = false;
 let contentTourPending = false;
 let contentSelectionTourAttempted = false;
+let contentLanguageHint = "";
+let contentLanguageHintHref = "";
+let contentLanguageHintPromise = null;
 function requireContentDependency(name) {
 	const dependency = globalThis[name];
 	if (!dependency) {
@@ -190,14 +193,16 @@ function hideWordPreview(delay) {
 		TranslationUtilsRef,
 		DictionaryUtilsRef,
 		contentT,
-		normalizeDictionaryQuery,
-		shouldLookupDictionaryQuery,
-		supportsDictionaryBySourceLang,
-		getExampleText,
-		isCjkText,
-		isBoundaryMatch,
-	});
-}
+			normalizeDictionaryQuery,
+			shouldLookupDictionaryQuery,
+			supportsDictionaryBySourceLang,
+			getExampleText,
+			isCjkText,
+			isBoundaryMatch,
+			findWholeWordMatch: ExampleUtilsRef.findWholeWordMatch,
+			languageHint: contentLanguageHint || document.documentElement.lang || (typeof navigator !== "undefined" ? navigator.language : "en"),
+		});
+	}
 
 function isCjkText(text) {
 	return ContentPageProcessingRef.isCjkText(text);
@@ -261,6 +266,30 @@ function detectTextLanguageWithBrowserApi(text) {
 	});
 }
 
+async function resolveContentLanguageHint() {
+	const currentHref = location.href || "";
+	if (contentLanguageHintPromise && contentLanguageHintHref === currentHref) {
+		return contentLanguageHintPromise;
+	}
+	contentLanguageHintHref = currentHref;
+	contentLanguageHintPromise = (async () => {
+		const bodyText = normalizeText(
+			document.body && typeof document.body.innerText === "string"
+				? document.body.innerText
+				: (document.body && document.body.textContent) || ""
+		).slice(0, 4000);
+		const detected = await detectTextLanguageWithBrowserApi(bodyText);
+		const fallback = (
+			document.documentElement.lang ||
+			await WordStorage.getSourceLang().catch(() => "") ||
+			(typeof navigator !== "undefined" ? navigator.language : "en")
+		);
+		contentLanguageHint = detected || fallback || "en";
+		return contentLanguageHint;
+	})();
+	return contentLanguageHintPromise;
+}
+
 async function shouldSkipTranslateAndDictionary(text) {
 	const detected = await detectTextLanguageWithBrowserApi(text);
 	if (!detected) return false;
@@ -295,11 +324,12 @@ const isLowInformationExample = ExampleUtilsRef.isLowInformationExample;
 const normalizeExampleList = ExampleUtilsRef.normalizeExampleList;
 const sortExamples = ExampleUtilsRef.sortExamples;
 const enforceExampleLimit = ExampleUtilsRef.enforceExampleLimit;
-const isTooSimilarToAny = (candidate, pool) => ExampleUtilsRef.isTooSimilarToAny(candidate, pool, 0.88);
-const hasContainmentRelation = ExampleUtilsRef.hasContainmentRelation;
+const isTooSimilarToAny = (candidate, pool, languageHint) => ExampleUtilsRef.isTooSimilarToAny(candidate, pool, 0.88, languageHint);
+const hasContainmentRelation = (candidate, pool, languageHint) => ExampleUtilsRef.hasContainmentRelation(candidate, pool, languageHint);
 
 function splitIntoSentences(text) {
 	const lang =
+		contentLanguageHint ||
 		document.documentElement.lang ||
 		(typeof navigator !== "undefined" ? navigator.language : "en");
 	return ExampleUtilsRef.splitIntoSentences(text, lang || "en");
@@ -310,7 +340,7 @@ const contentPageProcessingState = {
 	pendingExampleMap: {},
 };
 
-function getContentPageProcessingDeps() {
+function getContentPageProcessingDeps(languageHint) {
 	return {
 		document,
 		Node,
@@ -329,6 +359,7 @@ function getContentPageProcessingDeps() {
 		enforceExampleLimit,
 		sortExamples,
 		maxExamplesPerWord: MAX_EXAMPLES_PER_WORD,
+		languageHint: languageHint || contentLanguageHint || document.documentElement.lang || "en",
 		currentHref: () => location.href,
 		markLearned,
 		openAddWordModal: showAddWordModal,
@@ -357,7 +388,16 @@ function getContentPageProcessingDeps() {
 }
 
 function highlightWords() {
-	return ContentPageProcessingRef.highlightWords(getContentPageProcessingDeps());
+	return resolveContentLanguageHint().then((languageHint) => (
+		ContentPageProcessingRef.highlightWords(getContentPageProcessingDeps(languageHint))
+	));
+}
+if (typeof window !== "undefined") {
+	window.__resetContentLanguageHintForTests = function __resetContentLanguageHintForTests() {
+		contentLanguageHint = "";
+		contentLanguageHintHref = "";
+		contentLanguageHintPromise = null;
+	};
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {

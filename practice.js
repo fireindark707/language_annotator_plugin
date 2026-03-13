@@ -8,6 +8,7 @@ let streak = 0;
 let bestStreak = 0;
 let overtimeActive = false;
 let answered = false;
+let currentSourceLang = "auto";
 let reviewedWordsThisRound = [];
 let roundWordOutcomes = new Map();
 let correctWordsThisRound = new Set();
@@ -15,7 +16,48 @@ let selectedLearnedWords = new Set();
 
 const MAX_QUESTIONS = 10;
 const CHOICE_COUNT = 4;
-const CLOZE_PROBABILITY = 0.12;
+const CLOZE_PROBABILITY = 0.2;
+const CLOZE_BLANK_TEXT = "_____";
+const CLOZE_BLANK_RE = /_{5,}/g;
+const CLOZE_EXERCISE_PROMPTS = {
+	ar: { blank: "املأ الإجابة" },
+	bn: { blank: "উত্তর পূরণ করুন" },
+	cs: { blank: "dopln odpoved" },
+	de: { blank: "Antwort eintragen" },
+	el: { blank: "symplirose tin apantisi" },
+	en: { blank: "fill in the answer" },
+	es: { blank: "escribe la respuesta" },
+	fa: { blank: "پاسخ را پر کنید" },
+	fr: { blank: "ecrivez la reponse" },
+	he: { blank: "השלם את התשובה" },
+	hi: { blank: "उत्तर भरें" },
+	hu: { blank: "ird be a valaszt" },
+	id: { blank: "isi jawaban" },
+	it: { blank: "inserisci la risposta" },
+	ja: { blank: "答えを入れる" },
+	jv: { blank: "iseni wangsulan" },
+	km: { blank: "បំពេញចម្លើយ" },
+	ko: { blank: "정답을 넣기" },
+	lo: { blank: "ໃສ່ຄໍາຕອບ" },
+	ms: { blank: "isi jawapan" },
+	my: { blank: "အဖြေကို ဖြည့်ပါ" },
+	nl: { blank: "vul het antwoord in" },
+	pl: { blank: "wpisz odpowiedz" },
+	pt: { blank: "preencha a resposta" },
+	ro: { blank: "completeaza raspunsul" },
+	ru: { blank: "впишите ответ" },
+	su: { blank: "eusian jawaban" },
+	sv: { blank: "fyll i svaret" },
+	sw: { blank: "jaza jibu" },
+	ta: { blank: "பதிலை நிரப்புக" },
+	te: { blank: "జవాబును పూరించండి" },
+	th: { blank: "เติมคำตอบ" },
+	tl: { blank: "ilagay ang sagot" },
+	tr: { blank: "cevabi yazin" },
+	ur: { blank: "جواب بھریں" },
+	vi: { blank: "dien dap an" },
+	zh: { blank: "填写答案" },
+};
 
 const titleEl = document.getElementById("title");
 const subtitleEl = document.getElementById("subtitle");
@@ -254,8 +296,8 @@ function normalizeExampleText(example) {
 	return PracticeUtilsRef.normalizeExampleText(example);
 }
 
-function buildClozeStimulus(word, examples) {
-	return PracticeUtilsRef.buildClozeStimulus(word, examples);
+function buildClozeStimulus(word, examples, languageHint) {
+	return PracticeUtilsRef.buildClozeStimulus(word, examples, languageHint || currentSourceLang);
 }
 
 function getModePrompt(mode) {
@@ -403,6 +445,61 @@ function translateText(text) {
 	)).catch(() => "");
 }
 
+function translateTextWithSource(text, sourceLang) {
+	return Promise.resolve(
+		TranslationUtilsRef.requestRuntimeTranslation({
+			chromeRuntime: chrome.runtime,
+			text,
+			sourceLang: sourceLang || "auto",
+		})
+	).catch(() => "");
+}
+
+function getClozeExercisePromptParts(language) {
+	const base = TranslationUtilsRef.getLanguageBase(language);
+	return CLOZE_EXERCISE_PROMPTS[base] || CLOZE_EXERCISE_PROMPTS.en;
+}
+
+function buildClozeExerciseText(stimulus, language) {
+	const prompt = getClozeExercisePromptParts(language);
+	const parts = String(stimulus || "").split(CLOZE_BLANK_RE);
+	if (parts.length < 2) return String(stimulus || "");
+	const before = parts[0];
+	const after = parts.slice(1).join(CLOZE_BLANK_TEXT);
+	return `${before}(${prompt.blank})${after}`;
+}
+
+function detectClozeSourceLanguage(stimulus, fallbackSourceLang) {
+	return Promise.resolve(
+		TranslationUtilsRef.detectLanguageWithChromeI18n(
+			stimulus,
+			typeof chrome !== "undefined" && chrome && chrome.i18n ? chrome.i18n : null
+		)
+	).then((detectedLang) => {
+		return (
+			TranslationUtilsRef.normalizeTranslationLang(detectedLang) ||
+			TranslationUtilsRef.normalizeTranslationLang(fallbackSourceLang) ||
+			"auto"
+		);
+	}).catch(() => (
+		TranslationUtilsRef.normalizeTranslationLang(fallbackSourceLang) || "auto"
+	));
+}
+
+function translateClozeStimulus(text) {
+	const rawText = String(text || "");
+	CLOZE_BLANK_RE.lastIndex = 0;
+	if (!CLOZE_BLANK_RE.test(rawText)) {
+		return translateText(text);
+	}
+	return WordStorage.getSourceLang().then((sourceLang) => (
+		detectClozeSourceLanguage(rawText, sourceLang).then((detectedSourceLang) => {
+			const exerciseText = buildClozeExerciseText(rawText, detectedSourceLang);
+			return translateTextWithSource(exerciseText, detectedSourceLang);
+		})
+	)).catch(() => "");
+}
+
 function burst() {
 	celebrateEl.innerHTML = "";
 	for (let i = 0; i < 16; i += 1) {
@@ -442,13 +539,14 @@ function burstSummary() {
 }
 
 function buildQuestion(item) {
-	const clozeStimulus = buildClozeStimulus(item.word, item.examples);
+	const clozeStimulus = buildClozeStimulus(item.word, item.examples, currentSourceLang);
 	let pickedMode = "word2meaning";
 	if (clozeStimulus) {
 		const roll = Math.random();
+		const nonClozeCutoff = CLOZE_PROBABILITY + ((1 - CLOZE_PROBABILITY) / 2);
 		if (roll < CLOZE_PROBABILITY) {
 			pickedMode = "cloze";
-		} else if (roll < 0.56) {
+		} else if (roll < nonClozeCutoff) {
 			pickedMode = "word2meaning";
 		} else {
 			pickedMode = "meaning2word";
@@ -707,9 +805,11 @@ function startRound() {
 function init() {
 	return Promise.all([
 		WordStorage.getUiLanguage().catch(() => "en"),
+		WordStorage.getSourceLang().catch(() => "auto"),
 		WordStorage.getWords(),
-	]).then(([lang, wordsObj]) => {
+	]).then(([lang, sourceLang, wordsObj]) => {
 		uiLang = lang || "en";
+		currentSourceLang = sourceLang || "auto";
 		document.documentElement.lang = UiI18n.langAttr(uiLang);
 		document.documentElement.dir = UiI18n.dir(uiLang);
 		document.title = t("practice_mode");
@@ -784,7 +884,7 @@ clozeTranslateBtn.addEventListener("click", () => {
 	clozeTranslateTextEl.style.display = "";
 	clozeTranslateTextEl.className = "feedback";
 	clozeTranslateTextEl.textContent = t("loading_translation");
-	translateText(q.stimulus).then((translated) => {
+	translateClozeStimulus(q.stimulus).then((translated) => {
 		clozeTranslateTextEl.className = translated ? "feedback ok" : "feedback bad";
 		clozeTranslateTextEl.textContent = translated || t("dict_search_failed");
 	}).catch(() => {

@@ -80,6 +80,28 @@
         },
       },
       {
+        name: 'importData preserves existing settings when legacy exports omit newer fields',
+        async run() {
+          await S.saveSourceLang('fr');
+          await S.saveTranslationEngine('browser');
+          await S.saveAutoTranslateOnSelect(false);
+          await S.saveDictionaryLookupEnabled(false);
+          await S.saveUiLanguage('fr');
+          await S.saveExcludedDomains(['legacy.example']);
+          await S.importData({
+            words: { legacy: { meaning: 'old backup' } },
+          });
+          const words = await S.getWords();
+          assert(words.legacy, 'expected imported legacy words');
+          assertEqual(await S.getSourceLang(), 'fr');
+          assertEqual(await S.getTranslationEngine(), 'browser');
+          assertEqual(await S.getAutoTranslateOnSelect(), false);
+          assertEqual(await S.getDictionaryLookupEnabled(), false);
+          assertEqual(await S.getUiLanguage(), 'fr');
+          assertEqual((await S.getExcludedDomains())[0], 'legacy.example');
+        },
+      },
+      {
         name: 'getTranslationEngine defaults to online and saveTranslationEngine normalizes values',
         async run() {
           delete chrome.storage.local._store.translationEngine;
@@ -89,6 +111,15 @@
           assertEqual(await S.getTranslationEngine(), 'browser');
           await S.saveTranslationEngine('unexpected');
           assertEqual(await S.getTranslationEngine(), 'online');
+        },
+      },
+      {
+        name: 'init hydrates translation engine from sync when local state is missing',
+        async run() {
+          delete chrome.storage.local._store.translationEngine;
+          chrome.storage.sync._store.translationEngine = 'browser';
+          assertEqual(await S.getTranslationEngine(), 'browser');
+          assertEqual(chrome.storage.local._store.translationEngine, 'browser');
         },
       },
       {
