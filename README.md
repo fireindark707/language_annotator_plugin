@@ -1,6 +1,6 @@
 # Language Annotator
 
-[![Version](https://img.shields.io/badge/version-1.4.3-d91f26)](./manifest.json)
+[![Version](https://img.shields.io/badge/version-1.4.4-d91f26)](./manifest.json)
 [![Chrome](https://img.shields.io/badge/Chrome-Extension-1a73e8?logo=googlechrome&logoColor=white)](https://chromewebstore.google.com/detail/language-annotator/pplocadbndpadfenglgleehcfjaciobg)
 [![Firefox](https://img.shields.io/badge/Firefox-Add--on-ff7139?logo=firefoxbrowser&logoColor=white)](https://addons.mozilla.org/zh-TW/firefox/addon/language-annotator/)
 [![Manifest](https://img.shields.io/badge/manifest-Chrome%20MV3%20%7C%20Firefox%20MV2-6b7280)](./manifests)
@@ -262,4 +262,4 @@ This usually happens after reloading the extension while an old tab is still run
 
 ## Version
 
-Current manifest version: `1.4.3`.
+Current manifest version: `1.4.4`.
