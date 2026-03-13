@@ -8,6 +8,8 @@ const DictionaryUtilsRef = globalThis.DictionaryUtils;
 document.addEventListener("DOMContentLoaded", function () {
 	const sourceLangSelect = document.getElementById("sourceLang");
 	const uiLanguageSelect = document.getElementById("uiLanguage");
+	const translationEngineSelect = document.getElementById("translationEngine");
+	const translationEngineHint = document.getElementById("translationEngineHint");
 	const autoTranslateCheckbox = document.getElementById("autoTranslateOnSelect");
 	const dictionaryLookupRow = document.getElementById("dictionaryLookupRow");
 	const dictionaryLookupCheckbox = document.getElementById("dictionaryLookupEnabled");
@@ -65,6 +67,42 @@ document.addEventListener("DOMContentLoaded", function () {
 		dictionaryLookupRow.style.display = shouldShow ? "" : "none";
 	}
 
+	function renderTranslationEngineHint() {
+		const uiLanguage = uiLanguageSelect.value || "en";
+		const showHint = translationEngineSelect.value === "browser";
+		translationEngineHint.textContent = t(uiLanguage, "browser_translation_quality_hint");
+		translationEngineHint.classList.remove("is-animating");
+		translationEngineHint.hidden = !showHint;
+		if (!showHint) return;
+		void translationEngineHint.offsetWidth;
+		translationEngineHint.classList.add("is-animating");
+	}
+
+	function getPairFallbackMessage(uiLang, reason) {
+		const key = TranslationUtils.getBrowserTranslationFallbackKey(reason);
+		return t(uiLang, key);
+	}
+
+	async function ensureBrowserTranslationPairSupported() {
+		const engine = translationEngineSelect.value === "browser" ? "browser" : "online";
+		if (engine !== "browser") return true;
+		const uiLanguage = uiLanguageSelect.value || "en";
+		const result = await TranslationUtils.validateBrowserTranslationPair({
+			sourceLang: sourceLangSelect.value || "auto",
+			targetLang: TranslationUtils.getBrowserTargetLang(window.navigator),
+			translatorGlobal: globalThis.Translator,
+			navigatorObject: window.navigator,
+		});
+		if (result.supported) return true;
+		translationEngineSelect.value = "online";
+		renderTranslationEngineHint();
+		await WordStorage.saveTranslationEngine("online");
+		const message = getPairFallbackMessage(uiLanguage, result.reason);
+		saveStatus.textContent = message;
+		UiToast.show(message, "error");
+		return false;
+	}
+
 	function normalizeDomain(raw) {
 		let value = (raw || "").trim().toLowerCase();
 		value = value.replace(/^https?:\/\//, "");
@@ -111,6 +149,11 @@ document.addEventListener("DOMContentLoaded", function () {
 		document.getElementById("currentLangLabel").textContent = t(uiLang, "current_lang");
 		document.getElementById("sourceLangLabel").textContent = t(uiLang, "translation_source");
 		document.getElementById("uiLangLabel").textContent = t(uiLang, "ui_language");
+		document.getElementById("translationEngineLabel").textContent = t(uiLang, "translation_engine");
+		document.getElementById("translationEngineDesc").textContent = t(uiLang, "translation_engine_desc");
+		translationEngineSelect.options[0].textContent = t(uiLang, "translation_engine_online");
+		translationEngineSelect.options[1].textContent = t(uiLang, "translation_engine_browser");
+		renderTranslationEngineHint();
 		document.getElementById("autoTranslateLabel").textContent = t(uiLang, "auto_translate");
 		document.getElementById("autoTranslateDesc").textContent = t(uiLang, "auto_translate_desc");
 		document.getElementById("dictionaryLookupLabel").textContent = t(uiLang, "dictionary_lookup");
@@ -138,11 +181,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	function persistSettings(showToast) {
 		const sourceLang = sourceLangSelect.value;
+		const translationEngine = translationEngineSelect.value === "browser" ? "browser" : "online";
 		const autoTranslateOnSelect = autoTranslateCheckbox.checked;
 		const dictionaryLookupEnabled = dictionaryLookupCheckbox.checked;
 		const uiLanguage = uiLanguageSelect.value || "en";
 		Promise.all([
 			WordStorage.saveSourceLang(sourceLang),
+			WordStorage.saveTranslationEngine(translationEngine),
 			WordStorage.saveAutoTranslateOnSelect(autoTranslateOnSelect),
 			WordStorage.saveDictionaryLookupEnabled(dictionaryLookupEnabled),
 			WordStorage.saveUiLanguage(uiLanguage),
@@ -417,12 +462,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
 	Promise.all([
 		WordStorage.getSourceLang(),
+		WordStorage.getTranslationEngine(),
 		WordStorage.getAutoTranslateOnSelect(),
 		WordStorage.getDictionaryLookupEnabled(),
 		WordStorage.getUiLanguage(),
 		WordStorage.getExcludedDomains(),
-	]).then(function ([savedLang, autoTranslate, dictionaryLookup, uiLang, excluded]) {
+	]).then(function ([savedLang, translationEngine, autoTranslate, dictionaryLookup, uiLang, excluded]) {
 		sourceLangSelect.value = savedLang || "auto";
+		translationEngineSelect.value = translationEngine === "browser" ? "browser" : "online";
 		autoTranslateCheckbox.checked = autoTranslate;
 		dictionaryLookupCheckbox.checked = dictionaryLookup;
 		uiLanguageSelect.value = uiLang || "zh-TW";
@@ -432,6 +479,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		renderCurrentLabel();
 		renderDictionaryLookupVisibility();
 		renderExcludedDomains();
+		ensureBrowserTranslationPairSupported().catch(() => {});
 		window.setTimeout(() => startOptionsTour(false), 200);
 	}).catch(function (error) {
 		console.error("Failed to load options:", error);
@@ -448,7 +496,9 @@ document.addEventListener("DOMContentLoaded", function () {
 	sourceLangSelect.addEventListener("change", function () {
 		renderCurrentLabel();
 		renderDictionaryLookupVisibility();
-		scheduleAutoSave();
+		ensureBrowserTranslationPairSupported().then(function () {
+			scheduleAutoSave();
+		});
 	});
 
 	uiLanguageSelect.addEventListener("change", function () {
@@ -456,6 +506,13 @@ document.addEventListener("DOMContentLoaded", function () {
 		saveBtn.style.display = "none";
 		renderExcludedDomains();
 		scheduleAutoSave();
+	});
+
+	translationEngineSelect.addEventListener("change", function () {
+		renderTranslationEngineHint();
+		ensureBrowserTranslationPairSupported().then(function () {
+			scheduleAutoSave();
+		});
 	});
 
 	autoTranslateCheckbox.addEventListener("change", scheduleAutoSave);

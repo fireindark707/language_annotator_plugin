@@ -3,6 +3,7 @@
 	const WORDS_SHARD_PREFIX = "words_shard_v2_";
 	const LEGACY_WORDS_KEY = "words";
 	const SOURCE_LANG_KEY = "sourceLang";
+	const TRANSLATION_ENGINE_KEY = "translationEngine";
 	const AUTO_TRANSLATE_KEY = "autoTranslateOnSelect";
 	const UI_LANGUAGE_KEY = "uiLanguage";
 	const DICTIONARY_LOOKUP_KEY = "dictionaryLookupEnabled";
@@ -450,6 +451,7 @@
 		async exportData() {
 			const words = await this.getWords();
 			const sourceLang = await this.getSourceLang();
+			const translationEngine = await this.getTranslationEngine();
 			const autoTranslateOnSelect = await this.getAutoTranslateOnSelect();
 			const dictionaryLookupEnabled = await this.getDictionaryLookupEnabled();
 			const uiLanguage = await this.getUiLanguage();
@@ -457,6 +459,7 @@
 			return {
 				words: words,
 				sourceLang: sourceLang,
+				translationEngine: translationEngine,
 				autoTranslateOnSelect: autoTranslateOnSelect,
 				dictionaryLookupEnabled: dictionaryLookupEnabled,
 				uiLanguage: uiLanguage,
@@ -467,6 +470,7 @@
 		async importData(items) {
 			const words = items.words || {};
 			const sourceLang = items.sourceLang || "auto";
+			const translationEngine = items.translationEngine === "browser" ? "browser" : "online";
 			const autoTranslateOnSelect =
 				typeof items.autoTranslateOnSelect === "boolean"
 					? items.autoTranslateOnSelect
@@ -481,6 +485,7 @@
 				: DEFAULT_EXCLUDED_DOMAINS;
 			await this.saveWords(words, { syncMode: "immediate" });
 			await this.saveSourceLang(sourceLang);
+			await this.saveTranslationEngine(translationEngine);
 			await this.saveAutoTranslateOnSelect(autoTranslateOnSelect);
 			await this.saveDictionaryLookupEnabled(dictionaryLookupEnabled);
 			await this.saveUiLanguage(uiLanguage);
@@ -493,6 +498,20 @@
 				[AUTO_TRANSLATE_KEY]: true,
 			});
 			return localResult[AUTO_TRANSLATE_KEY] !== false;
+		},
+
+		async getTranslationEngine() {
+			await this.init();
+			const localResult = await getFromArea(chrome.storage.local, {
+				[TRANSLATION_ENGINE_KEY]: "online",
+			});
+			return localResult[TRANSLATION_ENGINE_KEY] === "browser" ? "browser" : "online";
+		},
+
+		async saveTranslationEngine(engine) {
+			const next = engine === "browser" ? "browser" : "online";
+			await setToArea(chrome.storage.local, { [TRANSLATION_ENGINE_KEY]: next });
+			await setToArea(chrome.storage.sync, { [TRANSLATION_ENGINE_KEY]: next });
 		},
 
 		async saveAutoTranslateOnSelect(enabled) {

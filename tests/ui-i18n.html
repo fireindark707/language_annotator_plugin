@@ -9,7 +9,25 @@
     const { assert, assertEqual, runTests } = window.TestHarness;
     const UiI18nRef = window.UiI18n;
     const languages = ['zh-TW','zh-CN','en','fr','pt','ar','hi','ja','ko','id','ru','es'];
-    const requiredKeys = ['popup_title','settings','sync_now','practice_mode','lemma_label','dict_selected_form','practice_show_translation'];
+    const requiredKeys = [
+      'popup_title',
+      'settings',
+      'sync_now',
+      'practice_mode',
+      'lemma_label',
+      'dict_selected_form',
+      'practice_show_translation',
+      'translation_engine',
+      'translation_engine_desc',
+      'translation_engine_online',
+      'translation_engine_browser',
+      'browser_translation_quality_hint',
+      'browser_translation_requires_manual_source',
+      'browser_translation_same_language',
+      'browser_translation_pair_unavailable',
+      'browser_translation_requires_chrome',
+      'browser_translation_failed',
+    ];
     runTests([
       {
         name: 'all supported UI languages expose required core keys',

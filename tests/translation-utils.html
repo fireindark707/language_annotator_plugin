@@ -11,6 +11,9 @@
   <script>
     const { assert, assertEqual, runTests } = window.TestHarness;
     const U = window.TranslationUtils;
+    window.chrome = {
+      runtime: { lastError: null },
+    };
 
     runTests([
       {
@@ -71,6 +74,312 @@
           await Promise.all(jobs);
           assertEqual(maxActive, 2);
           assertEqual(order.length, 8);
+        },
+      },
+      {
+        name: "validateBrowserTranslationPair rejects auto source and same-language pairs",
+        async run() {
+          const translatorGlobal = {
+            availability() {
+              throw new Error("should not probe unsupported pairs");
+            },
+            create() {
+              throw new Error("should not create unsupported pairs");
+            },
+          };
+          const autoResult = await U.validateBrowserTranslationPair({
+            sourceLang: "auto",
+            targetLang: "ja-JP",
+            translatorGlobal,
+          });
+          assertEqual(autoResult.supported, false);
+          assertEqual(autoResult.reason, "manual_source_required");
+
+          const sameResult = await U.validateBrowserTranslationPair({
+            sourceLang: "ja",
+            targetLang: "ja-JP",
+            translatorGlobal,
+          });
+          assertEqual(sameResult.supported, false);
+          assertEqual(sameResult.reason, "same_language");
+        },
+      },
+      {
+        name: "browser target normalization and fallback keys are stable across locales",
+        run() {
+          assertEqual(U.getBrowserTargetLang({ language: "zh-HK" }), "zh-TW");
+          assertEqual(U.getBrowserTargetLang({ language: "pt-BR" }), "pt-BR");
+          assertEqual(U.getBrowserTargetLang({ language: "fr-FR" }), "fr-FR");
+          assertEqual(U.isChromeBrowserEnvironment({ userAgent: "Mozilla/5.0 Chrome/142.0.0.0 Safari/537.36" }), true);
+          assertEqual(U.isChromeBrowserEnvironment({ userAgent: "Mozilla/5.0 Firefox/124.0" }), false);
+          assertEqual(U.isChromeBrowserEnvironment({ userAgent: "Mozilla/5.0 Edg/122.0.0.0 Chrome/122.0.0.0 Safari/537.36" }), false);
+          assertEqual(U.getBrowserTranslationFallbackKey("manual_source_required"), "browser_translation_requires_manual_source");
+          assertEqual(U.getBrowserTranslationFallbackKey("same_language"), "browser_translation_same_language");
+          assertEqual(U.getBrowserTranslationFallbackKey("chrome_only"), "browser_translation_requires_chrome");
+          assertEqual(U.getBrowserTranslationFallbackKey("browser_translate_failed"), "browser_translation_failed");
+          assertEqual(U.getBrowserTranslationFallbackKey("pair_unavailable"), "browser_translation_pair_unavailable");
+        },
+      },
+      {
+        name: "validateBrowserTranslationPair rejects non-Chrome browsers before probing translator",
+        async run() {
+          let availabilityCalls = 0;
+          const result = await U.validateBrowserTranslationPair({
+            sourceLang: "en",
+            targetLang: "ja-JP",
+            navigatorObject: { language: "ja-JP", userAgent: "Mozilla/5.0 Firefox/124.0" },
+            translatorGlobal: {
+              availability() {
+                availabilityCalls += 1;
+                return Promise.resolve("downloadable");
+              },
+              create() {
+                throw new Error("should not create on non-Chrome");
+              },
+            },
+          });
+          assertEqual(result.supported, false);
+          assertEqual(result.reason, "chrome_only");
+          assertEqual(availabilityCalls, 0);
+        },
+      },
+      {
+        name: "isSingleWordLikeText handles latin and compact-script heuristics conservatively",
+        run() {
+          assertEqual(U.isSingleWordLikeText("running", "en"), true);
+          assertEqual(U.isSingleWordLikeText("take off", "en"), false);
+          assertEqual(U.isSingleWordLikeText("this is definitely not a single word anymore", "en"), false);
+          assertEqual(U.isSingleWordLikeText("今天下午我們一起去圖書館", "zh-TW"), false);
+          assertEqual(U.isSingleWordLikeText("圖書館", "zh-TW"), true);
+          assertEqual(U.isSingleWordLikeText("今日は図書館に行きます", "ja"), false);
+          assertEqual(U.isSingleWordLikeText("学校", "ja"), true);
+          assertEqual(U.isSingleWordLikeText("ตอนนี้เรากำลังไปสถานีรถไฟ", "th"), false);
+          assertEqual(U.isSingleWordLikeText("สวัสดี", "th"), true);
+        },
+      },
+      {
+        name: "requestPreferredTranslation skips translation when detected language matches browser language",
+        async run() {
+          let runtimeCalls = 0;
+          const translated = await U.requestPreferredTranslation({
+            translationEngine: "browser",
+            text: "already japanese",
+            sourceLang: "en",
+            targetLang: "ja-JP",
+            detectedLanguage: "ja",
+            translatorGlobal: {
+              availability() { return Promise.resolve("downloadable"); },
+              create() {
+                throw new Error("should not create translator for browser language text");
+              },
+            },
+            chromeRuntime: {
+              sendMessage() {
+                runtimeCalls += 1;
+              },
+            },
+          });
+          assertEqual(translated, "");
+          assertEqual(runtimeCalls, 0);
+        },
+      },
+      {
+        name: "requestPreferredTranslation uses browser translator only for configured source language",
+        async run() {
+          const events = [];
+          const translated = await U.requestPreferredTranslation({
+            translationEngine: "browser",
+            text: "hello there",
+            sourceLang: "en-US",
+            targetLang: "ja-JP",
+            detectedLanguage: "en",
+            translatorGlobal: {
+              availability({ sourceLanguage, targetLanguage }) {
+                events.push(`availability:${sourceLanguage}->${targetLanguage}`);
+                return Promise.resolve("downloadable");
+              },
+              create({ sourceLanguage, targetLanguage }) {
+                events.push(`create:${sourceLanguage}->${targetLanguage}`);
+                return Promise.resolve({
+                  translate(text) {
+                    events.push(`translate:${text}`);
+                    return Promise.resolve("こんにちは");
+                  },
+                });
+              },
+            },
+            chromeRuntime: {
+              sendMessage() {
+                events.push("runtime");
+              },
+            },
+          });
+          assertEqual(translated, "こんにちは");
+          assert(events.includes("availability:en-US->ja-JP"), "expected pair availability probe");
+          assert(events.includes("create:en-US->ja-JP"), "expected translator create");
+          assert(events.includes("translate:hello there"), "expected built-in translation");
+          assertEqual(events.includes("runtime"), false);
+        },
+      },
+      {
+        name: "requestPreferredTranslation forces single words to online translation even in browser mode",
+        async run() {
+          const events = [];
+          const translated = await U.requestPreferredTranslation({
+            translationEngine: "browser",
+            text: "running",
+            sourceLang: "en",
+            targetLang: "ja-JP",
+            detectedLanguage: "en",
+            translatorGlobal: {
+              availability() {
+                events.push("availability");
+                return Promise.resolve("downloadable");
+              },
+              create() {
+                events.push("create");
+                return Promise.resolve({
+                  translate() {
+                    events.push("translate");
+                    return Promise.resolve("should-not-run");
+                  },
+                });
+              },
+            },
+            chromeRuntime: {
+              lastError: null,
+              sendMessage(message, callback) {
+                events.push(`runtime:${message.sourceLang}`);
+                callback({ translation: "走線上" });
+              },
+            },
+          });
+          assertEqual(translated, "走線上");
+          assert(events.includes("runtime:en"), "expected online fallback");
+          assertEqual(events.includes("create"), false);
+          assertEqual(events.includes("translate"), false);
+        },
+      },
+      {
+        name: "requestPreferredTranslation falls back to online translation for other detected languages",
+        async run() {
+          let runtimePayload = null;
+          const translated = await U.requestPreferredTranslation({
+            translationEngine: "browser",
+            text: "bonjour",
+            sourceLang: "en",
+            targetLang: "ja-JP",
+            detectedLanguage: "fr",
+            translatorGlobal: {
+              availability() { return Promise.resolve("downloadable"); },
+              create() {
+                throw new Error("should not create translator for third language");
+              },
+            },
+            chromeRuntime: {
+              lastError: null,
+              sendMessage(message, callback) {
+                runtimePayload = message;
+                callback({ translation: "こんにちは" });
+              },
+            },
+          });
+          assertEqual(translated, "こんにちは");
+          assertEqual(runtimePayload.sourceLang, "fr");
+          assertEqual(runtimePayload.targetLang, "ja-JP");
+        },
+      },
+      {
+        name: "requestPreferredTranslation falls back to online translation when browser pair is unavailable",
+        async run() {
+          let runtimePayload = null;
+          const translated = await U.requestPreferredTranslation({
+            translationEngine: "browser",
+            text: "hello",
+            sourceLang: "en",
+            targetLang: "zh-TW",
+            detectedLanguage: "en",
+            translatorGlobal: {
+              availability() { return Promise.resolve("unavailable"); },
+              create() {
+                throw new Error("should not create unsupported pair");
+              },
+            },
+            chromeRuntime: {
+              lastError: null,
+              sendMessage(message, callback) {
+                runtimePayload = message;
+                callback({ translation: "你好" });
+              },
+            },
+          });
+          assertEqual(translated, "你好");
+          assertEqual(runtimePayload.sourceLang, "en");
+          assertEqual(runtimePayload.targetLang, "zh-TW");
+        },
+      },
+      {
+        name: "requestPreferredTranslation falls back online on non-Chrome browsers and reports chrome-only reason",
+        async run() {
+          let fallbackReason = "";
+          let runtimePayload = null;
+          const translated = await U.requestPreferredTranslation({
+            translationEngine: "browser",
+            text: "hello there",
+            sourceLang: "en",
+            navigatorObject: { language: "ja-JP", userAgent: "Mozilla/5.0 Firefox/124.0" },
+            detectedLanguage: "en",
+            translatorGlobal: {
+              availability() {
+                throw new Error("should not probe translator");
+              },
+              create() {
+                throw new Error("should not create translator");
+              },
+            },
+            onBrowserFallback(result) {
+              fallbackReason = result && result.reason;
+            },
+            chromeRuntime: {
+              lastError: null,
+              sendMessage(message, callback) {
+                runtimePayload = message;
+                callback({ translation: "こんにちは" });
+              },
+            },
+          });
+          assertEqual(translated, "こんにちは");
+          assertEqual(fallbackReason, "chrome_only");
+          assertEqual(runtimePayload.targetLang, "ja-JP");
+        },
+      },
+      {
+        name: "requestPreferredTranslation respects normalized browser locale in non-English environments",
+        async run() {
+          let runtimePayload = null;
+          const translated = await U.requestPreferredTranslation({
+            translationEngine: "browser",
+            text: "bonjour tout le monde",
+            sourceLang: "fr-FR",
+            navigatorObject: { language: "zh-HK" },
+            detectedLanguage: "fr",
+            translatorGlobal: {
+              availability() { return Promise.resolve("unavailable"); },
+              create() {
+                throw new Error("should not create unsupported pair");
+              },
+            },
+            chromeRuntime: {
+              lastError: null,
+              sendMessage(message, callback) {
+                runtimePayload = message;
+                callback({ translation: "你好，大家好" });
+              },
+            },
+          });
+          assertEqual(translated, "你好，大家好");
+          assertEqual(runtimePayload.targetLang, "zh-TW");
+          assertEqual(runtimePayload.sourceLang, "fr-FR");
         },
       },
     ]);

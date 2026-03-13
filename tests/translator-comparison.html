@@ -1,0 +1,491 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>translator-comparison</title>
+</head>
+<body>
+  <button id="analyzeBtn" type="button">Analyze Languages</button>
+  <button id="prepareBtn" type="button" disabled>Prepare Built-in Translator</button>
+  <button id="runBtn" type="button" disabled>Run Comparison</button>
+  <pre id="test-output">pending</pre>
+  <script>
+    const CASES = [
+      { id: "ui_1", text: "If you tap the highlighted word, you can save it without leaving the page." },
+      { id: "news_1", text: "The article explains how drought affects food prices in rural areas." },
+      { id: "work_1", text: "Although the meeting ran long, we still finished the release checklist." },
+      { id: "daily_1", text: "Please keep the receipt in case you need to return the item later." },
+      { id: "phrasal_1", text: "She ended up turning down the offer, even though the salary was higher." },
+      { id: "memory_1", text: "After reading the same word in three different contexts, I finally remembered it." },
+      { id: "logistics_1", text: "The package was delayed because the courier misread the apartment number." },
+      { id: "idiom_1", text: "I finally got the hang of it after a few messy attempts." }
+    ];
+
+    const TARGET_CANDIDATES = ["zh-TW", "zh-Hant", "zh"];
+    const ANALYZE_TIMEOUT_MS = 30000;
+    const PREPARE_TIMEOUT_MS = 180000;
+    const AUTORUN = new URLSearchParams(window.location.search).get("autorun") === "1";
+
+    let detector = null;
+    let preparedTranslators = new Map();
+    let report = createEmptyReport();
+
+    function createEmptyReport() {
+      return {
+        support: {
+          hasTranslator: "Translator" in self,
+          hasAvailability: "Translator" in self && typeof Translator.availability === "function",
+          hasCreate: "Translator" in self && typeof Translator.create === "function",
+          hasLanguageDetector: "LanguageDetector" in self,
+        },
+        targetLanguage: "",
+        detectorAvailability: "",
+        detectorCreateError: "",
+        status: "idle",
+        pairStatuses: {},
+        rows: [],
+      };
+    }
+
+    function cloneReportState() {
+      return {
+        support: report.support,
+        targetLanguage: report.targetLanguage,
+        detectorAvailability: report.detectorAvailability,
+        detectorCreateError: report.detectorCreateError,
+        status: report.status,
+        pairStatuses: report.pairStatuses,
+        rows: report.rows,
+      };
+    }
+
+    function setOutput() {
+      document.getElementById("test-output").textContent =
+        JSON.stringify(cloneReportState(), null, 2);
+    }
+
+    function setButtons() {
+      const analyzeBtn = document.getElementById("analyzeBtn");
+      const prepareBtn = document.getElementById("prepareBtn");
+      const runBtn = document.getElementById("runBtn");
+      const isBusy = report.status === "analyzing" ||
+        report.status === "preparing-built-in" ||
+        report.status === "running-comparison";
+
+      analyzeBtn.disabled = isBusy;
+      prepareBtn.disabled = isBusy || report.status !== "analyzed";
+      runBtn.disabled = isBusy || report.status !== "prepared-built-in";
+    }
+
+    function updateView() {
+      setButtons();
+      setOutput();
+    }
+
+    function setStatus(status) {
+      report.status = status;
+      updateView();
+    }
+
+    function withTimeout(promise, ms, label) {
+      let timer = null;
+      return Promise.race([
+        promise.finally(() => {
+          if (timer) {
+            clearTimeout(timer);
+          }
+        }),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error(`${label} timed out after ${ms}ms`));
+          }, ms);
+        }),
+      ]);
+    }
+
+    function destroyPreparedTranslators() {
+      preparedTranslators.forEach((translator) => {
+        if (translator && typeof translator.destroy === "function") {
+          try {
+            translator.destroy();
+          } catch (_) {}
+        }
+      });
+      preparedTranslators = new Map();
+    }
+
+    function destroyDetector() {
+      if (detector && typeof detector.destroy === "function") {
+        try {
+          detector.destroy();
+        } catch (_) {}
+      }
+      detector = null;
+    }
+
+    function resetSessionState() {
+      destroyPreparedTranslators();
+      destroyDetector();
+      report = createEmptyReport();
+      updateView();
+    }
+
+    function getPairKey(sourceLanguage, targetLanguage) {
+      return `${sourceLanguage}__${targetLanguage}`;
+    }
+
+    function ensurePairStatus(sourceLanguage, targetLanguage) {
+      const pairKey = getPairKey(sourceLanguage, targetLanguage);
+      if (!report.pairStatuses[pairKey]) {
+        report.pairStatuses[pairKey] = {
+          sourceLanguage,
+          targetLanguage,
+          availability: "",
+          prepared: false,
+          prepareError: "",
+          downloadProgress: 0,
+        };
+      }
+      return report.pairStatuses[pairKey];
+    }
+
+    async function detectSourceLanguage(text) {
+      if (!detector || typeof detector.detect !== "function") {
+        return { detectedLanguage: "", confidence: 0 };
+      }
+
+      try {
+        const results = await detector.detect(text);
+        if (!Array.isArray(results) || results.length === 0) {
+          return { detectedLanguage: "", confidence: 0 };
+        }
+        return {
+          detectedLanguage: results[0].detectedLanguage || "",
+          confidence: typeof results[0].confidence === "number" ? results[0].confidence : 0,
+        };
+      } catch (_) {
+        return { detectedLanguage: "", confidence: 0 };
+      }
+    }
+
+    async function createLanguageDetector() {
+      if (!report.support.hasLanguageDetector ||
+        typeof LanguageDetector.availability !== "function") {
+        report.detectorAvailability = "missing";
+        report.detectorCreateError = "LanguageDetector API is not available.";
+        return null;
+      }
+
+      try {
+        report.detectorAvailability = await LanguageDetector.availability();
+        updateView();
+      } catch (error) {
+        report.detectorAvailability = "error";
+        report.detectorCreateError = error && error.message ? error.message : String(error);
+        return null;
+      }
+
+      try {
+        return await withTimeout(
+          LanguageDetector.create(),
+          ANALYZE_TIMEOUT_MS,
+          "LanguageDetector.create"
+        );
+      } catch (error) {
+        report.detectorCreateError = error && error.message ? error.message : String(error);
+        return null;
+      }
+    }
+
+    async function resolveTargetLanguage(sourceLanguages) {
+      if (!report.support.hasAvailability || sourceLanguages.length === 0) {
+        return "";
+      }
+
+      let firstSupportedTarget = "";
+
+      for (const targetLanguage of TARGET_CANDIDATES) {
+        let allSupported = true;
+        let hasSupportedPair = false;
+
+        for (const sourceLanguage of sourceLanguages) {
+          const pairStatus = ensurePairStatus(sourceLanguage, targetLanguage);
+          if (pairStatus.availability) {
+            if (pairStatus.availability !== "unavailable") {
+              hasSupportedPair = true;
+            } else {
+              allSupported = false;
+            }
+            continue;
+          }
+
+          try {
+            pairStatus.availability = await Translator.availability({
+              sourceLanguage,
+              targetLanguage,
+            });
+          } catch (error) {
+            pairStatus.availability = "error";
+            pairStatus.prepareError = error && error.message ? error.message : String(error);
+          }
+
+          if (pairStatus.availability && pairStatus.availability !== "unavailable" &&
+            pairStatus.availability !== "error") {
+            hasSupportedPair = true;
+          } else {
+            allSupported = false;
+          }
+          updateView();
+        }
+
+        if (!firstSupportedTarget && hasSupportedPair) {
+          firstSupportedTarget = targetLanguage;
+        }
+        if (allSupported && hasSupportedPair) {
+          return targetLanguage;
+        }
+      }
+
+      return firstSupportedTarget;
+    }
+
+    function getActivePairStatuses() {
+      return Object.entries(report.pairStatuses)
+        .filter(([, value]) => value.targetLanguage === report.targetLanguage);
+    }
+
+    async function analyzeLanguages() {
+      resetSessionState();
+      setStatus("analyzing");
+
+      detector = await createLanguageDetector();
+      if (!detector) {
+        setStatus("failed");
+        return;
+      }
+
+      const detectedLanguages = [];
+      report.rows = [];
+
+      for (const item of CASES) {
+        const detected = await detectSourceLanguage(item.text);
+        const row = {
+          id: item.id,
+          source: item.text,
+          detectedLanguage: detected.detectedLanguage,
+          detectedConfidence: detected.confidence,
+          pairAvailability: "",
+          chromeBuiltIn: "",
+          googleRemote: "",
+          chromeError: "",
+          googleError: "",
+        };
+        report.rows.push(row);
+        if (detected.detectedLanguage) {
+          detectedLanguages.push(detected.detectedLanguage);
+        }
+        updateView();
+      }
+
+      const uniqueSourceLanguages = [...new Set(detectedLanguages)];
+      report.targetLanguage = await resolveTargetLanguage(uniqueSourceLanguages);
+
+      if (!report.targetLanguage) {
+        report.rows = report.rows.map((row) => ({
+          ...row,
+          pairAvailability: row.detectedLanguage ? "unavailable" : "",
+          chromeError: row.detectedLanguage
+            ? "No supported target language found for this source language."
+            : "Language detection did not return a source language.",
+        }));
+        setStatus("failed");
+        return;
+      }
+
+      report.rows = report.rows.map((row) => {
+        if (!row.detectedLanguage) {
+          return {
+            ...row,
+            chromeError: "Language detection did not return a source language.",
+          };
+        }
+        const pairStatus = ensurePairStatus(row.detectedLanguage, report.targetLanguage);
+        return {
+          ...row,
+          pairAvailability: pairStatus.availability || "",
+        };
+      });
+
+      setStatus("analyzed");
+    }
+
+    async function prepareBuiltInTranslator() {
+      const activePairs = getActivePairStatuses();
+      if (!report.targetLanguage || activePairs.length === 0) {
+        setStatus("failed");
+        return;
+      }
+
+      setStatus("preparing-built-in");
+
+      for (const [pairKey, pairStatus] of activePairs) {
+        pairStatus.prepareError = "";
+        pairStatus.downloadProgress = 0;
+        pairStatus.prepared = false;
+
+        if (!report.support.hasCreate) {
+          pairStatus.prepareError = "Translator.create is not available.";
+          updateView();
+          continue;
+        }
+
+        if (!pairStatus.availability || pairStatus.availability === "unavailable" ||
+          pairStatus.availability === "error") {
+          if (!pairStatus.prepareError) {
+            pairStatus.prepareError = "Translator pair is not available.";
+          }
+          updateView();
+          continue;
+        }
+
+        try {
+          const translator = await withTimeout(
+            Translator.create({
+              sourceLanguage: pairStatus.sourceLanguage,
+              targetLanguage: pairStatus.targetLanguage,
+              monitor(monitor) {
+                monitor.addEventListener("downloadprogress", (event) => {
+                  pairStatus.downloadProgress =
+                    typeof event.loaded === "number" ? event.loaded : pairStatus.downloadProgress;
+                  updateView();
+                });
+              },
+            }),
+            PREPARE_TIMEOUT_MS,
+            `Translator.create(${pairStatus.sourceLanguage} -> ${pairStatus.targetLanguage})`
+          );
+          preparedTranslators.set(pairKey, translator);
+          pairStatus.prepared = true;
+        } catch (error) {
+          pairStatus.prepareError = error && error.message ? error.message : String(error);
+        }
+        updateView();
+      }
+
+      setStatus("prepared-built-in");
+    }
+
+    async function translateWithGoogle(row) {
+      try {
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(row.detectedLanguage || "auto")}&tl=${encodeURIComponent(report.targetLanguage || "zh-TW")}&hl=en-US&dt=t&dt=bd&dj=1&source=input&q=${encodeURIComponent(row.source)}`;
+        const response = await fetch(url);
+        const data = await response.json();
+        row.googleRemote = Array.isArray(data && data.sentences)
+          ? data.sentences.map((entry) => entry.trans || "").join(" ")
+          : "";
+      } catch (error) {
+        row.googleError = error && error.message ? error.message : String(error);
+      }
+    }
+
+    async function runComparison() {
+      if (report.status !== "prepared-built-in") {
+        setStatus("failed");
+        return;
+      }
+
+      setStatus("running-comparison");
+
+      for (const row of report.rows) {
+        row.chromeBuiltIn = "";
+        row.googleRemote = "";
+        row.chromeError = row.detectedLanguage ? "" : row.chromeError;
+        row.googleError = "";
+
+        if (row.detectedLanguage) {
+          const pairKey = getPairKey(row.detectedLanguage, report.targetLanguage);
+          const pairStatus = report.pairStatuses[pairKey] || null;
+          const translator = preparedTranslators.get(pairKey) || null;
+
+          if (!pairStatus || !pairStatus.prepared || !translator ||
+            typeof translator.translate !== "function") {
+            row.chromeError = "translator not prepared";
+          } else {
+            try {
+              row.chromeBuiltIn = await translator.translate(row.source);
+            } catch (error) {
+              row.chromeError = error && error.message ? error.message : String(error);
+            }
+          }
+        }
+
+        await translateWithGoogle(row);
+        updateView();
+      }
+
+      setStatus("complete");
+    }
+
+    async function runAutorunSequence() {
+      try {
+        await analyzeLanguages();
+        if (report.status !== "analyzed") {
+          return;
+        }
+        await prepareBuiltInTranslator();
+        if (report.status !== "prepared-built-in") {
+          return;
+        }
+        await runComparison();
+      } catch (error) {
+        report.status = "failed";
+        if (!report.detectorCreateError) {
+          report.detectorCreateError = error && error.message ? error.message : String(error);
+        }
+        updateView();
+      }
+    }
+
+    document.getElementById("analyzeBtn").addEventListener("click", () => {
+      analyzeLanguages().catch((error) => {
+        report.status = "failed";
+        report.detectorCreateError = error && error.message ? error.message : String(error);
+        updateView();
+      });
+    });
+
+    document.getElementById("prepareBtn").addEventListener("click", () => {
+      prepareBuiltInTranslator().catch((error) => {
+        report.status = "failed";
+        const activePairs = getActivePairStatuses();
+        if (activePairs.length > 0) {
+          activePairs[0][1].prepareError = error && error.message ? error.message : String(error);
+        }
+        updateView();
+      });
+    });
+
+    document.getElementById("runBtn").addEventListener("click", () => {
+      runComparison().catch((error) => {
+        report.status = "failed";
+        report.rows = report.rows.map((row) => ({
+          ...row,
+          chromeError: row.chromeError || (error && error.message ? error.message : String(error)),
+        }));
+        updateView();
+      });
+    });
+
+    window.addEventListener("beforeunload", () => {
+      destroyPreparedTranslators();
+      destroyDetector();
+    });
+
+    updateView();
+
+    if (AUTORUN) {
+      runAutorunSequence();
+    }
+  </script>
+</body>
+</html>

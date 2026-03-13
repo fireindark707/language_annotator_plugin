@@ -21,11 +21,16 @@
   <pre id="test-output"></pre>
   <script>
     const toastCalls = [];
+    let translationEngineState = "online";
     window.chrome = {
       runtime: {
         lastError: null,
         getURL(path) { return path; },
         sendMessage(message, callback) {
+          if (message.action === "translate") {
+            callback({ translation: `T:${message.text}` });
+            return;
+          }
           if (message.action === "getLemma") {
             const lemmaMap = { berjalan: "jalan", makanan: "makan" };
             callback({ found: !!lemmaMap[message.text], lemma: lemmaMap[message.text] || "" });
@@ -42,6 +47,7 @@
     window.WordStorage = {
       getUiLanguage() { return Promise.resolve("en"); },
       getSourceLang() { return Promise.resolve("id"); },
+      getTranslationEngine() { return Promise.resolve(translationEngineState); },
       getDictionaryLookupEnabled() { return Promise.resolve(true); },
       getWords() { return Promise.resolve({}); },
       saveWords() { return Promise.resolve(); },
@@ -206,6 +212,40 @@
           assertEqual(saveCalls, 0);
           assertEqual(meaningEl.textContent, "old meaning");
           meaningEl.remove();
+        },
+      },
+      {
+        name: "random sort helper shuffles fullscreen words deterministically when Math.random is stubbed",
+        run() {
+          const originalRandom = Math.random;
+          const rolls = [0, 0];
+          Math.random = () => (rolls.length ? rolls.shift() : 0);
+          try {
+            const renderedWords = shuffleWordOrder(["alpha", "beta", "gamma"]);
+            assertEqual(renderedWords.length, 3);
+            assertEqual(renderedWords[0], "beta");
+            assertEqual(renderedWords[1], "gamma");
+            assertEqual(renderedWords[2], "alpha");
+          } finally {
+            Math.random = originalRandom;
+          }
+        },
+      },
+      {
+        name: "browser translation fallback keeps fullscreen translation working and shows error reason",
+        async run() {
+          toastCalls.length = 0;
+          const originalRequestPreferredTranslation = window.TranslationUtils.requestPreferredTranslation;
+          window.TranslationUtils.requestPreferredTranslation = function requestPreferredTranslationStub(options) {
+            if (options && typeof options.onBrowserFallback === "function") {
+              options.onBrowserFallback({ reason: "pair_unavailable" });
+            }
+            return Promise.resolve("T:kalimat panjang untuk pengujian");
+          };
+          const translated = await translateExampleSentence("kalimat panjang untuk pengujian");
+          assertEqual(translated, "T:kalimat panjang untuk pengujian");
+          assert(toastCalls.some((entry) => entry.message === "browser_translation_pair_unavailable" && entry.level === "error"), "expected words fallback toast");
+          window.TranslationUtils.requestPreferredTranslation = originalRequestPreferredTranslation;
         },
       },
     ]);

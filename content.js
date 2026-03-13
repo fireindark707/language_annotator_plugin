@@ -68,6 +68,12 @@ function contentT(key) {
 	return fallback[key] || key;
 }
 
+function showContentBrowserTranslationFallback(reason) {
+	if (!globalThis.UiToast || typeof globalThis.UiToast.show !== "function") return;
+	const messageKey = TranslationUtilsRef.getBrowserTranslationFallbackKey(reason);
+	UiToast.show(contentT(messageKey), "error");
+}
+
 function startContentTour(force) {
 	if (!globalThis.UiTour) return;
 	const run = force ? UiTour.start : UiTour.maybeStartOnce;
@@ -274,8 +280,10 @@ function mapDictionarySections(dictResponse, sourceLang) {
 	return DictionaryUtilsRef.mapDictionarySections(dictResponse, sourceLang, {
 		maxEntries: 3,
 		translateEntry(definition, lang) {
-			return TranslationUtilsRef.requestRuntimeTranslation({
+			return TranslationUtilsRef.requestPreferredTranslation({
 				chromeRuntime: chrome.runtime,
+				chromeI18n: chrome.i18n,
+				wordStorage: WordStorage,
 				text: definition,
 				sourceLang: lang || "auto",
 			});
@@ -606,17 +614,36 @@ function translateText(text) {
 		if (shouldSkip) return;
 		return Promise.all([
 		WordStorage.getSourceLang(),
+		typeof WordStorage.getTranslationEngine === "function"
+			? WordStorage.getTranslationEngine().catch(() => "online")
+			: Promise.resolve("online"),
 		WordStorage.getDictionaryLookupEnabled().catch(() => true),
-	]).then(([sourceLang, dictionaryEnabled]) => {
+	]).then(async ([sourceLang, translationEngine, dictionaryEnabled]) => {
+		const detectedLang = await detectTextLanguageWithBrowserApi(text);
+		if (detectedLang && TranslationUtilsRef.isSameLanguageFamily(detectedLang, TranslationUtilsRef.getBrowserTargetLang(window.navigator))) {
+			return;
+		}
 		const isSingleWord = !/\s/.test((text || "").trim());
-		return TranslationUtilsRef.requestRuntimeTranslation({
+		return TranslationUtilsRef.requestPreferredTranslation({
 			chromeRuntime: chrome.runtime,
+			chromeI18n: chrome.i18n,
+			wordStorage: WordStorage,
 			text,
 			sourceLang,
+			translationEngine,
+			detectedLanguage: detectedLang,
+			targetLang: TranslationUtilsRef.getBrowserTargetLang(window.navigator),
+			onBrowserFallback(result) {
+				showContentBrowserTranslationFallback(result && result.reason);
+			},
 		}).then((translation) => {
+			if (!translation) return;
 			showTranslation(translation);
 			const dictQuery = normalizeDictionaryQuery(text);
-			if (!(dictionaryEnabled && isSingleWord && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery))) return;
+			const detectedMatchesSource = detectedLang
+				? TranslationUtilsRef.isSameLanguageFamily(detectedLang, sourceLang)
+				: true;
+			if (!(dictionaryEnabled && isSingleWord && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery) && detectedMatchesSource)) return;
 			chrome.runtime.sendMessage(
 				{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
 				(dictResponse) => {
@@ -653,6 +680,7 @@ function appendDictionaryToTranslationBox(dictResponse, sourceLang) {
 		document,
 		DictionaryUtilsRef,
 		TranslationUtilsRef,
+		WordStorage,
 		contentT,
 		chromeRuntime: chrome.runtime,
 		startContentSelectionTour,

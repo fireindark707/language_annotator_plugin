@@ -8,6 +8,9 @@
   <span id="currentLangLabel"></span>
   <span id="sourceLangLabel"></span>
   <span id="uiLangLabel"></span>
+  <span id="translationEngineLabel"></span>
+  <span id="translationEngineDesc"></span>
+  <span id="translationEngineHint" class="translation-engine-hint" hidden></span>
   <span id="autoTranslateLabel"></span>
   <span id="autoTranslateDesc"></span>
   <div id="dictionaryLookupRow"><span id="dictionaryLookupLabel"></span><span id="dictionaryLookupDesc"></span><input id="dictionaryLookupEnabled" type="checkbox"></div>
@@ -24,6 +27,7 @@
   <span id="excludedDomainsDesc"></span>
   <select id="sourceLang"><option value="auto">auto</option><option value="en">English</option><option value="id">Indonesian</option><option value="zh">Chinese</option></select>
   <select id="uiLanguage"><option value="en">English</option><option value="zh-TW">繁中</option></select>
+  <select id="translationEngine"><option value="online">Online</option><option value="browser">Browser</option></select>
   <input id="autoTranslateOnSelect" type="checkbox">
   <div id="currentLang"></div>
   <button id="save"></button>
@@ -45,6 +49,10 @@
     let importedItems = null;
     let savedWords = {};
     let anchorClicks = 0;
+    Object.defineProperty(window.navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 Chrome/142.0.0.0 Safari/537.36',
+    });
     window.DictionaryUtils = {
       supportsDictionaryBySourceLang(lang) {
         return ["en", "id", "zh"].includes((lang || "").split("-")[0]);
@@ -59,6 +67,31 @@
       dir(lang) { return (lang || '').startsWith('ar') ? 'rtl' : 'ltr'; },
     };
     window.UiToast = { show(message, type) { toastCalls.push({ message, type }); } };
+    window.TranslationUtils = {
+      getBrowserTargetLang() { return 'ja-JP'; },
+      getBrowserTranslationFallbackKey(reason) {
+        if (reason === 'chrome_only' || reason === 'api_unavailable') return 'browser_translation_requires_chrome';
+        if (reason === 'manual_source_required') return 'browser_translation_requires_manual_source';
+        if (reason === 'same_language') return 'browser_translation_same_language';
+        if (reason === 'browser_translate_failed') return 'browser_translation_failed';
+        return 'browser_translation_pair_unavailable';
+      },
+      validateBrowserTranslationPair({ sourceLang, targetLang, navigatorObject }) {
+        if ((navigatorObject && navigatorObject.userAgent || '').includes('Firefox')) {
+          return Promise.resolve({ supported: false, reason: 'chrome_only', sourceLang, targetLang, availability: '' });
+        }
+        if (!sourceLang || sourceLang === 'auto') {
+          return Promise.resolve({ supported: false, reason: 'manual_source_required', sourceLang, targetLang, availability: '' });
+        }
+        if ((sourceLang || '').split('-')[0] === 'ja') {
+          return Promise.resolve({ supported: false, reason: 'same_language', sourceLang, targetLang, availability: '' });
+        }
+        if ((sourceLang || '').split('-')[0] === 'zh') {
+          return Promise.resolve({ supported: false, reason: 'pair_unavailable', sourceLang, targetLang, availability: 'unavailable' });
+        }
+        return Promise.resolve({ supported: true, reason: '', sourceLang, targetLang, availability: 'downloadable' });
+      },
+    };
     window.UiTour = {
       maybeStartOnce(opts) { tourCalls.push({ type: 'maybe', scope: opts.storageKey, lang: opts.lang }); },
       start(opts) { tourCalls.push({ type: 'start', scope: opts.storageKey, lang: opts.lang }); },
@@ -73,6 +106,7 @@
     };
     window.WordStorage = {
       getSourceLang() { return Promise.resolve('id'); },
+      getTranslationEngine() { return Promise.resolve('online'); },
       getAutoTranslateOnSelect() { return Promise.resolve(true); },
       getDictionaryLookupEnabled() { return Promise.resolve(true); },
       getUiLanguage() { return Promise.resolve('en'); },
@@ -89,6 +123,7 @@
         return Promise.resolve({ compactLevel: 0, droppedWords: 0 });
       },
       saveSourceLang(value) { saveCalls.push(['source', value]); return Promise.resolve(); },
+      saveTranslationEngine(value) { saveCalls.push(['engine', value]); return Promise.resolve(); },
       saveAutoTranslateOnSelect(value) { saveCalls.push(['auto', value]); return Promise.resolve(); },
       saveDictionaryLookupEnabled(value) { saveCalls.push(['dict', value]); return Promise.resolve(); },
       saveUiLanguage(value) { saveCalls.push(['ui', value]); return Promise.resolve(); },
@@ -143,6 +178,7 @@
           await wait(260);
           assertEqual(document.getElementById('sourceLang').value, 'id');
           assertEqual(document.getElementById('uiLanguage').value, 'en');
+          assertEqual(document.getElementById('translationEngine').value, 'online');
           assertEqual(document.getElementById('currentLang').textContent, 'Indonesian');
           assertEqual(document.getElementById('dictionaryLookupRow').style.display, '');
           assert(document.getElementById('helpBtn').getAttribute('aria-label').includes('replay'), 'expected replay aria');
@@ -159,6 +195,75 @@
           assertEqual(document.getElementById('dictionaryLookupRow').style.display, 'none');
           assert(saveCalls.some((x) => x[0] === 'source' && x[1] === 'auto'), 'expected source saved');
           assert(saveCalls.some((x) => x[0] === 'excluded'), 'expected autosave full settings');
+        },
+      },
+      {
+        name: 'browser translation requires manual source and falls back to online',
+        async run() {
+          const engine = document.getElementById('translationEngine');
+          const source = document.getElementById('sourceLang');
+          source.value = 'auto';
+          engine.value = 'browser';
+          engine.dispatchEvent(new Event('change', { bubbles: true }));
+          await wait(40);
+          assertEqual(engine.value, 'online');
+          assert(saveCalls.some((x) => x[0] === 'engine' && x[1] === 'online'), 'expected engine fallback save');
+          assert(toastCalls.some((x) => x.message === 'browser_translation_requires_manual_source' && x.type === 'error'), 'expected fallback toast');
+        },
+      },
+      {
+        name: 'browser translation pair check falls back when pair unavailable',
+        async run() {
+          const source = document.getElementById('sourceLang');
+          const engine = document.getElementById('translationEngine');
+          source.value = 'zh';
+          source.dispatchEvent(new Event('change', { bubbles: true }));
+          engine.value = 'browser';
+          engine.dispatchEvent(new Event('change', { bubbles: true }));
+          await wait(40);
+          assertEqual(engine.value, 'online');
+          assert(toastCalls.some((x) => x.message === 'browser_translation_pair_unavailable' && x.type === 'error'), 'expected unavailable toast');
+        },
+      },
+      {
+        name: 'browser translation warns and falls back on non-Chrome browsers',
+        async run() {
+          const source = document.getElementById('sourceLang');
+          const engine = document.getElementById('translationEngine');
+          const originalUserAgent = window.navigator.userAgent;
+          Object.defineProperty(window.navigator, 'userAgent', {
+            configurable: true,
+            value: 'Mozilla/5.0 Firefox/124.0',
+          });
+          source.value = 'en';
+          source.dispatchEvent(new Event('change', { bubbles: true }));
+          engine.value = 'browser';
+          engine.dispatchEvent(new Event('change', { bubbles: true }));
+          await wait(40);
+          assertEqual(engine.value, 'online');
+          assert(toastCalls.some((x) => x.message === 'browser_translation_requires_chrome' && x.type === 'error'), 'expected chrome-only toast');
+          Object.defineProperty(window.navigator, 'userAgent', {
+            configurable: true,
+            value: originalUserAgent,
+          });
+        },
+      },
+      {
+        name: 'browser translation stays enabled when pair is supported',
+        async run() {
+          const source = document.getElementById('sourceLang');
+          const engine = document.getElementById('translationEngine');
+          source.value = 'en';
+          source.dispatchEvent(new Event('change', { bubbles: true }));
+          await wait(20);
+          engine.value = 'browser';
+          engine.dispatchEvent(new Event('change', { bubbles: true }));
+          await wait(240);
+          assertEqual(engine.value, 'browser');
+          assertEqual(document.getElementById('translationEngineHint').hidden, false);
+          assertEqual(document.getElementById('translationEngineHint').textContent, 'browser_translation_quality_hint');
+          assert(document.getElementById('translationEngineHint').classList.contains('is-animating'), 'expected animated hint class');
+          assert(saveCalls.some((x) => x[0] === 'engine' && x[1] === 'browser'), 'expected browser engine saved');
         },
       },
       {

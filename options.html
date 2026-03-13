@@ -232,6 +232,47 @@
             color: var(--muted);
         }
 
+        .translation-engine-hint {
+            margin-top: 8px;
+            padding: 10px 12px;
+            border: 1px solid rgba(165, 81, 67, 0.26);
+            border-radius: 12px 10px 14px 9px;
+            background:
+                linear-gradient(135deg, rgba(255, 245, 232, 0.98), rgba(255, 239, 220, 0.92)),
+                radial-gradient(circle at right top, rgba(197, 104, 81, 0.14), transparent 58%);
+            color: #7d5547;
+            box-shadow: 0 10px 18px rgba(165, 81, 67, 0.08);
+            transform-origin: top left;
+        }
+
+        .translation-engine-hint.is-animating {
+            animation: translationHintEnter 520ms cubic-bezier(.2, .8, .2, 1);
+        }
+
+        @keyframes translationHintEnter {
+            0% {
+                opacity: 0;
+                transform: translateY(-6px) scale(0.97);
+                box-shadow: 0 0 0 rgba(165, 81, 67, 0);
+            }
+            58% {
+                opacity: 1;
+                transform: translateY(0) scale(1.01);
+                box-shadow: 0 12px 22px rgba(165, 81, 67, 0.16);
+            }
+            100% {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                box-shadow: 0 10px 18px rgba(165, 81, 67, 0.08);
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .translation-engine-hint.is-animating {
+                animation: none;
+            }
+        }
+
         .switch {
             position: relative;
             display: inline-block;
@@ -287,14 +328,29 @@
 
         .io-actions {
             display: flex;
-            gap: 8px;
+            gap: 10px;
+            row-gap: 10px;
             flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .io-actions .btn-secondary {
+            padding: 11px 18px;
         }
 
         .simple-import {
             margin-top: 16px;
             padding-top: 14px;
             border-top: 1px dashed var(--border);
+        }
+
+        #translationEngine {
+            margin-top: 9px;
+            margin-bottom: 8px;
+        }
+
+        .simple-import .io-actions {
+            margin-top: 14px;
         }
 
         .domain-row {
@@ -428,6 +484,16 @@
                 </select>
             </div>
 
+            <div>
+                <label for="translationEngine" id="translationEngineLabel">翻譯引擎</label>
+                <div class="switch-desc" id="translationEngineDesc">選擇使用線上翻譯或瀏覽器內建翻譯。</div>
+                <select id="translationEngine">
+                    <option value="online">線上翻譯</option>
+                    <option value="browser">瀏覽器翻譯</option>
+                </select>
+                <div class="switch-desc translation-engine-hint" id="translationEngineHint" hidden>瀏覽器翻譯速度更快，但效果略遜於線上翻譯。</div>
+            </div>
+
             <div class="switch-row">
                 <div>
                     <div class="switch-title" id="autoTranslateLabel">勾選後自動翻譯</div>
@@ -492,6 +558,7 @@
     <script src="lib/storage-merge-utils.js"></script>
     <script src="lib/dictionary-utils.js"></script>
     <script src="lib/lemma-utils.js"></script>
+    <script src="lib/translation-utils.js"></script>
     <script src="storage.js"></script>
     <script src="ui-i18n.js"></script>
     <script src="ui-tour.js"></script>

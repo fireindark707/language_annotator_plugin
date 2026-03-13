@@ -42,12 +42,14 @@
         name: 'exportData returns all persisted fields',
         async run() {
           await S.saveSourceLang('id');
+          await S.saveTranslationEngine('browser');
           await S.saveAutoTranslateOnSelect(false);
           await S.saveDictionaryLookupEnabled(true);
           await S.saveUiLanguage('fr');
           await S.saveExcludedDomains(['Example.com', '']);
           const data = await S.exportData();
           assertEqual(data.sourceLang, 'id');
+          assertEqual(data.translationEngine, 'browser');
           assertEqual(data.autoTranslateOnSelect, false);
           assertEqual(data.dictionaryLookupEnabled, true);
           assertEqual(data.uiLanguage, 'fr');
@@ -61,6 +63,7 @@
           await S.importData({
             words: { imported: { meaning: 'I' } },
             sourceLang: 'en',
+            translationEngine: 'browser',
             autoTranslateOnSelect: true,
             dictionaryLookupEnabled: false,
             uiLanguage: 'pt',
@@ -69,10 +72,23 @@
           const words = await S.getWords();
           assert(words.imported, 'expected imported words');
           assertEqual(await S.getSourceLang(), 'en');
+          assertEqual(await S.getTranslationEngine(), 'browser');
           assertEqual(await S.getAutoTranslateOnSelect(), true);
           assertEqual(await S.getDictionaryLookupEnabled(), false);
           assertEqual(await S.getUiLanguage(), 'pt');
           assertEqual((await S.getExcludedDomains())[0], 'foo.com');
+        },
+      },
+      {
+        name: 'getTranslationEngine defaults to online and saveTranslationEngine normalizes values',
+        async run() {
+          delete chrome.storage.local._store.translationEngine;
+          delete chrome.storage.sync._store.translationEngine;
+          assertEqual(await S.getTranslationEngine(), 'online');
+          await S.saveTranslationEngine('browser');
+          assertEqual(await S.getTranslationEngine(), 'browser');
+          await S.saveTranslationEngine('unexpected');
+          assertEqual(await S.getTranslationEngine(), 'online');
         },
       },
       {

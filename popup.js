@@ -75,6 +75,12 @@ function t(key) {
 	return UiI18n.t(uiLang, key);
 }
 
+function showBrowserTranslationFallback(reason) {
+	if (!globalThis.UiToast || typeof globalThis.UiToast.show !== "function") return;
+	const messageKey = TranslationUtilsRef.getBrowserTranslationFallbackKey(reason);
+	UiToast.show(t(messageKey), "error");
+}
+
 function startPopupTour(force) {
 	if (!globalThis.UiTour) return;
 	const run = force ? UiTour.start : UiTour.maybeStartOnce;
@@ -83,6 +89,15 @@ function startPopupTour(force) {
 		lang: uiLang,
 		steps: UiTour.getSteps(uiLang, "popup"),
 	});
+}
+
+function shuffleWordOrder(list) {
+	const shuffled = list.slice();
+	for (let i = shuffled.length - 1; i > 0; i -= 1) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+	}
+	return shuffled;
 }
 
 function isCjkText(text) {
@@ -181,10 +196,15 @@ async function translateExampleSentence(sentence) {
 		cachedSourceLangPromise = WordStorage.getSourceLang().catch(() => "auto");
 	}
 	const sourceLang = await cachedSourceLangPromise;
-	return TranslationUtilsRef.requestRuntimeTranslation({
+	return TranslationUtilsRef.requestPreferredTranslation({
 		chromeRuntime: chrome.runtime,
+		chromeI18n: chrome.i18n,
+		wordStorage: WordStorage,
 		text: sentence,
 		sourceLang: sourceLang || "auto",
+		onBrowserFallback(result) {
+			showBrowserTranslationFallback(result && result.reason);
+		},
 	});
 }
 
@@ -457,6 +477,7 @@ function applyUiText() {
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");
 	if (sortModeSelect.options[2]) sortModeSelect.options[2].textContent = t("sort_freq");
+	if (sortModeSelect.options[3]) sortModeSelect.options[3].textContent = t("sort_random");
 	if (helpBtn && globalThis.UiTour) {
 		helpBtn.title = UiTour.getLabel(uiLang, "replay");
 		helpBtn.setAttribute("aria-label", UiTour.getLabel(uiLang, "replay"));
@@ -478,7 +499,7 @@ function updateWordsList() {
 	wordsList.innerHTML = "";
 
 	WordStorage.getWords().then((words) => {
-		const allWordsArray = Object.keys(words);
+		let allWordsArray = Object.keys(words);
 		if (sortMode === "alpha_asc") {
 			allWordsArray.sort((a, b) => a.localeCompare(b));
 		} else if (sortMode === "freq_desc") {
@@ -491,6 +512,8 @@ function updateWordsList() {
 				if (bf !== af) return bf - af;
 				return a.localeCompare(b);
 			});
+		} else if (sortMode === "random_order") {
+			allWordsArray = shuffleWordOrder(allWordsArray);
 		} else {
 			allWordsArray.sort((a, b) => {
 				const at = words[a] && words[a].createdAt ? words[a].createdAt : 0;

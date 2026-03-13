@@ -105,6 +105,44 @@
         },
       },
       {
+        name: "buildQuestion only uses cloze within the lower cloze probability band",
+        run() {
+          const originalRandom = Math.random;
+          allWords = [
+            { word: "alpha", meaning: "A", learned: false, examples: ["alpha appears here."] },
+            { word: "beta", meaning: "B", learned: false, examples: ["beta appears here."] },
+            { word: "gamma", meaning: "G", learned: false, examples: ["gamma appears here."] },
+            { word: "delta", meaning: "D", learned: false, examples: ["delta appears here."] },
+          ];
+          Math.random = () => 0.15;
+          try {
+            const q = buildQuestion(allWords[0]);
+            assertEqual(q.mode, "word2meaning");
+          } finally {
+            Math.random = originalRandom;
+          }
+        },
+      },
+      {
+        name: "buildQuestion still allows cloze inside the reduced probability band",
+        run() {
+          const originalRandom = Math.random;
+          allWords = [
+            { word: "alpha", meaning: "A", learned: false, examples: ["alpha appears here."] },
+            { word: "beta", meaning: "B", learned: false, examples: ["beta appears here."] },
+            { word: "gamma", meaning: "G", learned: false, examples: ["gamma appears here."] },
+            { word: "delta", meaning: "D", learned: false, examples: ["delta appears here."] },
+          ];
+          Math.random = () => 0.05;
+          try {
+            const q = buildQuestion(allWords[0]);
+            assertEqual(q.mode, "cloze");
+          } finally {
+            Math.random = originalRandom;
+          }
+        },
+      },
+      {
         name: "getReviewedWordsUnique deduplicates while dropping falsy values",
         run() {
           reviewedWordsThisRound = ["alpha", "beta", "", "alpha", null, "beta"];

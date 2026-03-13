@@ -9,6 +9,7 @@
     const tourCalls = [];
     const shownToasts = [];
     let wordsState = { running: { meaning: '奔跑', learned: false, examples: [] } };
+    Object.defineProperty(window.navigator, 'language', { configurable: true, value: 'ja-JP' });
     window.chrome = {
       runtime: {
         lastError: null,
@@ -29,6 +30,7 @@
       getWords: () => Promise.resolve(JSON.parse(JSON.stringify(wordsState))),
       saveWords: (words) => { wordsState = JSON.parse(JSON.stringify(words)); saveSnapshots.push(wordsState); return Promise.resolve(); },
       getSourceLang: () => Promise.resolve('en'),
+      getTranslationEngine: () => Promise.resolve('online'),
       getDictionaryLookupEnabled: () => Promise.resolve(true),
     };
     window.UiI18n = { t: (_lang, key) => key, langAttr: (lang) => lang || 'en', dir: () => 'ltr' };
@@ -89,6 +91,29 @@
           await wait(50);
           assert(saveSnapshots.length > 0, 'expected words saved');
           assert(wordsState.running, 'expected saved word record');
+        },
+      },
+      {
+        name: 'browser translation pair failure falls back online and shows user-facing reason',
+        async run() {
+          shownToasts.length = 0;
+          const originalRequestPreferredTranslation = window.TranslationUtils.requestPreferredTranslation;
+          window.TranslationUtils.requestPreferredTranslation = function requestPreferredTranslationStub(options) {
+            if (options && typeof options.onBrowserFallback === 'function') {
+              options.onBrowserFallback({ reason: 'pair_unavailable' });
+            }
+            return Promise.resolve('翻譯:fallback');
+          };
+          const existingBox = document.getElementById('translationBox');
+          if (existingBox) existingBox.remove();
+          await translateText('running quickly');
+          await wait(60);
+          const box = document.getElementById('translationBox');
+          assert(box, 'expected translation box after online fallback');
+          assert(box.textContent.includes('翻譯:fallback'), 'expected fallback translation');
+          assert(shownToasts.some((item) => item.message === 'browser_translation_pair_unavailable' && item.type === 'error'), 'expected fallback reason toast');
+          window.TranslationUtils.requestPreferredTranslation = originalRequestPreferredTranslation;
+          box.remove();
         },
       },
       {

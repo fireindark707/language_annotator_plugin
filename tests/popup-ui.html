@@ -7,7 +7,7 @@
   <a id="settingsLink"></a>
   <button id="fullscreenBtn"></button>
   <button id="practiceBtn"></button>
-  <select id="sortMode"><option value="recent_desc"></option><option value="alpha_asc"></option><option value="freq_desc"></option></select>
+  <select id="sortMode"><option value="recent_desc"></option><option value="alpha_asc"></option><option value="freq_desc"></option><option value="random_order"></option></select>
   <div id="wordsList"></div>
   <div id="wordStats"></div>
   <div id="languageStats"></div>
@@ -19,12 +19,23 @@
     const toastCalls = [];
     const speechCalls = [];
     const tourCalls = [];
+    let translationEngineState = 'online';
     const wordsState = {
       vulgar: { meaning: 'rude', createdAt: 5, learned: false, examples: [{ text: 'a vulgar joke', translation: '粗俗的笑話', sourceUrl: 'https://a.com/x', capturedAt: 1 }], pageCount: 1, encounterCount: 2 },
       kind: { meaning: 'kind', createdAt: 1, learned: true, examples: [], pageCount: 0, encounterCount: 0 },
     };
     window.chrome = {
-      runtime: { getURL(path) { return path; }, lastError: null },
+      runtime: {
+        getURL(path) { return path; },
+        lastError: null,
+        sendMessage(message, callback) {
+          if (message.action === 'translate') {
+            callback({ translation: `T:${message.text}` });
+            return;
+          }
+          callback(null);
+        },
+      },
       tabs: { create(payload) { tabCalls.push(payload); } },
     };
     window.UiI18n = { t(lang, key) { return key; }, langAttr(lang) { return lang || 'en'; }, dir() { return 'ltr'; } };
@@ -39,6 +50,7 @@
     window.WordStorage = {
       getUiLanguage() { return Promise.resolve('en'); },
       getSourceLang() { return Promise.resolve('id'); },
+      getTranslationEngine() { return Promise.resolve(translationEngineState); },
       getWords() { return Promise.resolve(JSON.parse(JSON.stringify(wordsState))); },
       saveWords(words) {
         Object.keys(wordsState).forEach((key) => delete wordsState[key]);
@@ -116,6 +128,49 @@
           await wait(260);
           assert(!wordsState.vulgar, 'expected word deleted from store');
           assert(toastCalls.some((x) => x.message === 'deleted'), 'expected delete toast');
+        },
+      },
+      {
+        name: 'random sort mode shuffles popup words deterministically when Math.random is stubbed',
+        async run() {
+          Object.keys(wordsState).forEach((key) => delete wordsState[key]);
+          Object.assign(wordsState, {
+            alpha: { meaning: 'A', createdAt: 1, learned: false, examples: [], pageCount: 0, encounterCount: 0 },
+            beta: { meaning: 'B', createdAt: 2, learned: false, examples: [], pageCount: 0, encounterCount: 0 },
+            gamma: { meaning: 'C', createdAt: 3, learned: false, examples: [], pageCount: 0, encounterCount: 0 },
+          });
+          const originalRandom = Math.random;
+          const rolls = [0, 0];
+          Math.random = () => (rolls.length ? rolls.shift() : 0);
+          sortMode = 'random_order';
+          try {
+            await updateWordsList();
+            await wait(20);
+          } finally {
+            Math.random = originalRandom;
+          }
+          const renderedWords = Array.from(document.querySelectorAll('.word')).map((el) => el.textContent.trim());
+          assertEqual(renderedWords.length, 3);
+          assertEqual(renderedWords[0], 'beta');
+          assertEqual(renderedWords[1], 'gamma');
+          assertEqual(renderedWords[2], 'alpha');
+        },
+      },
+      {
+        name: 'browser translation fallback keeps popup translation working and shows error reason',
+        async run() {
+          toastCalls.length = 0;
+          const originalRequestPreferredTranslation = window.TranslationUtils.requestPreferredTranslation;
+          window.TranslationUtils.requestPreferredTranslation = function requestPreferredTranslationStub(options) {
+            if (options && typeof options.onBrowserFallback === 'function') {
+              options.onBrowserFallback({ reason: 'pair_unavailable' });
+            }
+            return Promise.resolve('T:kalimat panjang untuk pengujian');
+          };
+          const translated = await translateExampleSentence('kalimat panjang untuk pengujian');
+          assertEqual(translated, 'T:kalimat panjang untuk pengujian');
+          assert(toastCalls.some((x) => x.message === 'browser_translation_pair_unavailable' && x.type === 'error'), 'expected popup fallback toast');
+          window.TranslationUtils.requestPreferredTranslation = originalRequestPreferredTranslation;
         },
       },
     ]);

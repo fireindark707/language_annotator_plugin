@@ -15,6 +15,7 @@ let selectedLearnedWords = new Set();
 
 const MAX_QUESTIONS = 10;
 const CHOICE_COUNT = 4;
+const CLOZE_PROBABILITY = 0.12;
 
 const titleEl = document.getElementById("title");
 const subtitleEl = document.getElementById("subtitle");
@@ -445,9 +446,9 @@ function buildQuestion(item) {
 	let pickedMode = "word2meaning";
 	if (clozeStimulus) {
 		const roll = Math.random();
-		if (roll < 0.2) {
+		if (roll < CLOZE_PROBABILITY) {
 			pickedMode = "cloze";
-		} else if (roll < 0.6) {
+		} else if (roll < 0.56) {
 			pickedMode = "word2meaning";
 		} else {
 			pickedMode = "meaning2word";
