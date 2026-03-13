@@ -116,6 +116,17 @@
         },
       },
       {
+        name: 'popup example highlighting respects compact-script match boundaries',
+        run() {
+          currentSourceLang = 'ja';
+          const el = createHighlightedSentenceElement('今日は学校へ行きます。今日は小学校にも寄ります。', '学校');
+          const marks = el.querySelectorAll('.example-word');
+          assertEqual(marks.length, 1);
+          assertEqual(marks[0].textContent, '学校');
+          assertEqual(el.textContent, '今日は学校へ行きます。今日は小学校にも寄ります。');
+        },
+      },
+      {
         name: 'toggle learned removes word from popup list and delete removes word',
         async run() {
           document.querySelector('.action-learned').click();

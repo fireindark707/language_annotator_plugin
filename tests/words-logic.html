@@ -182,6 +182,17 @@
         },
       },
       {
+        name: "fullscreen example highlighting respects compact-script match boundaries",
+        run() {
+          currentSourceLang = "ja";
+          const el = createHighlightedSentenceElement("今日は学校へ行きます。今日は小学校にも寄ります。", "学校");
+          const marks = el.querySelectorAll(".example-word");
+          assertEqual(marks.length, 1);
+          assertEqual(marks[0].textContent, "学校");
+          assertEqual(el.textContent, "今日は学校へ行きます。今日は小学校にも寄ります。");
+        },
+      },
+      {
         name: "fullscreen inline meaning edit cancels on escape without saving",
         async run() {
           let saveCalls = 0;

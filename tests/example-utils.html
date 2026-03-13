@@ -88,6 +88,15 @@
         },
       },
       {
+        name: "compact-script similarity and containment operate on segmented tokens",
+        run() {
+          assertEqual(U.hasContainmentRelation("今日は学校へ行きます", ["学校へ行きます"], "ja"), true);
+          assertEqual(U.hasContainmentRelation("今日は小学校へ行きます", ["学校へ行きます"], "ja"), false);
+          assert(U.isTooSimilarToAny("今日は学校へ行きます", ["明日は学校へ行きます"], 0.88, "ja"), "expected similar Japanese sentences to be treated as near-duplicates");
+          assertEqual(U.isTooSimilarToAny("今日は図書館で勉強します", ["今日は学校へ行きます"], 0.88, "ja"), false);
+        },
+      },
+      {
         name: "splitIntoSentences filters obvious code-like garbage",
         run() {
           const codey = "document.getElementById('x').addEventListener('click', function() { return 1; });";

@@ -63,6 +63,27 @@
         },
       },
       {
+        name: "createPreviewHighlightedSentence respects compact-script match boundaries",
+        run() {
+          const node = U.createPreviewHighlightedSentence("今日は学校へ行きます。今日は小学校にも寄ります。", "学校", {
+            document,
+            languageHint: "ja",
+            isCjkText: () => false,
+            isBoundaryMatch: () => false,
+            findWholeWordMatch(text, word, _lang, fromIndex) {
+              if (fromIndex > 0) return null;
+              return text.startsWith("今日は学校", fromIndex) && word === "学校"
+                ? { index: 3, length: 2 }
+                : null;
+            },
+          });
+          const marks = node.querySelectorAll("span");
+          assertEqual(marks.length, 1);
+          assertEqual(marks[0].textContent, "学校");
+          assert(!node.textContent.includes("小学校") || !node.innerHTML.includes("<span>小学校</span>"), "expected no false-positive highlight inside 小学校");
+        },
+      },
+      {
         name: "showTranslation creates translation box and appendDictionaryToTranslationBox renders sections",
         async run() {
           const sel = window.getSelection();
