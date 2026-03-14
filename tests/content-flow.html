@@ -8,15 +8,21 @@
     const saveSnapshots = [];
     const tourCalls = [];
     const shownToasts = [];
+    const runtimeMessages = [];
+    let dictionaryLookupCalls = 0;
     let wordsState = { running: { meaning: '奔跑', learned: false, examples: [] } };
     Object.defineProperty(window.navigator, 'language', { configurable: true, value: 'ja-JP' });
     window.chrome = {
       runtime: {
         lastError: null,
         sendMessage(message, callback) {
+          runtimeMessages.push(message);
           if (message.action === 'translate') return callback({ translation: '翻譯:' + message.text });
           if (message.action === 'getLemma') return callback({ found: true, lemma: 'run' });
-          if (message.action === 'lookupDictionary') return callback({ found: true, source: 'dictionaryapi', query: 'running', lemma: 'run', usedLemma: false, sections: [{ mode: 'surface', query: 'running', source: 'dictionaryapi', entries: [{ pos: 'verb', definition: 'move fast' }] }, { mode: 'lemma', query: 'run', source: 'dictionaryapi', entries: [{ pos: 'verb', definition: 'move' }] }], entries: [{ pos: 'verb', definition: 'move fast' }] });
+          if (message.action === 'lookupDictionary') {
+            dictionaryLookupCalls += 1;
+            return callback({ found: true, source: 'dictionaryapi', query: 'running', lemma: 'run', usedLemma: false, sections: [{ mode: 'surface', query: 'running', source: 'dictionaryapi', entries: [{ pos: 'verb', definition: 'move fast' }] }, { mode: 'lemma', query: 'run', source: 'dictionaryapi', entries: [{ pos: 'verb', definition: 'move' }] }], entries: [{ pos: 'verb', definition: 'move fast' }] });
+          }
           callback({});
         },
         onMessage: { addListener(fn) { window.__contentListener = fn; } },
@@ -147,6 +153,55 @@
             assertEqual(highlights.length, 1);
             assertEqual(highlights[0].textContent, '学校');
           } finally {
+            window.chrome.i18n.detectLanguage = originalDetectLanguage;
+          }
+        },
+      },
+      {
+        name: 'content language hint refreshes when body language changes on the same URL',
+        async run() {
+          const originalDetectLanguage = window.chrome.i18n.detectLanguage;
+          document.getElementById('fixture').textContent = '今日は学校へ行きます。';
+          if (typeof window.__resetContentLanguageHintForTests === 'function') {
+            window.__resetContentLanguageHintForTests();
+          }
+          window.chrome.i18n.detectLanguage = (text, callback) => {
+            if (String(text).includes('学校')) {
+              callback({ languages: [{ language: 'ja', percentage: 100 }] });
+              return;
+            }
+            callback({ languages: [{ language: 'en', percentage: 100 }] });
+          };
+          try {
+            const first = await window.__resolveContentLanguageHintForTests();
+            assertEqual(first, 'ja');
+            document.getElementById('fixture').textContent = 'running words stay visible';
+            const second = await window.__resolveContentLanguageHintForTests();
+            assertEqual(second, 'en');
+          } finally {
+            window.chrome.i18n.detectLanguage = originalDetectLanguage;
+          }
+        },
+      },
+      {
+        name: 'content translation flow does not treat compact-script sentences as dictionary queries',
+        async run() {
+          const originalNavigatorLanguage = window.navigator.language;
+          const originalGetSourceLang = window.WordStorage.getSourceLang;
+          const originalDetectLanguage = window.chrome.i18n.detectLanguage;
+          const beforeLookups = dictionaryLookupCalls;
+          Object.defineProperty(window.navigator, 'language', { configurable: true, value: 'en-US' });
+          window.WordStorage.getSourceLang = () => Promise.resolve('ja');
+          window.chrome.i18n.detectLanguage = (_text, callback) => {
+            callback({ languages: [{ language: 'ja', percentage: 100 }] });
+          };
+          try {
+            await translateText('今日は図書館に行きます');
+            await wait(120);
+            assertEqual(dictionaryLookupCalls, beforeLookups);
+          } finally {
+            Object.defineProperty(window.navigator, 'language', { configurable: true, value: originalNavigatorLanguage });
+            window.WordStorage.getSourceLang = originalGetSourceLang;
             window.chrome.i18n.detectLanguage = originalDetectLanguage;
           }
         },

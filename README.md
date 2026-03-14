@@ -122,6 +122,18 @@ That makes the extension useful for:
 - `content.js`
   - on-page highlighting, translation overlay, add-word modal, example collection, content tours
 
+## UI style
+
+The project follows a warm, paper-like interface language inspired by the everyday atmosphere of Isao Takahata's films.
+
+- calm editorial hierarchy instead of dashboard styling
+- warm paper tones and terracotta accents instead of cold product colors
+- serif headings with readable sans-serif body text
+- gentle material depth instead of glossy or futuristic effects
+- stronger festive motion reserved mainly for `practice.html`
+
+See [docs/ui-style-guide.md](./docs/ui-style-guide.md) for the full visual direction and design rules.
+
 ## Supported UI languages
 
 Current UI coverage includes:

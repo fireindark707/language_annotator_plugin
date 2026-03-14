@@ -319,6 +319,35 @@
         },
       },
       {
+        name: "requestPreferredTranslation keeps detected third language when browser pair is unavailable",
+        async run() {
+          let runtimePayload = null;
+          const translated = await U.requestPreferredTranslation({
+            translationEngine: "browser",
+            text: "bonjour tout le monde",
+            sourceLang: "en",
+            targetLang: "zh-TW",
+            detectedLanguage: "fr",
+            translatorGlobal: {
+              availability() { return Promise.resolve("unavailable"); },
+              create() {
+                throw new Error("should not create unsupported pair");
+              },
+            },
+            chromeRuntime: {
+              lastError: null,
+              sendMessage(message, callback) {
+                runtimePayload = message;
+                callback({ translation: "你好" });
+              },
+            },
+          });
+          assertEqual(translated, "你好");
+          assertEqual(runtimePayload.sourceLang, "fr");
+          assertEqual(runtimePayload.targetLang, "zh-TW");
+        },
+      },
+      {
         name: "requestPreferredTranslation falls back online on non-Chrome browsers and reports chrome-only reason",
         async run() {
           let fallbackReason = "";
@@ -379,7 +408,7 @@
           });
           assertEqual(translated, "你好，大家好");
           assertEqual(runtimePayload.targetLang, "zh-TW");
-          assertEqual(runtimePayload.sourceLang, "fr-FR");
+          assertEqual(runtimePayload.sourceLang, "fr");
         },
       },
     ]);

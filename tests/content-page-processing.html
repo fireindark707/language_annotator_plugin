@@ -99,6 +99,26 @@
         },
       },
       {
+        name: "buildHighlightTargets prefers explicit stored roots over another word's family form",
+        run() {
+          const targets = U.buildHighlightTargets(["running", "run"], {
+            running: {
+              learned: false,
+              familyForms: ["run", "runs"],
+            },
+            run: {
+              learned: false,
+              familyForms: ["running"],
+            },
+          });
+          const runTargets = targets.filter((item) => item.form === "run");
+          assertEqual(runTargets.length, 1);
+          assertEqual(runTargets[0].rootWord, "run");
+          assertEqual(runTargets[0].isFamily, false);
+          assert(targets.some((item) => item.form === "runs" && item.rootWord === "running" && item.isFamily === true), "expected non-conflicting family form kept");
+        },
+      },
+      {
         name: "buildHighlightedFragment renders family matches with family highlight class",
         run() {
           const fragment = U.buildHighlightedFragment("running fast", [
@@ -486,6 +506,102 @@
             assertEqual(calls.length, 2);
             assertEqual(calls[0], "root:run");
             assertEqual(calls[1], "family:running");
+          } finally {
+            host.remove();
+          }
+        },
+      },
+      {
+        name: "highlightWords uses explicit stored root when another word family form conflicts",
+        async run() {
+          const host = document.createElement("div");
+          host.textContent = "run while running";
+          document.body.appendChild(host);
+          const calls = [];
+          const previewCalls = [];
+          const state = {
+            pendingExampleMap: {},
+            exampleMergeTimer: null,
+            contentTourAttempted: true,
+            contentTourPending: false,
+          };
+          U.highlightWords({
+            document,
+            Node,
+            WordStorage: {
+              getWords() {
+                return Promise.resolve({
+                  running: {
+                    meaning: "continuous form",
+                    learned: false,
+                    examples: [],
+                    familyForms: ["run"],
+                  },
+                  run: {
+                    meaning: "root meaning",
+                    learned: false,
+                    examples: [],
+                  },
+                });
+              },
+              saveWords() {
+                return Promise.resolve();
+              },
+            },
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement() {
+              return false;
+            },
+            showWordPreview(anchor, payload) {
+              previewCalls.push({ text: anchor.textContent, payload });
+            },
+            hideWordPreview() {},
+            splitIntoSentences(text) {
+              return [text];
+            },
+            isLowInformationExample() { return false; },
+            normalizeText(text) {
+              return (text || "").replace(/\s+/g, " ").trim();
+            },
+            normalizeExampleList(entries) {
+              return entries || [];
+            },
+            hasContainmentRelation() { return false; },
+            isTooSimilarToAny() { return false; },
+            enforceExampleLimit(entries) { return entries; },
+            sortExamples(entries) { return entries; },
+            maxExamplesPerWord: 20,
+            currentHref() { return "https://example.com/page"; },
+            onMergeError(error) { throw error; },
+            onHighlightError(error) { throw error; },
+            markLearned(text) {
+              calls.push(`root:${text}`);
+            },
+            openAddWordModal(text) {
+              calls.push(`family:${text}`);
+            },
+            startContentTour() {
+              return true;
+            },
+            isCurrentDomainExcluded() {
+              return Promise.resolve(false);
+            },
+            state,
+          });
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 30));
+            const runHighlight = Array.from(host.querySelectorAll(".plugin-highlight-word")).find((el) => el.textContent === "run");
+            const runningHighlight = Array.from(host.querySelectorAll(".plugin-highlight-word")).find((el) => el.textContent === "running");
+            assert(runHighlight, "expected run highlight");
+            assert(runningHighlight, "expected running highlight");
+            assertEqual(runHighlight.classList.contains("plugin-highlight-family-word"), false);
+            assertEqual(runningHighlight.classList.contains("plugin-highlight-family-word"), false);
+            runHighlight.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
+            runHighlight.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+            assertEqual(calls.includes("root:run"), true);
+            const runPreview = previewCalls.find((entry) => entry.text === "run");
+            assert(runPreview, "expected run preview");
+            assertEqual(runPreview.payload, "root meaning");
           } finally {
             host.remove();
           }

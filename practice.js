@@ -104,6 +104,7 @@ let answerFlashTimer = null;
 let practiceTourAttempted = false;
 const PracticeUtilsRef = globalThis.PracticeUtils;
 const TranslationUtilsRef = globalThis.TranslationUtils;
+const CELEBRATION_COLORS = ["#ffdd7a", "#ffc96f", "#ffb347", "#f4e3b2", "#d3495f", "#f06b83"];
 
 function t(key) {
 	return UiI18n.t(uiLang, key);
@@ -268,7 +269,7 @@ function showAnswerFlash(word, meaning, isCorrect) {
 	const safeWord = w || "-";
 	const safeMeaning = m || t("practice_no_meaning");
 	const status = isCorrect ? t("practice_answer_status_correct") : t("practice_answer_status_answer");
-	answerFlashEl.innerHTML = `<div class="answer-flash-card"><div class="status">${status}</div><span class="word">${safeWord}</span><span class="meaning">${safeMeaning}</span></div>`;
+	answerFlashEl.innerHTML = `<div class="answer-flash-card${isCorrect ? " is-correct" : ""}"><div class="status">${status}</div><span class="word">${safeWord}</span><span class="meaning">${safeMeaning}</span></div>`;
 	answerFlashEl.classList.remove("show");
 	void answerFlashEl.offsetWidth;
 	answerFlashEl.classList.add("show");
@@ -319,27 +320,78 @@ function getSummaryTone(pct) {
 	return { badge: t("practice_tone_badge_low"), comment: t("practice_tone_comment_low") };
 }
 
+function clearCelebrationLayer(layer) {
+	if (!layer) return;
+	layer.innerHTML = "";
+}
+
+function retriggerCelebrationBreath(el, extraClass) {
+	if (!el) return;
+	el.classList.remove("celebration-breathe");
+	if (extraClass) el.classList.remove(extraClass);
+	void el.offsetWidth;
+	el.classList.add("celebration-breathe");
+	if (extraClass) el.classList.add(extraClass);
+	setTimeout(() => {
+		el.classList.remove("celebration-breathe");
+		if (extraClass) el.classList.remove(extraClass);
+	}, 700);
+}
+
+function spawnCelebrationParticles(layer, origin, options) {
+	if (!layer || !origin) return;
+	const count = options && typeof options.count === "number" ? options.count : 24;
+	const spreadMin = options && typeof options.spreadMin === "number" ? options.spreadMin : 36;
+	const spreadMax = options && typeof options.spreadMax === "number" ? options.spreadMax : 120;
+	const originX = origin.x;
+	const originY = origin.y;
+	for (let i = 0; i < count; i += 1) {
+		const particle = document.createElement("div");
+		const roll = Math.random();
+		let variant = "spark-dot";
+		if (roll > 0.72) variant = "spark-orb";
+		else if (roll > 0.42) variant = "spark-confetti";
+		else if (roll > 0.2) variant = "spark-paper";
+		particle.className = `spark ${variant}`;
+		particle.style.left = `${originX}px`;
+		particle.style.top = `${originY}px`;
+		const angle = Math.random() * Math.PI * 2;
+		const radius = spreadMin + Math.random() * (spreadMax - spreadMin);
+		particle.style.setProperty("--tx", `${Math.cos(angle) * radius}px`);
+		particle.style.setProperty("--ty", `${Math.sin(angle) * radius}px`);
+		particle.style.setProperty("--rot", `${(-160 + Math.random() * 320).toFixed(1)}deg`);
+		const color = CELEBRATION_COLORS[i % CELEBRATION_COLORS.length];
+		if (variant === "spark-orb") {
+			particle.style.color = color;
+			particle.style.background = `radial-gradient(circle, ${color} 0%, rgba(255,255,255,0.08) 72%, transparent 100%)`;
+		} else if (variant === "spark-confetti") {
+			const alt = CELEBRATION_COLORS[(i + 2) % CELEBRATION_COLORS.length];
+			particle.style.background = `linear-gradient(135deg, ${color} 0%, ${alt} 100%)`;
+		} else if (variant === "spark-paper") {
+			particle.style.background = `linear-gradient(180deg, rgba(255,255,255,0.92) 0%, ${color} 100%)`;
+			particle.style.boxShadow = "0 2px 8px rgba(88, 63, 50, 0.12)";
+		} else {
+			particle.style.background = color;
+		}
+		layer.appendChild(particle);
+	}
+	setTimeout(() => {
+		clearCelebrationLayer(layer);
+	}, 1120);
+}
+
 function burstAtElement(el, count) {
 	if (!el || !celebrateEl) return;
 	const elRect = el.getBoundingClientRect();
 	const layerRect = celebrateEl.getBoundingClientRect();
-	const cx = elRect.left + elRect.width / 2 - layerRect.left;
-	const cy = elRect.top + elRect.height / 2 - layerRect.top;
-	for (let i = 0; i < count; i += 1) {
-		const dot = document.createElement("div");
-		dot.className = "spark";
-		dot.style.left = `${cx}px`;
-		dot.style.top = `${cy}px`;
-		const angle = Math.random() * Math.PI * 2;
-		const r = 36 + Math.random() * 74;
-		dot.style.setProperty("--tx", `${Math.cos(angle) * r}px`);
-		dot.style.setProperty("--ty", `${Math.sin(angle) * r}px`);
-		dot.style.background = ["#ffdd7a", "#ffb347", "#d3495f", "#f06b83"][i % 4];
-		celebrateEl.appendChild(dot);
-	}
-	setTimeout(() => {
-		celebrateEl.innerHTML = "";
-	}, 820);
+	spawnCelebrationParticles(celebrateEl, {
+		x: elRect.left + elRect.width / 2 - layerRect.left,
+		y: elRect.top + elRect.height / 2 - layerRect.top,
+	}, {
+		count,
+		spreadMin: 34,
+		spreadMax: 118,
+	});
 }
 
 function animateStreakFx(isCorrect) {
@@ -347,6 +399,7 @@ function animateStreakFx(isCorrect) {
 	if (isCorrect) {
 		void streakChip.offsetWidth;
 		streakChip.classList.add("streak-pop");
+		retriggerCelebrationBreath(streakChip);
 		if (streak >= 3) {
 			streakChip.classList.add("streak-fire");
 		}
@@ -501,41 +554,32 @@ function translateClozeStimulus(text) {
 }
 
 function burst() {
-	celebrateEl.innerHTML = "";
-	for (let i = 0; i < 16; i += 1) {
-		const dot = document.createElement("div");
-		dot.className = "spark";
-		dot.style.left = "50%";
-		dot.style.top = "40%";
-		const angle = (Math.PI * 2 * i) / 16;
-		const r = 70 + Math.random() * 120;
-		dot.style.setProperty("--tx", `${Math.cos(angle) * r}px`);
-		dot.style.setProperty("--ty", `${Math.sin(angle) * r}px`);
-		dot.style.background = ["#7a1022", "#a81631", "#c12a46", "#d3495f"][i % 4];
-		celebrateEl.appendChild(dot);
-	}
-	setTimeout(() => {
-		celebrateEl.innerHTML = "";
-	}, 740);
+	if (!celebrateEl) return;
+	const layerRect = celebrateEl.getBoundingClientRect();
+	spawnCelebrationParticles(celebrateEl, {
+		x: layerRect.width * 0.5,
+		y: layerRect.height * 0.4,
+	}, {
+		count: 26,
+		spreadMin: 78,
+		spreadMax: 156,
+	});
 }
 
 function burstSummary() {
-	summaryCelebrateEl.innerHTML = "";
-	for (let i = 0; i < 24; i += 1) {
-		const dot = document.createElement("div");
-		dot.className = "summary-spark";
-		dot.style.left = `${20 + Math.random() * 60}%`;
-		dot.style.top = `${15 + Math.random() * 55}%`;
-		const angle = Math.random() * Math.PI * 2;
-		const r = 50 + Math.random() * 110;
-		dot.style.setProperty("--tx", `${Math.cos(angle) * r}px`);
-		dot.style.setProperty("--ty", `${Math.sin(angle) * r}px`);
-		dot.style.background = ["#7a1022", "#a81631", "#c12a46", "#d3495f"][i % 4];
-		summaryCelebrateEl.appendChild(dot);
-	}
-	setTimeout(() => {
-		summaryCelebrateEl.innerHTML = "";
-	}, 820);
+	if (!summaryCelebrateEl || !summaryEl) return;
+	clearCelebrationLayer(summaryCelebrateEl);
+	const layerRect = summaryCelebrateEl.getBoundingClientRect();
+	spawnCelebrationParticles(summaryCelebrateEl, {
+		x: layerRect.width * 0.5,
+		y: layerRect.height * 0.32,
+	}, {
+		count: 34,
+		spreadMin: 86,
+		spreadMax: 184,
+	});
+	retriggerCelebrationBreath(summaryBigScoreEl);
+	retriggerCelebrationBreath(summaryEl, "is-celebrating");
 }
 
 function buildQuestion(item) {

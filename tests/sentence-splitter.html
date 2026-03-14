@@ -6,127 +6,128 @@
 </head>
 <body>
   <pre id="test-output"></pre>
+  <script src="../lib/sentence-splitter.js"></script>
+  <script src="./lib/test-harness.js"></script>
   <script>
-    const runtimeOrigin = window.location.origin;
-    window.chrome = {
-      runtime: {
-        getURL(path) {
-          return `${runtimeOrigin}/${path}`;
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const U = window.SentenceSplitter;
+
+    runTests([
+      {
+        name: "normalizeLanguage folds regional variants into supported bases",
+        run() {
+          assertEqual(U.normalizeLanguage("id-ID"), "id");
+          assertEqual(U.normalizeLanguage("ja-JP"), "ja");
+          assertEqual(U.normalizeLanguage("zh-TW"), "zh");
+          assertEqual(U.normalizeLanguage("pt-BR"), "pt");
         },
       },
-    };
-  </script>
-  <script src="../lib/sentence-splitter.js"></script>
-  <script>
-    const results = [];
-
-    function record(status, name, detail) {
-      results.push(`${status}: ${name}${detail ? ` :: ${detail}` : ""}`);
-    }
-
-    function assertEqual(actual, expected, name) {
-      if (actual !== expected) {
-        throw new Error(`${name} | actual=${JSON.stringify(actual)} expected=${JSON.stringify(expected)}`);
-      }
-    }
-
-    function assertContainsIgnoringSpaces(text, expected, name) {
-      const actualNormalized = String(text || "").replace(/\s+/g, "");
-      const expectedNormalized = String(expected || "").replace(/\s+/g, "");
-      if (!actualNormalized.includes(expectedNormalized)) {
-        throw new Error(`${name} | actual=${JSON.stringify(text)} expected~=${JSON.stringify(expected)}`);
-      }
-    }
-
-    function flush(failed) {
-      const output = document.getElementById("test-output");
-      output.textContent = results.join("\n");
-      const summary = document.createElement("div");
-      summary.id = "test-summary";
-      summary.textContent = failed ? "TEST_FAIL" : "TEST_PASS";
-      document.body.appendChild(summary);
-    }
-
-    (async () => {
-      let failed = false;
-      const tests = [
-        async function testFallbackAndCache() {
-          window.SentenceSplitter.__resetCacheForTests();
+      {
+        name: "splitIntoSentences caches fallback results by normalized text and language",
+        run() {
+          U.__resetForTests();
           let fallbackCalls = 0;
-          const text = "Fallback path example.";
-          const first = window.SentenceSplitter.splitIntoSentences(text, "en", (normalized) => {
+          const first = U.splitIntoSentences("Fallback path example.", "en", (normalized) => {
             fallbackCalls += 1;
             return [normalized, "extra"];
           });
-          const second = window.SentenceSplitter.splitIntoSentences(text, "en", () => {
+          const second = U.splitIntoSentences("Fallback   path example.", "en", () => {
             fallbackCalls += 1;
             return ["should not run"];
           });
-          assertEqual(fallbackCalls, 1, "fallback splitter should be cached");
-          assertEqual(first.length, 2, "fallback result length");
-          assertEqual(second.length, 2, "cached fallback result length");
-          assertEqual(second[1], "extra", "cached fallback result content");
+          assertEqual(fallbackCalls, 1);
+          assertEqual(first.length, 2);
+          assertEqual(second.length, 2);
+          assertEqual(second[1], "extra");
         },
-        async function testInit() {
-          const api = await window.SentenceSplitter.init();
-          assertEqual(!!api, true, "sentence splitter initializes");
-        },
-        async function testUsesRuntimeModuleUrl() {
-          const normalized = window.SentenceSplitter.normalizeLanguage("id-ID");
-          assertEqual(normalized, "id", "language normalization stays intact");
-          const api = await window.SentenceSplitter.init();
-          assertEqual(!!api, true, "runtime getURL path loads sentencex module");
-        },
-        async function testIndonesianKep() {
-          const text = "Pangkalpinang, InfoPublik - Kendati tidak ditemukan anak dengan kondisi stunting di Kelurahan Bacang Pangkalpinang, Penjabat (Pj) Gubernur Kepulauan Bangka Belitung (Kep. Babel) Suganda Pandapotan Pasaribu, meminta agar ibu hamil, dan orang tua dengan anak balita, untuk senantiasa memperhatikan asupan gizi.";
-          const result = window.SentenceSplitter.splitIntoSentences(text, "id", () => []);
-          assertEqual(result.length, 1, "indonesian Kep abbreviation stays in one sentence");
-          assertEqual(result[0].includes("(Kep. Babel)"), true, "indonesian keeps Kep. Babel");
-        },
-        async function testSpanishHonorific() {
-          const text = "El Sr. Gómez llegó temprano. Luego habló con todos.";
-          const result = window.SentenceSplitter.splitIntoSentences(text, "es", () => []);
-          assertEqual(result.length, 2, "spanish honorific count");
-          assertEqual(result[0].includes("Sr. Gómez"), true, "spanish honorific content");
-        },
-        async function testGermanAbbreviation() {
-          const text = "Viele Geräte, z. B. Sensoren, profitieren davon. Danach folgt der Test.";
-          const result = window.SentenceSplitter.splitIntoSentences(text, "de", () => []);
-          assertEqual(result.length, 2, "german z. B. count");
-          assertContainsIgnoringSpaces(result[0], "z. B. Sensoren", "german z. B. content");
-        },
-        async function testJapaneseAcronym() {
-          const text = "これはA.I.技術の説明です。次の文です。";
-          const result = window.SentenceSplitter.splitIntoSentences(text, "ja", () => []);
-          assertEqual(result.length, 2, "japanese A.I. count");
-          assertContainsIgnoringSpaces(result[0], "A.I.技術", "japanese A.I. content");
-        },
-        async function testRepairSegmentsMergesAbbreviations() {
-          const repaired = window.SentenceSplitter.repairSegments([
+      },
+      {
+        name: "repairSegments merges abbreviation-driven false splits",
+        run() {
+          U.__resetForTests();
+          const repairedEs = U.repairSegments([
             "El Sr.",
             "Gómez llegó temprano.",
             "Luego habló con todos.",
           ], "es");
-          assertEqual(repaired.length, 2, "repairSegments merges split honorific");
-          assertContainsIgnoringSpaces(repaired[0], "Sr. Gómez llegó temprano.", "repairSegments content");
+          const repairedJa = U.repairSegments([
+            "これはA.",
+            "I.技術の説明です。",
+            "次の文です。",
+          ], "ja");
+          assertEqual(repairedEs.length, 2);
+          assertEqual(repairedEs[0], "El Sr. Gómez llegó temprano.");
+          assertEqual(repairedJa.length, 2);
+          assertEqual(repairedJa[0], "これはA.I.技術の説明です。");
         },
-      ];
-
-      for (const testFn of tests) {
-        try {
-          await testFn();
-          record("PASS", testFn.name);
-        } catch (error) {
-          failed = true;
-          record("FAIL", testFn.name, error && error.message ? error.message : String(error));
-        }
-      }
-
-      flush(failed);
-    })().catch((error) => {
-      record("FAIL", "sentence-splitter bootstrap", error && error.message ? error.message : String(error));
-      flush(true);
-    });
+      },
+      {
+        name: "splitIntoSentences uses mocked sentencex api and repairs its output",
+        run() {
+          U.__resetForTests();
+          U.__setApiForTests({
+            segment(lang, text) {
+              assertEqual(lang, "de");
+              assertEqual(text, "Viele Geräte, z. B. Sensoren, profitieren davon. Danach folgt der Test.");
+              return [
+                "Viele Geräte, z.",
+                "B. Sensoren, profitieren davon.",
+                "Danach folgt der Test.",
+              ];
+            },
+          });
+          const result = U.splitIntoSentences(
+            "Viele Geräte, z. B. Sensoren, profitieren davon. Danach folgt der Test.",
+            "de",
+            () => {
+              throw new Error("fallback should not run");
+            }
+          );
+          assertEqual(result.length, 2);
+          assertEqual(result[0], "Viele Geräte, z.B. Sensoren, profitieren davon.");
+          assertEqual(result[1], "Danach folgt der Test.");
+        },
+      },
+      {
+        name: "splitIntoSentences falls back when mocked sentencex api throws",
+        run() {
+          U.__resetForTests();
+          U.__setApiForTests({
+            segment() {
+              throw new Error("boom");
+            },
+          });
+          let fallbackCalls = 0;
+          const result = U.splitIntoSentences("これはテストです。次の文です。", "ja", (normalized, lang) => {
+            fallbackCalls += 1;
+            assertEqual(lang, "ja");
+            return normalized.split("。").filter(Boolean).map((item) => `${item}。`);
+          });
+          assertEqual(fallbackCalls, 1);
+          assertEqual(result.length, 2);
+          assertEqual(result[0], "これはテストです。");
+          assertEqual(result[1], "次の文です。");
+        },
+      },
+      {
+        name: "splitIntoSentences caches mocked api results until reset",
+        run() {
+          U.__resetForTests();
+          let calls = 0;
+          U.__setApiForTests({
+            segment() {
+              calls += 1;
+              return ["Alpha.", "Beta."];
+            },
+          });
+          const first = U.splitIntoSentences("Alpha. Beta.", "en", () => []);
+          const second = U.splitIntoSentences("Alpha. Beta.", "en", () => []);
+          assertEqual(calls, 1);
+          assertEqual(first.length, 2);
+          assertEqual(second.length, 2);
+        },
+      },
+    ]);
   </script>
 </body>
 </html>

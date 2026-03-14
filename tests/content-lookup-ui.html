@@ -98,6 +98,7 @@
           const box = U.showTranslation("翻譯內容", { document });
           assert(box, "expected translation box");
           assertEqual(document.getElementById("translationBox").textContent.includes("翻譯內容"), true);
+          assertEqual(document.getElementById("translationBox").querySelector("button"), null);
 
           U.appendDictionaryToTranslationBox({
             sections: [{

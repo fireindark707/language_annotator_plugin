@@ -8,6 +8,7 @@ let contentSelectionTourAttempted = false;
 let contentLanguageHint = "";
 let contentLanguageHintHref = "";
 let contentLanguageHintPromise = null;
+let contentLanguageHintSample = "";
 function requireContentDependency(name) {
 	const dependency = globalThis[name];
 	if (!dependency) {
@@ -268,16 +269,19 @@ function detectTextLanguageWithBrowserApi(text) {
 
 async function resolveContentLanguageHint() {
 	const currentHref = location.href || "";
+	const bodyText = normalizeText(
+		document.body && typeof document.body.innerText === "string"
+			? document.body.innerText
+			: (document.body && document.body.textContent) || ""
+	).slice(0, 4000);
 	if (contentLanguageHintPromise && contentLanguageHintHref === currentHref) {
-		return contentLanguageHintPromise;
+		if (contentLanguageHintSample === bodyText) {
+			return contentLanguageHintPromise;
+		}
 	}
 	contentLanguageHintHref = currentHref;
+	contentLanguageHintSample = bodyText;
 	contentLanguageHintPromise = (async () => {
-		const bodyText = normalizeText(
-			document.body && typeof document.body.innerText === "string"
-				? document.body.innerText
-				: (document.body && document.body.textContent) || ""
-		).slice(0, 4000);
 		const detected = await detectTextLanguageWithBrowserApi(bodyText);
 		const fallback = (
 			document.documentElement.lang ||
@@ -396,8 +400,10 @@ if (typeof window !== "undefined") {
 	window.__resetContentLanguageHintForTests = function __resetContentLanguageHintForTests() {
 		contentLanguageHint = "";
 		contentLanguageHintHref = "";
+		contentLanguageHintSample = "";
 		contentLanguageHintPromise = null;
 	};
+	window.__resolveContentLanguageHintForTests = resolveContentLanguageHint;
 }
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -663,7 +669,10 @@ function translateText(text) {
 		if (detectedLang && TranslationUtilsRef.isSameLanguageFamily(detectedLang, TranslationUtilsRef.getBrowserTargetLang(window.navigator))) {
 			return;
 		}
-		const isSingleWord = !/\s/.test((text || "").trim());
+			const isSingleWord = TranslationUtilsRef.isSingleWordLikeText(
+				text,
+				detectedLang || sourceLang || document.documentElement.lang || navigator.language
+			);
 		return TranslationUtilsRef.requestPreferredTranslation({
 			chromeRuntime: chrome.runtime,
 			chromeI18n: chrome.i18n,
