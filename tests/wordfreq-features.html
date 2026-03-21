@@ -1,0 +1,1221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>wordfreq-features</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+
+  <!-- Required dependencies for content-difficulty.js and content-page-processing.js -->
+  <script src="../lib/sentence-splitter.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/wordfreq-utils.js"></script>
+  <script src="../lib/content-difficulty.js"></script>
+  <script src="../lib/content-page-processing.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    // ─── Mock WordfreqLib ─────────────────────────────────────────────────────
+    // Provides a deterministic in-memory word frequency table used across all tests.
+    // Format: word -> zipf score
+    const MOCK_FREQ = {
+      // EN thresholds: A1≥5.3, A2≥4.7, B1≥4.2, B2≥3.7, C1≥3.2
+      // English A1 (≥5.3)
+      "the": 7.0, "is": 6.8, "and": 6.9, "to": 6.7, "in": 6.5, "a": 7.1, "of": 6.6,
+      "it": 6.3, "he": 6.1, "she": 6.0, "they": 5.8, "we": 5.7, "you": 5.9,
+      "was": 6.2, "are": 6.4, "has": 6.0, "have": 6.1, "had": 6.2, "be": 6.0,
+      // English A2 (≥4.7)
+      "year": 4.9, "people": 4.8,
+      // English B1 (≥4.2): book/water/city/read are all B1 for EN
+      "book": 4.5, "city": 4.3, "water": 4.6, "read": 4.4, "learn": 4.2,
+      // English B2 (≥3.7): house(4.1) is B2 for EN (< B1 threshold 4.2)
+      "house": 4.1, "ponder": 3.8, "wander": 3.7,
+      // English C1 (≥3.2)
+      "sorrow": 3.5, "gloom": 3.2,
+      // English C2 (<3.2)
+      "parchment": 2.1, "lexicon": 2.3, "breviary": 2.8, "codex": 2.0,
+      "folio": 2.2, "epistle": 1.9, "palimpsest": 1.5, "quire": 1.7,
+      "zymurgy": 0.5, "pogonology": 0.4, "tmesis": 0.6, "anfractuous": 0.3,
+      // Inflected forms (C2) paired with their common lemmas — for lemma-aware scoring tests
+      // EN thresholds: A1≥5.3, A2≥4.7, B1≥4.2, B2≥3.7, C1≥3.2, C2<3.2
+      "running": 1.0,   // C2 — lemma "run" is A2(5.0)
+      "run": 5.0,       // A2
+      "writings": 1.8,  // C2 — lemma "write" is A2(4.8)
+      "write": 4.8,     // A2
+      "sorrows": 2.9,   // C2 — lemma "sorrow" is C1(3.5)
+      "wandered": 2.5,  // C2 — lemma "wander" is B2(3.7)
+      // Indonesian (id) — thresholds [5.4,4.7,4.2,3.8,3.3]
+      // A1 (≥5.4): common function words + lemmas
+      "yang": 7.0, "dan": 6.8, "ini": 6.5, "itu": 6.6, "ada": 6.4,
+      "bisa": 5.5,     // A1 — lemma of "sebisanya"
+      "tidak": 6.7, "dengan": 6.9, "untuk": 6.6,
+      "bangun": 5.6,   // A1 — lemma of "dibangunkan"
+      // C2 (<3.3): inflected forms whose lemmas are A1
+      "dibangunkan": 1.8,  // C2 — lemma "bangun" is A1
+      "sebisanya": 2.0,    // C2 — lemma "bisa" is A1
+      // Chinese (zh) — single chars have varying freq
+      "的": 7.5, "是": 7.2, "在": 7.0, "了": 7.3, "我": 6.8, "他": 6.9,
+      "学": 5.2, "习": 5.0, "中": 6.0, "国": 5.8,
+      "词": 3.5, "频": 3.2, "率": 3.8,
+      "璎": 1.2, "珞": 1.1, "琮": 0.9,
+      // Japanese (ja)
+      "の": 7.5, "は": 7.3, "が": 7.1, "で": 7.0, "に": 7.2,
+      "語": 5.0, "言": 5.1, "学": 5.2, "校": 4.8,
+      "璧": 1.0,
+      // Korean (ko)
+      "이": 7.0, "가": 6.8, "의": 7.1, "를": 6.9,
+      "학": 5.0, "교": 4.9, "어": 5.1,
+      // Thai (th)
+      "ใน": 6.5, "และ": 6.3, "ของ": 6.4,
+    };
+
+    // Simulates the BrowserDataFetcher + Wordfreq instances; init is instant (no network).
+    function makeMockWordfreqLib() {
+      function BrowserDataFetcher() {}
+      function Wordfreq(lang) {
+        this._lang = lang;
+      }
+      Wordfreq.prototype.init = function () { return Promise.resolve(); };
+      Wordfreq.prototype.zipfFrequency = function (word) {
+        const w = (word || "").toLowerCase();
+        return (w in MOCK_FREQ) ? MOCK_FREQ[w] : 0;
+      };
+      return { Wordfreq, BrowserDataFetcher };
+    }
+
+    // Install mock library before each test group that needs it.
+    function installMockLib() {
+      globalThis.WordfreqLib = makeMockWordfreqLib();
+    }
+    function uninstallMockLib() {
+      delete globalThis.WordfreqLib;
+    }
+
+    // ─── WordfreqUtils Unit Tests ─────────────────────────────────────────────
+    const WFU = window.WordfreqUtils;
+
+    // ─── ContentDifficulty Unit Tests ─────────────────────────────────────────
+    const CD = window.ContentDifficulty;
+
+    // ─── ContentPageProcessing Unit Tests ────────────────────────────────────
+    const CPP = window.ContentPageProcessing;
+
+    // ─── Section 11 helpers (analyzeAndShow + getLemma) ───────────────────────
+    // Each test uses document.implementation.createHTMLDocument() for full isolation.
+    // Token-count math for EN (minLen=3, threshold=0.90):
+    //   A1 (≥3 chars): the,and,was,she,they,you,have,had,are  (9 total)
+    //   C2:            parchment,lexicon,breviary,folio,codex  (5 total)
+    //   Non-mock pad:  this,sentence,just,padding,that,text,
+    //                  exceeds,hundred,characters,minimum,content (11 total)
+    //   → 25 unique tokens ≥ 20 guard; text ≈ 130 chars ≥ 100 guard
+    //   → scored = 9 A1 + C2_count; through C1 = 9/scored
+
+    // 9 A1 + 5 C2 → scored=14, 9/14=64% < 90% → C2
+    const C2_ARTICLE = [
+      "the and was she they you have had are",
+      "parchment lexicon breviary folio codex",
+      "this sentence just padding that text exceeds hundred characters minimum content",
+    ].join(" ");
+
+    // 9 A1 + 2 inflected C2 → scored=11
+    // Without lemma: 9/11=81.8% < 90% → C2
+    // With running→run(A2) + writings→write(A2): A2 cumulative = 100% → A2
+    const INFLECTED_ARTICLE = [
+      "the and was she they you have had are",
+      "running writings",
+      "this sentence just padding that text exceeds hundred characters minimum content",
+    ].join(" ");
+
+    // Indonesian: 9 A1 + dibangunkan(C2) + sebisanya(C2) + 11 non-mock pad = 23 unique tokens
+    // Without lemma: 9/11 = 81.8% through C1 → C2
+    // With lemma (dibangunkan→bangun A1, sebisanya→bisa A1): 11/11 = 100% through A1 → A1
+    // Indonesian: 9 A1 + dibangunkan(C2) + sebisanya(C2) + 10 non-mock pad = 21 unique tokens
+    // Without lemma: 9/11 = 81.8% through C1 → C2
+    // With lemma (dibangunkan→bangun A1, sebisanya→bisa A1): 11/11 = 100% through A1 → A1
+    const ID_INFLECTED_ARTICLE = [
+      "yang dan ini itu ada bisa tidak dengan untuk",
+      "dibangunkan sebisanya",
+      "kalimat artikel dibuat sebagai konten pengujian cukup panjang bahwa termasuk",
+    ].join(" ");
+
+    function makeIsolatedDoc(articleText) {
+      const doc = document.implementation.createHTMLDocument("test");
+      doc.body.innerHTML = `<p>${articleText}</p>`;
+      return doc;
+    }
+
+    function waitForPanel(doc, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const t0 = Date.now();
+        (function poll() {
+          const panel = doc.getElementById("laDifficultyPanel");
+          if (panel) return resolve(panel);
+          if (Date.now() - t0 > timeoutMs) return reject(new Error("panel did not appear"));
+          setTimeout(poll, 50);
+        }());
+      });
+    }
+
+    runTests([
+
+      // ═══ 1. WordfreqUtils — basic API ══════════════════════════════════════
+
+      {
+        name: "WordfreqUtils.isSupported: known languages are supported",
+        run() {
+          assert(WFU.isSupported("en"), "en supported");
+          assert(WFU.isSupported("zh"), "zh supported");
+          assert(WFU.isSupported("ja"), "ja supported");
+          assert(WFU.isSupported("ko"), "ko supported");
+          assert(WFU.isSupported("de"), "de supported");
+          assert(WFU.isSupported("fr"), "fr supported");
+          assert(WFU.isSupported("ar"), "ar supported");
+          assert(WFU.isSupported("th"), "th supported");
+          assert(WFU.isSupported("ur"), "ur supported");
+          assert(WFU.isSupported("be"), "be supported");
+        },
+      },
+
+      {
+        name: "WordfreqUtils.isSupported: unsupported langs return false",
+        run() {
+          assert(!WFU.isSupported("sw"),  "sw not supported");
+          assert(!WFU.isSupported("sq"),  "sq not supported");
+          assert(!WFU.isSupported("ca"),  "ca not supported");
+          assert(!WFU.isSupported(""),    "empty not supported");
+          assert(!WFU.isSupported(null),  "null not supported");
+          assert(!WFU.isSupported("auto"), "auto not supported");
+        },
+      },
+
+      {
+        name: "WordfreqUtils.normalizeLang: strips region code",
+        run() {
+          assert(WFU.isSupported("en-US"), "en-US -> en");
+          assert(WFU.isSupported("zh-TW"), "zh-TW -> zh");
+          assert(WFU.isSupported("de-AT"), "de-AT -> de");
+        },
+      },
+
+      {
+        name: "WordfreqUtils.getDifficultyTier: EN Zipf thresholds [5.3,4.7,4.2,3.7,3.2]",
+        run() {
+          assertEqual(WFU.getDifficultyTier(7.0,  "en"), "A1");
+          assertEqual(WFU.getDifficultyTier(5.3,  "en"), "A1");  // exactly A1 min
+          assertEqual(WFU.getDifficultyTier(5.2,  "en"), "A2");  // just below A1
+          assertEqual(WFU.getDifficultyTier(4.7,  "en"), "A2");  // exactly A2 min
+          assertEqual(WFU.getDifficultyTier(4.6,  "en"), "B1");  // just below A2
+          assertEqual(WFU.getDifficultyTier(4.2,  "en"), "B1");  // exactly B1 min
+          assertEqual(WFU.getDifficultyTier(4.1,  "en"), "B2");  // just below B1
+          assertEqual(WFU.getDifficultyTier(3.7,  "en"), "B2");  // exactly B2 min
+          assertEqual(WFU.getDifficultyTier(3.6,  "en"), "C1");  // just below B2
+          assertEqual(WFU.getDifficultyTier(3.2,  "en"), "C1");  // exactly C1 min
+          assertEqual(WFU.getDifficultyTier(3.1,  "en"), "C2");  // just below C1
+          assertEqual(WFU.getDifficultyTier(0.1,  "en"), "C2");
+        },
+      },
+
+      {
+        name: "WordfreqUtils.getDifficultyTier: null/undefined/zero returns null",
+        run() {
+          assertEqual(WFU.getDifficultyTier(null,      "en"), null);
+          assertEqual(WFU.getDifficultyTier(undefined, "en"), null);
+          assertEqual(WFU.getDifficultyTier(0,         "en"), null);  // not in dataset
+          assertEqual(WFU.getDifficultyTier(-1,        "en"), null);
+        },
+      },
+
+      {
+        name: "WordfreqUtils.isReady: returns false before init",
+        run() {
+          // Use a fresh language that hasn't been initialized in this test session
+          assert(!WFU.isReady("be"), "be should not be ready before initForLang");
+        },
+      },
+
+      {
+        name: "WordfreqUtils.initForLang: returns false for unsupported lang",
+        async run() {
+          const result = await WFU.initForLang("xx");
+          assertEqual(result, false);
+        },
+      },
+
+      {
+        name: "WordfreqUtils.initForLang: returns false when WordfreqLib absent",
+        async run() {
+          uninstallMockLib();
+          const saved = globalThis.WordfreqLib;
+          const result = await WFU.initForLang("lv"); // lv not yet initialized
+          assertEqual(result, false);
+        },
+      },
+
+      {
+        name: "WordfreqUtils.initForLang: initializes and getZipf works (English)",
+        async run() {
+          installMockLib();
+          const ok = await WFU.initForLang("en");
+          assertEqual(ok, true);
+          assert(WFU.isReady("en"), "en should be ready");
+          const z = WFU.getZipf("the", "en");
+          assert(z !== null && z > 6, "the: high zipf");
+          const z2 = WFU.getZipf("zymurgy", "en");
+          assertEqual(WFU.getDifficultyTier(z2, "en"), "C2");
+        },
+      },
+
+      {
+        name: "WordfreqUtils.initForLang: second call returns cached promise",
+        async run() {
+          installMockLib();
+          const p1 = WFU.initForLang("en");
+          const p2 = WFU.initForLang("en");
+          const [r1, r2] = await Promise.all([p1, p2]);
+          assertEqual(r1, true);
+          assertEqual(r2, true);
+        },
+      },
+
+      {
+        name: "WordfreqUtils.getZipf: returns null if lang not ready",
+        run() {
+          const z = WFU.getZipf("book", "mk"); // mk not initialized yet
+          assertEqual(z, null);
+        },
+      },
+
+      {
+        name: "WordfreqUtils.getZipf: case-insensitive lookup",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const z1 = WFU.getZipf("THE", "en");
+          const z2 = WFU.getZipf("the", "en");
+          assertEqual(z1, z2);
+        },
+      },
+
+      {
+        name: "WordfreqUtils.initForLang: Chinese and tier classification",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("zh");
+          assert(WFU.isReady("zh"), "zh ready");
+          // ZH thresholds [5.4,4.8,4.3,3.9,3.4]: 的(7.5)→A1, 词(3.5)≥3.4→C1, 琮(0.9)→C2
+          assertEqual(WFU.getDifficultyTier(WFU.getZipf("的", "zh"), "zh"), "A1");
+          assertEqual(WFU.getDifficultyTier(WFU.getZipf("词", "zh"), "zh"), "C1");
+          assertEqual(WFU.getDifficultyTier(WFU.getZipf("琮", "zh"), "zh"), "C2");
+        },
+      },
+
+      // ═══ 2. ContentDifficulty — tokenizeArticle ════════════════════════════
+
+      {
+        name: "tokenizeArticle: basic English, filters short tokens",
+        run() {
+          const tokens = CD.tokenizeArticle("It is a test of the reading system here", 500, "en");
+          assert(tokens.includes("test"), "test included");
+          assert(tokens.includes("reading"), "reading included");
+          assert(tokens.includes("system"), "system included");
+          // Short words filtered (length < 3)
+          assert(!tokens.includes("it"), "it filtered");
+          assert(!tokens.includes("is"), "is filtered");
+          assert(!tokens.includes("of"), "of filtered");
+        },
+      },
+
+      {
+        name: "tokenizeArticle: respects maxTokens limit",
+        run() {
+          const longText = Array.from({length: 1000}, (_, i) => "word" + i).join(" ");
+          const tokens = CD.tokenizeArticle(longText, 50, "en");
+          assert(tokens.length <= 50, "max 50 tokens");
+        },
+      },
+
+      {
+        name: "tokenizeArticle: returns unique tokens (deduplicated)",
+        run() {
+          const tokens = CD.tokenizeArticle("the cat sat the cat sat", 500, "en");
+          const set = new Set(tokens);
+          assertEqual(set.size, tokens.length);
+        },
+      },
+
+      {
+        name: "tokenizeArticle: CJK lang (zh) — single characters included (minLen=1)",
+        run() {
+          const tokens = CD.tokenizeArticle("的是在学习中文词频", 500, "zh");
+          // Single CJK chars (minLen=1 for zh) must be included
+          assert(tokens.length > 0, "CJK tokens extracted");
+          assert(tokens.includes("的") || tokens.includes("学"), "single CJK char included");
+        },
+      },
+
+      {
+        name: "tokenizeArticle: Japanese lang (ja) — single hiragana included",
+        run() {
+          const tokens = CD.tokenizeArticle("日本語の学校", 500, "ja");
+          assert(tokens.length > 0, "ja tokens extracted");
+        },
+      },
+
+      {
+        name: "tokenizeArticle: Korean lang (ko) — individual chars tokenized",
+        run() {
+          const tokens = CD.tokenizeArticle("이것이 한국어", 500, "ko");
+          assert(tokens.length > 0, "ko tokens extracted");
+          // Character-level tokenization for ko: individual chars are tokens
+          assert(tokens.includes("이") || tokens.includes("것") || tokens.includes("한"), "ko individual char included");
+        },
+      },
+
+      {
+        name: "tokenizeArticle: Thai lang (th) — short tokens included",
+        run() {
+          const tokens = CD.tokenizeArticle("ใน และ ของ ประเทศไทย", 500, "th");
+          assert(tokens.length > 0, "th tokens extracted");
+        },
+      },
+
+      {
+        name: "tokenizeArticle: non-CJK lang still filters length < 3",
+        run() {
+          const tokens = CD.tokenizeArticle("je tu il", 500, "fr");
+          // All tokens are length 2 — should be filtered
+          assert(!tokens.includes("je"), "fr short token filtered");
+          assert(!tokens.includes("tu"), "fr short token filtered");
+        },
+      },
+
+      // ═══ 3. ContentDifficulty — extractArticleText ════════════════════════
+
+      {
+        name: "extractArticleText: collects text from p/article/section elements",
+        run() {
+          const div = document.createElement("div");
+          div.innerHTML = `
+            <article>Long article content here about important topics</article>
+            <p>Another paragraph with plenty of readable text here</p>
+            <section>A section with additional context and information</section>
+          `;
+          document.body.appendChild(div);
+          const text = CD.extractArticleText(div.ownerDocument || document);
+          document.body.removeChild(div);
+          assert(text.includes("article content"), "article text found");
+          assert(text.includes("paragraph"), "paragraph text found");
+        },
+      },
+
+      {
+        name: "extractArticleText: skips la- extension elements",
+        run() {
+          const div = document.createElement("div");
+          div.innerHTML = `
+            <p>Real article content that should be included in analysis</p>
+            <div class="la-popup"><p>Extension UI text — ignore this</p></div>
+            <div id="laDifficultyPanel"><p>Panel text — ignore this</p></div>
+          `;
+          document.body.appendChild(div);
+          const text = CD.extractArticleText(div.ownerDocument || document);
+          document.body.removeChild(div);
+          assert(text.includes("Real article"), "real content included");
+          assert(!text.includes("Extension UI"), "la-class content excluded");
+          assert(!text.includes("Panel text"), "panel content excluded");
+        },
+      },
+
+      {
+        name: "extractArticleText: skips short text elements (< 20 chars)",
+        run() {
+          const div = document.createElement("div");
+          div.innerHTML = `
+            <p>Hi</p>
+            <p>This is a longer paragraph that definitely passes the twenty-character threshold</p>
+          `;
+          document.body.appendChild(div);
+          const text = CD.extractArticleText(div.ownerDocument || document);
+          document.body.removeChild(div);
+          assert(!text.includes("Hi"), "short text skipped");
+          assert(text.includes("longer paragraph"), "long text included");
+        },
+      },
+
+      // ═══ 4. ContentDifficulty — computeDistribution ═══════════════════════
+
+      {
+        name: "computeDistribution: returns null when WordfreqUtils not ready",
+        run() {
+          const tokens = ["parchment", "lexicon", "book"];
+          const result = CD.computeDistribution(tokens, "de"); // de not initialized
+          assertEqual(result, null);
+        },
+      },
+
+      {
+        name: "computeDistribution: English easy article → B1 level",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // EN thresholds [5.3,4.7,4.2,3.7,3.2]
+          // the/and/is/was(≥5.3)=A1(×4); book(4.5)/city(4.3)/water(4.6)/read(4.4) ≥4.2 → B1(×4)
+          // cumulative: A1=50%, A1+A2=50%, A1+A2+B1=100% ≥ 90% → B1
+          const tokens = ["the", "and", "is", "was", "book", "city", "water", "read"];
+          const result = CD.computeDistribution(tokens, "en");
+          assert(result !== null, "result not null");
+          assertEqual(result.a1, 4, "a1=4");
+          assertEqual(result.a2, 0, "a2=0 (4.3–4.6 is B1 for EN, not A2)");
+          assertEqual(result.b1, 4, "b1=4");
+          assertEqual(result.level, "B1");
+        },
+      },
+
+      {
+        name: "computeDistribution: English hard text → C2 level",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // all 9 words have Zipf < 3.5 → all C2
+          // cumulative: through C1 = 0/9 = 0% → C2
+          const tokens = ["parchment", "lexicon", "breviary", "codex", "palimpsest", "zymurgy", "pogonology", "tmesis", "anfractuous"];
+          const result = CD.computeDistribution(tokens, "en");
+          assert(result !== null, "result not null");
+          assertEqual(result.c1, 0, "c1=0 (all below C1 threshold)");
+          assertEqual(result.c2, 9, "c2=9 (all C2)");
+          assertEqual(result.level, "C2");
+        },
+      },
+
+      {
+        name: "computeDistribution: returns null for empty tokens",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const result = CD.computeDistribution([], "en");
+          assertEqual(result, null);
+        },
+      },
+
+      {
+        name: "computeDistribution: bucket counts sum to scored",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const tokens = ["the", "book", "parchment", "zymurgy", "and", "lexicon"];
+          const result = CD.computeDistribution(tokens, "en");
+          assert(result !== null, "result not null");
+          assertEqual(result.a1 + result.a2 + result.b1 + result.b2 + result.c1 + result.c2, result.scored);
+        },
+      },
+
+      {
+        name: "computeDistribution: mixed text → B2 level",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // the/and/is=A1(×3), book/water=A2(×2), city/read=B1(×2), ponder(3.8)=B2(×1)
+          // cumulative: through B1=7/8=87.5% < 93%; through B2=8/8=100% ≥ 93% → B2
+          const tokens = ["the", "and", "is", "book", "water", "city", "read", "ponder"];
+          const result = CD.computeDistribution(tokens, "en");
+          assert(result !== null, "result not null");
+          assertEqual(result.b2, 1, "b2=1 (ponder at 3.8)");
+          assertEqual(result.level, "B2");
+        },
+      },
+
+      {
+        name: "computeDistribution: harder words push level up",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // Easy baseline: the/and/is=A1(×3), book=A2(×1), city=B1(×1)
+          // cumulative: through B1 = 5/5 = 100% ≥ 93% → B1
+          const easyTokens = ["the", "and", "is", "book", "city"];
+          const easyResult = CD.computeDistribution(easyTokens, "en");
+          assertEqual(easyResult.level, "B1", "easy baseline is B1");
+          // With C1 words: the/and/is=A1(×3), book=A2(×1), sorrow/wander=C1(×2)
+          // cumulative: through B1=4/6=67%; through B2=4/6=67%; through C1=6/6=100% ≥ 93% → C1
+          const harderTokens = ["the", "and", "is", "book", "sorrow", "wander"];
+          const harderResult = CD.computeDistribution(harderTokens, "en");
+          assertEqual(harderResult.level, "C1", "adding C1 words raises level to C1");
+        },
+      },
+
+      {
+        name: "computeDistribution: Chinese tokens scored correctly",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("zh");
+          const tokens = ["的", "是", "学", "词", "频", "璎"];
+          const result = CD.computeDistribution(tokens, "zh");
+          assert(result !== null, "zh result not null");
+          assert(result.scored > 0, "zh scored > 0");
+        },
+      },
+
+      // ═══ 5. computeContextScore — Latin (non-CJK) ═════════════════════════
+
+      {
+        name: "computeContextScore: English — returns higher score for common-word context",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // Sentence with only very-common words around the target
+          const easyCtx = "The book was in the house and she read it";
+          // Sentence with mostly rare words around the target
+          const hardCtx = "The parchment contained a palimpsest lexicon and codex breviary";
+          const scoreEasy = CPP.computeContextScore(easyCtx, "book", WFU, "en");
+          const scoreHard = CPP.computeContextScore(hardCtx, "parchment", WFU, "en");
+          assert(scoreEasy > scoreHard, "easy context scores higher: " + scoreEasy + " > " + scoreHard);
+        },
+      },
+
+      {
+        name: "computeContextScore: excludes the target word itself from scoring",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // If target word were included in scoring, its own Zipf would skew the result
+          const s1 = CPP.computeContextScore("the and is zymurgy book was", "zymurgy", WFU, "en");
+          const s2 = CPP.computeContextScore("the and is zymurgy book was", "none", WFU, "en");
+          // s2 includes "zymurgy" (very-rare, low zipf), so s2 should be lower than s1
+          assert(s1 >= s2, "target word excluded from score (s1=" + s1 + ", s2=" + s2 + ")");
+        },
+      },
+
+      {
+        name: "computeContextScore: returns 0 for empty/no-scoreable sentence",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          assertEqual(CPP.computeContextScore("", "book", WFU, "en"), 0);
+          assertEqual(CPP.computeContextScore("aa bb", "aa", WFU, "en"), 0); // all too short
+        },
+      },
+
+      {
+        name: "computeContextScore: filters tokens shorter than 3 chars for non-CJK",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // All context words are ≤2 chars; should return 0 (nothing scoreable)
+          const score = CPP.computeContextScore("is it in at an to a the book", "book", WFU, "en");
+          // "the" is 3 chars and should be scored (common)
+          assert(score >= 0, "non-negative score");
+          // Short words like "is", "it", "in" (2 chars) are excluded
+          const scoreNoShort = CPP.computeContextScore("in at an to", "in", WFU, "en");
+          assertEqual(scoreNoShort, 0, "2-char tokens excluded, score=0");
+        },
+      },
+
+      // ═══ 6. computeContextScore — CJK languages ═══════════════════════════
+
+      {
+        name: "computeContextScore: Chinese — individual chars scored",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("zh");
+          // 的(7.5),是(7.2),在(7.0),习(5.0) should all be scored; target 学 excluded
+          const score = CPP.computeContextScore("的是在学习", "学", WFU, "zh");
+          assert(score > 0, "zh context scored: " + score);
+        },
+      },
+
+      {
+        name: "computeContextScore: Japanese — individual chars scored",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("ja");
+          // の(7.5),言(5.1),学(5.2) scored; target 語 excluded
+          const score = CPP.computeContextScore("の語言学", "語", WFU, "ja");
+          assert(score > 0, "ja context scored: " + score);
+        },
+      },
+
+      {
+        name: "computeContextScore: Korean — individual chars scored",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("ko");
+          // 이(7.0),가(6.8),의(7.1),를(6.9),교(4.9) scored; target 학 excluded
+          const score = CPP.computeContextScore("이가의를학교", "학", WFU, "ko");
+          assert(score > 0, "ko context scored: " + score);
+        },
+      },
+
+      {
+        name: "computeContextScore: Thai — space-separated short words scored (minLen=1)",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("th");
+          // Thai is space-separated; "ใน"(2ch), "และ"(3ch), "ของ"(3ch) are whole words
+          // minLen=1 for th means 2-char words like "ใน" are included; target "ใน" excluded
+          const score = CPP.computeContextScore("ใน และ ของ", "ใน", WFU, "th");
+          assert(score > 0, "th context scored: " + score);
+        },
+      },
+
+      {
+        name: "computeContextScore: CJK vs non-CJK tokenization boundary",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          await WFU.initForLang("zh");
+          // For en: 2-char tokens are filtered (length < 3)
+          const enScore = CPP.computeContextScore("aa bb cc", "aa", WFU, "en");
+          // For zh: character-level tokenization — 是(7.2),在(7.0) scored; target 的 excluded
+          const zhScore = CPP.computeContextScore("的是在", "的", WFU, "zh");
+          assertEqual(enScore, 0, "en: 2-char tokens not scored");
+          assert(zhScore > 0, "zh: char-level tokens scored: " + zhScore);
+        },
+      },
+
+      // ═══ 7. Example sorting using computeContextScore ═════════════════════
+
+      {
+        name: "Example sorting: easy-context sentences ranked first",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+
+          const sentences = [
+            { text: "The palimpsest codex contains breviary and epistle annotations", relevance: 1 },
+            { text: "She read the book in the house by the water", relevance: 1 },
+            { text: "He had a lexicon and parchment folio on the shelf", relevance: 1 },
+          ];
+
+          sentences.sort((a, b) =>
+            CPP.computeContextScore(b.text, "read", WFU, "en") -
+            CPP.computeContextScore(a.text, "read", WFU, "en")
+          );
+
+          // The simplest-context sentence should be first
+          assert(sentences[0].text.includes("She read the book"), "easy sentence first: " + sentences[0].text);
+        },
+      },
+
+      {
+        name: "Example sorting: stable when all scores equal",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // All sentences have same context — sort should not throw
+          const sentences = [
+            { text: "the book was here", id: 1 },
+            { text: "the book is here", id: 2 },
+            { text: "the book will be here", id: 3 },
+          ];
+          sentences.sort((a, b) =>
+            CPP.computeContextScore(b.text, "book", WFU, "en") -
+            CPP.computeContextScore(a.text, "book", WFU, "en")
+          );
+          assertEqual(sentences.length, 3, "all sentences preserved after sort");
+        },
+      },
+
+      // ═══ 8. SPA navigation — onUrlChange hook ════════════════════════════
+
+      {
+        name: "checkUrlAndHighlight: calls onUrlChange when URL changes",
+        async run() {
+          let urlChangedTo = null;
+          let highlightCalled = false;
+          let fakeUrl = "http://example.com/onurlchange-1";
+
+          const deps = {
+            getLocationHref: () => fakeUrl,
+            highlightWords: () => { highlightCalled = true; },
+            onUrlChange: (url) => { urlChangedTo = url; },
+          };
+
+          // Seed lastUrl with current URL (no change expected)
+          CPP.checkUrlAndHighlight(deps);
+
+          // Now change URL — should trigger both scheduleHighlight and onUrlChange
+          fakeUrl = "http://example.com/onurlchange-2";
+          CPP.checkUrlAndHighlight(deps);
+
+          // scheduleHighlight uses setTimeout(80ms) — wait for it to fire
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          assert(highlightCalled, "highlightWords called on URL change");
+          assertEqual(urlChangedTo, "http://example.com/onurlchange-2");
+        },
+      },
+
+      {
+        name: "checkUrlAndHighlight: onUrlChange NOT called when URL unchanged",
+        run() {
+          let callCount = 0;
+          const fixedUrl = "http://example.com/stable-" + Date.now();
+
+          const deps = {
+            getLocationHref: () => fixedUrl,
+            highlightWords: () => {},
+            onUrlChange: () => { callCount++; },
+          };
+
+          // Seed with current URL (first call triggers change from "")
+          CPP.checkUrlAndHighlight(deps);
+          const before = callCount;
+          // Call again without URL change — onUrlChange must NOT fire again
+          CPP.checkUrlAndHighlight(deps);
+
+          assertEqual(callCount, before, "onUrlChange not called when URL unchanged");
+        },
+      },
+
+      {
+        name: "checkUrlAndHighlight: works without onUrlChange (backward compat)",
+        async run() {
+          let highlightCalled = false;
+          let fakeUrl = "http://example.com/noUrlChange-a";
+
+          const deps = {
+            getLocationHref: () => fakeUrl,
+            highlightWords: () => { highlightCalled = true; },
+            // No onUrlChange — should not throw
+          };
+
+          CPP.checkUrlAndHighlight(deps); // seed
+          fakeUrl = "http://example.com/noUrlChange-b";
+          CPP.checkUrlAndHighlight(deps); // change
+
+          // scheduleHighlight uses setTimeout(80ms) — wait for it to fire
+          await new Promise((resolve) => setTimeout(resolve, 200));
+
+          assert(highlightCalled, "highlightWords still called without onUrlChange");
+        },
+      },
+
+      // ═══ 9. Edge cases ═════════════════════════════════════════════════════
+
+      {
+        name: "WordfreqUtils.getZipf: empty/null word returns 0 or null gracefully",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const z1 = WFU.getZipf("", "en");
+          const z2 = WFU.getZipf(null, "en");
+          // Should not throw; return a number (0 if not found) or null
+          assert(z1 !== undefined, "empty word: no exception");
+          assert(z2 !== undefined, "null word: no exception");
+        },
+      },
+
+      {
+        name: "WordfreqUtils: auto lang is unsupported",
+        run() {
+          assert(!WFU.isSupported("auto"), "auto not supported");
+          assert(!WFU.isReady("auto"), "auto not ready");
+        },
+      },
+
+      {
+        name: "tokenizeArticle: empty string returns empty array",
+        run() {
+          const tokens = CD.tokenizeArticle("", 500, "en");
+          assertEqual(tokens.length, 0);
+        },
+      },
+
+      {
+        name: "tokenizeArticle: numbers and punctuation not included",
+        run() {
+          const tokens = CD.tokenizeArticle("123 test. 456, hello!", 500, "en");
+          assert(!tokens.includes("123"), "numbers excluded");
+          assert(!tokens.includes("456"), "numbers excluded");
+          assert(tokens.includes("test"), "test included");
+          assert(tokens.includes("hello"), "hello included");
+        },
+      },
+
+      {
+        name: "computeContextScore: handles sentence with only target word",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const score = CPP.computeContextScore("book", "book", WFU, "en");
+          assertEqual(score, 0, "only target word → score 0 (excluded from scoring)");
+        },
+      },
+
+      {
+        name: "computeDistribution: words not in mock table (zipf=0) are excluded from scoring",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // Unknown words return 0 from mock → excluded (zipf <= 0), scored=0 → null
+          const tokens = ["xxxxxxyyy", "zzzzzabc", "unknownword"];
+          const result = CD.computeDistribution(tokens, "en");
+          assertEqual(result, null, "all unknown → null (no scoreable tokens)");
+          // Known + unknown: only known words contribute
+          const mixed = ["the", "xxxxxxyyy", "zzmurgy"];
+          const r2 = CD.computeDistribution(mixed, "en");
+          assert(r2 !== null, "mixed: result not null");
+          assertEqual(r2.scored, 1, "only 'the' scored");
+          assertEqual(r2.a1, 1, "'the' is A1");
+        },
+      },
+
+      // ═══ 10. computeDistribution — lemmaZipfMap ══════════════════════════
+      // Tests the synchronous override path in computeDistribution.
+      // lemmaZipfMap is pre-built by analyzeAndShow after async lemma lookups;
+      // computeDistribution itself just uses whatever zipf the map provides.
+
+      {
+        name: "lemmaZipfMap: C2 token overridden to A2 zipf → bucket changes to A2",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // Without map: the(A1), and(A1), parchment(C2) → c2=1, level=C2
+          const tokens = ["the", "and", "parchment"];
+          const noMap = CD.computeDistribution(tokens, "en");
+          assertEqual(noMap.c2, 1, "parchment is C2 without map");
+          assertEqual(noMap.level, "C2");
+
+          // With map: parchment effective zipf = 5.0 → A2 (≥4.7, <5.3)
+          const map = new Map([["parchment", 5.0]]);
+          const withMap = CD.computeDistribution(tokens, "en", map);
+          assertEqual(withMap.c2, 0, "parchment no longer C2 with map");
+          assertEqual(withMap.a2, 1, "parchment now A2 with map");
+          assertEqual(withMap.level, "A2", "level improves from C2 to A2");
+        },
+      },
+
+      {
+        name: "lemmaZipfMap: corrected token removed from c2Tokens set",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const tokens = ["the", "running", "parchment"];
+          // Without map: running(C2) + parchment(C2) → c2Tokens has both
+          const noMap = CD.computeDistribution(tokens, "en");
+          assert(noMap.c2Tokens.has("running"), "running in c2Tokens without map");
+          assert(noMap.c2Tokens.has("parchment"), "parchment in c2Tokens without map");
+
+          // With map correcting "running" to run's zipf(5.0=A2):
+          const map = new Map([["running", 5.0]]);
+          const withMap = CD.computeDistribution(tokens, "en", map);
+          assert(!withMap.c2Tokens.has("running"), "running removed from c2Tokens after correction");
+          assert(withMap.c2Tokens.has("parchment"), "parchment still in c2Tokens (not in map)");
+          assertEqual(withMap.c2, 1, "only parchment is C2");
+        },
+      },
+
+      {
+        name: "lemmaZipfMap: tokens absent from map use their original zipf unchanged",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // running(C2 1.0), writings(C2 1.8), book(B1 4.5)
+          // map only corrects "running"
+          const tokens = ["running", "writings", "book"];
+          const map = new Map([["running", 5.0]]); // run=A2
+          const result = CD.computeDistribution(tokens, "en", map);
+          assertEqual(result.a2, 1, "running corrected to A2");
+          assertEqual(result.c2, 1, "writings still C2 (not in map)");
+          assertEqual(result.b1, 1, "book still B1 (not in map)");
+        },
+      },
+
+      {
+        name: "lemmaZipfMap: article level improves when multiple inflected C2 forms corrected",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // 14 A1 tokens + "running"(C2) + "writings"(C2)
+          // Without map: a1=14, c2=2, scored=16
+          //   through C1 = 14/16 = 87.5% < 90%; through C2 = 100% → level=C2
+          const tokens = [
+            "the","and","is","was","he","she","they","we","you","have",
+            "had","are","be","it","running","writings",
+          ];
+          const noMap = CD.computeDistribution(tokens, "en");
+          assertEqual(noMap.c2, 2, "running + writings are C2 without map");
+          assertEqual(noMap.level, "C2", "level is C2 without map");
+
+          // With map: running→5.0(A2), writings→4.8(A2)
+          // a1=14, a2=2, scored=16
+          // through A1 = 14/16 = 87.5% < 90%; through A2 = 16/16 = 100% ≥ 90% → level=A2
+          const map = new Map([["running", 5.0], ["writings", 4.8]]);
+          const withMap = CD.computeDistribution(tokens, "en", map);
+          assertEqual(withMap.a2, 2, "running + writings now A2");
+          assertEqual(withMap.c2, 0, "no C2 tokens remain");
+          assertEqual(withMap.level, "A2", "level improves to A2");
+        },
+      },
+
+      {
+        name: "lemmaZipfMap: C2→C1 upgrade (sorrows→sorrow) reduces c2, increases c1",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // sorrows(C2 2.9), sorrow(C1 3.5); wandered(C2 2.5), wander(B2 3.7)
+          const tokens = ["the", "and", "is", "was", "he", "sorrows", "wandered"];
+          const noMap = CD.computeDistribution(tokens, "en");
+          assertEqual(noMap.c2, 2, "sorrows + wandered are C2");
+
+          // map: sorrows→3.5(C1), wandered→3.7(B2)
+          const map = new Map([["sorrows", 3.5], ["wandered", 3.7]]);
+          const withMap = CD.computeDistribution(tokens, "en", map);
+          assertEqual(withMap.c2, 0, "no C2 tokens remain after correction");
+          assertEqual(withMap.c1, 1, "sorrows upgraded to C1");
+          assertEqual(withMap.b2, 1, "wandered upgraded to B2");
+        },
+      },
+
+      {
+        name: "lemmaZipfMap: null map behaves identically to no map argument",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const tokens = ["the", "and", "running"];
+          const noArg  = CD.computeDistribution(tokens, "en");
+          const nullMap = CD.computeDistribution(tokens, "en", null);
+          assertEqual(noArg.a1,    nullMap.a1);
+          assertEqual(noArg.c2,    nullMap.c2);
+          assertEqual(noArg.level, nullMap.level);
+        },
+      },
+
+      // ═══ 11. analyzeAndShow — getLemma integration ═══════════════════════
+      // (helpers and constants defined above runTests; see before runTests([)
+
+      {
+        name: "analyzeAndShow: panel appears in isolated document after async resolution",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          // 9 A1 + 5 C2 + 11 non-mock = 25 unique tokens; text ≈ 130 chars
+          const doc = makeIsolatedDoc(C2_ARTICLE);
+          CD.analyzeAndShow({ sourceLang: "en", document: doc });
+          const panel = await waitForPanel(doc, 3000);
+          assert(panel !== null, "panel present in isolated doc");
+        },
+      },
+
+      {
+        name: "analyzeAndShow: getLemma upgrades C2 inflected forms → level improves vs no-getLemma",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+
+          // Without getLemma: running(C2) + writings(C2) → scored=11, C2/scored=18%, level=C2
+          const docNoLemma = makeIsolatedDoc(INFLECTED_ARTICLE);
+          CD.analyzeAndShow({ sourceLang: "en", document: docNoLemma });
+          const panelNoLemma = await waitForPanel(docNoLemma, 3000);
+          const levelNoLemma = panelNoLemma.querySelector(".la-difficulty-panel-level")?.textContent?.trim();
+
+          // With getLemma: running→run(A2 5.0), writings→write(A2 4.8) → level=A2
+          const docWithLemma = makeIsolatedDoc(INFLECTED_ARTICLE);
+          CD.analyzeAndShow({
+            sourceLang: "en",
+            document: docWithLemma,
+            getLemma: (word) => {
+              const map = { running: "run", writings: "write" };
+              return Promise.resolve(map[word] || null);
+            },
+          });
+          const panelWithLemma = await waitForPanel(docWithLemma, 3000);
+          const levelWithLemma = panelWithLemma.querySelector(".la-difficulty-panel-level")?.textContent?.trim();
+
+          const CEFR_ORDER = { A1: 0, A2: 1, B1: 2, B2: 3, C1: 4, C2: 5 };
+          assert(CEFR_ORDER[levelWithLemma] < CEFR_ORDER[levelNoLemma],
+            `level with getLemma (${levelWithLemma}) should be easier than without (${levelNoLemma})`);
+        },
+      },
+
+      {
+        name: "analyzeAndShow: getLemma returning null for a token leaves that token unchanged",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+
+          // C2_ARTICLE: 9 A1 + 5 C2 = 14 scored; through C1 = 9/14 = 64% < 90% → level C2
+          const doc = makeIsolatedDoc(C2_ARTICLE);
+          let lemmaCallCount = 0;
+          CD.analyzeAndShow({
+            sourceLang: "en",
+            document: doc,
+            getLemma: (word) => { lemmaCallCount++; return Promise.resolve(null); },
+          });
+          const panel = await waitForPanel(doc, 3000);
+          const level = panel.querySelector(".la-difficulty-panel-level")?.textContent?.trim();
+
+          assert(lemmaCallCount > 0, "getLemma was called for C2 tokens");
+          assertEqual(level, "C2", "level stays C2 when getLemma returns null");
+        },
+      },
+
+      {
+        name: "analyzeAndShow: getLemma same as token (no change) → score unchanged",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+
+          // C2_ARTICLE: same C2 words; getLemma returns the same word → lowerLemma === word
+          // → returns null from the pair builder → no lemmaZipfMap entry → no change → C2
+          const doc = makeIsolatedDoc(C2_ARTICLE);
+          CD.analyzeAndShow({
+            sourceLang: "en",
+            document: doc,
+            getLemma: (word) => Promise.resolve(word), // identity: same word returned
+          });
+          const panel = await waitForPanel(doc, 3000);
+          const level = panel.querySelector(".la-difficulty-panel-level")?.textContent?.trim();
+          assertEqual(level, "C2", "level unchanged when lemma === token");
+        },
+      },
+
+      {
+        name: "analyzeAndShow: CJK (zh) — getLemma is never invoked for char-level lang",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("zh");
+
+          // 26 unique CJK chars (each char is a token in zh mode); text repeated → ≥100 chars
+          const chars = "的是在了我他学习中国词频率璎珞琮今日本語文化世界人口";
+          const doc = makeIsolatedDoc(chars.repeat(4));
+
+          let lemmaCallCount = 0;
+          CD.analyzeAndShow({
+            sourceLang: "zh",
+            document: doc,
+            getLemma: (word) => { lemmaCallCount++; return Promise.resolve(null); },
+          });
+          await waitForPanel(doc, 3000);
+
+          assertEqual(lemmaCallCount, 0, "getLemma never called for zh (char-level lang)");
+        },
+      },
+
+      {
+        name: "analyzeAndShow: no getLemma option — backward compatible, panel still shows",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+
+          // C2_ARTICLE has enough tokens and text; no getLemma → original behavior
+          const doc = makeIsolatedDoc(C2_ARTICLE);
+          CD.analyzeAndShow({ sourceLang: "en", document: doc });
+          const panel = await waitForPanel(doc, 3000);
+          assert(panel !== null, "panel appears without getLemma option");
+        },
+      },
+
+      // ═══ 12. Indonesian regression — dibangunkan / sebisanya ══════════════
+      // These tests reproduce the real-world bug: "dibangunkan" (被喚醒) and
+      // "sebisanya" (盡量) were scored as C2 even though their lemmas are A1
+      // common Indonesian words ("bangun", "bisa").
+
+      {
+        name: "id regression: computeDistribution — dibangunkan/sebisanya are C2 without lemmaZipfMap",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          // id thresholds [5.4,4.7,4.2,3.8,3.3]: dibangunkan(1.8) and sebisanya(2.0) both < 3.3 → C2
+          const tokens = ["yang", "dan", "ini", "itu", "ada", "bisa", "tidak", "dengan", "untuk", "dibangunkan", "sebisanya"];
+          const result = CD.computeDistribution(tokens, "id");
+          assert(result !== null, "result not null");
+          assertEqual(result.c2, 2, "dibangunkan + sebisanya are C2");
+          assert(result.c2Tokens.has("dibangunkan"), "dibangunkan in c2Tokens");
+          assert(result.c2Tokens.has("sebisanya"), "sebisanya in c2Tokens");
+        },
+      },
+
+      {
+        name: "id regression: computeDistribution — lemmaZipfMap(bangun/bisa A1) removes both from C2",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          // Simulates what analyzeAndShow builds after getLemma resolves:
+          // dibangunkan→bangun(5.6 A1), sebisanya→bisa(5.5 A1)
+          const tokens = ["yang", "dan", "ini", "itu", "ada", "bisa", "tidak", "dengan", "untuk", "dibangunkan", "sebisanya"];
+          const map = new Map([["dibangunkan", 5.6], ["sebisanya", 5.5]]);
+          const result = CD.computeDistribution(tokens, "id", map);
+          assertEqual(result.c2, 0, "no C2 tokens after lemma correction");
+          assert(!result.c2Tokens.has("dibangunkan"), "dibangunkan removed from c2Tokens");
+          assert(!result.c2Tokens.has("sebisanya"), "sebisanya removed from c2Tokens");
+          assertEqual(result.level, "A1", "level is A1 — all tokens now A1");
+        },
+      },
+
+      {
+        name: "id regression: getLemma null (old r.found bug) → dibangunkan stays C2",
+        // This reproduces what happened before the fix in content.js:
+        // resolveLemma() returns { query, lemma, effectiveQuery, lang } — no .found field.
+        // The old code did: .then(r => r && r.found ? r.lemma : null)
+        // Since r.found === undefined (falsy), getLemma always returned null.
+        // So lemmaZipfMap was never built and C2 words were never upgraded.
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const doc = makeIsolatedDoc(ID_INFLECTED_ARTICLE);
+          // Simulate old broken getLemma: always returns null (as if r.found were checked)
+          let callCount = 0;
+          CD.analyzeAndShow({
+            sourceLang: "id",
+            document: doc,
+            getLemma: (word) => { callCount++; return Promise.resolve(null); },
+          });
+          const panel = await waitForPanel(doc, 3000);
+          const level = panel.querySelector(".la-difficulty-panel-level")?.textContent?.trim();
+          assert(callCount > 0, "getLemma was called for C2 tokens");
+          assertEqual(level, "C2", "level stays C2 when getLemma always returns null (old bug)");
+        },
+      },
+
+      {
+        name: "id regression: getLemma returning lemma (fixed r.lemma check) → level upgrades to A1",
+        // This verifies the fix in content.js:
+        // The fixed code does: .then(r => (r && r.lemma) || null)
+        // This correctly returns the lemma string when found.
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const doc = makeIsolatedDoc(ID_INFLECTED_ARTICLE);
+          // Simulate fixed getLemma: returns the lemma directly (as resolveLemma now provides)
+          CD.analyzeAndShow({
+            sourceLang: "id",
+            document: doc,
+            getLemma: (word) => {
+              // dibangunkan → bangun (A1, zipf=5.6); sebisanya → bisa (A1, zipf=5.5)
+              const lemmaMap = { dibangunkan: "bangun", sebisanya: "bisa" };
+              return Promise.resolve(lemmaMap[word] || null);
+            },
+          });
+          const panel = await waitForPanel(doc, 3000);
+          const level = panel.querySelector(".la-difficulty-panel-level")?.textContent?.trim();
+          assertEqual(level, "A1", "level upgrades to A1 when lemmas are correctly resolved");
+        },
+      },
+
+      {
+        name: "id regression: getLemma not called for non-C2 tokens (yang/dan/bisa are A1)",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const doc = makeIsolatedDoc(ID_INFLECTED_ARTICLE);
+          const wordsQueried = [];
+          CD.analyzeAndShow({
+            sourceLang: "id",
+            document: doc,
+            getLemma: (word) => { wordsQueried.push(word); return Promise.resolve(null); },
+          });
+          await waitForPanel(doc, 3000);
+          // Only C1/C2 tokens should be queried
+          assert(!wordsQueried.includes("yang"),   "A1 word 'yang' not queried");
+          assert(!wordsQueried.includes("bisa"),   "A1 word 'bisa' not queried");
+          assert(wordsQueried.includes("dibangunkan"), "C2 word 'dibangunkan' queried");
+          assert(wordsQueried.includes("sebisanya"),   "C2 word 'sebisanya' queried");
+        },
+      },
+
+    ]);
+  </script>
+</body>
+</html>

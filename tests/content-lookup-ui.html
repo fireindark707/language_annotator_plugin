@@ -45,6 +45,39 @@
       };
     }
 
+    // ─── Mock WordfreqUtils for badge tests ──────────────────────────────────
+    // Uses EN thresholds [5.3, 4.7, 4.2, 3.7, 3.2] for getDifficultyTier.
+    const BADGE_FREQ = {
+      "the":       7.0,  // A1
+      "run":       5.0,  // A2
+      "book":      4.5,  // B1
+      "house":     4.1,  // B2
+      "sorrow":    3.5,  // C1
+      "parchment": 2.1,  // C2
+      "running":   1.0,  // C2 — lemma "run" → A2(5.0)
+    };
+    function makeMockWordfreqUtils(freqTable) {
+      const SUPPORTED = new Set(["en", "zh", "ja", "ko", "id", "fr", "de"]);
+      return {
+        isSupported(lang) { return SUPPORTED.has((lang || "").split("-")[0].toLowerCase()); },
+        isReady(_lang) { return true; },
+        initForLang(_lang) { return Promise.resolve(true); },
+        getZipf(word, _lang) {
+          const w = (word || "").toLowerCase();
+          return (w in freqTable) ? freqTable[w] : 0;
+        },
+        getDifficultyTier(zipf, _lang) {
+          if (!zipf || zipf <= 0) return null;
+          if (zipf >= 5.3) return "A1";
+          if (zipf >= 4.7) return "A2";
+          if (zipf >= 4.2) return "B1";
+          if (zipf >= 3.7) return "B2";
+          if (zipf >= 3.2) return "C1";
+          return "C2";
+        },
+      };
+    }
+
     runTests([
       {
         name: "createPreviewHighlightedSentence highlights whole word matches",
@@ -278,6 +311,170 @@
           U.hideWordPreview(0);
           await new Promise((resolve) => setTimeout(resolve, 10));
           anchor.remove();
+        },
+      },
+
+      // ═══ Zipf badge — showWordPreview ══════════════════════════════════════
+
+      {
+        name: "showWordPreview renders A1 zipf badge for common word",
+        async run() {
+          const wfu = makeMockWordfreqUtils(BADGE_FREQ);
+          const anchor = document.createElement("span");
+          anchor.textContent = "the";
+          anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          document.body.appendChild(anchor);
+          U.showWordPreview(anchor, "article", [], {
+            document,
+            WordStorage: { getSourceLang: () => Promise.resolve("en") },
+            WordfreqUtils: wfu,
+            chromeRuntime: { lastError: null, sendMessage(_, cb) { cb({}); } },
+            TranslationUtilsRef: window.TranslationUtils,
+            contentT(key) { return { examples: "Examples", pronounce: "Pronounce" }[key] || key; },
+            getExampleText(e) { return e.text || ""; },
+            isCjkText: () => false,
+            isBoundaryMatch: () => true,
+          });
+          await waitFor(() => !!document.querySelector(".la-zipf-badge--A1"));
+          const badge = document.querySelector(".la-zipf-badge--A1");
+          assert(badge, "expected A1 badge");
+          assertEqual(badge.textContent, "A1");
+          U.hideWordPreview(0);
+          await new Promise((r) => setTimeout(r, 10));
+          anchor.remove();
+        },
+      },
+
+      {
+        name: "showWordPreview renders C2 zipf badge for rare word",
+        async run() {
+          const wfu = makeMockWordfreqUtils(BADGE_FREQ);
+          const anchor = document.createElement("span");
+          anchor.textContent = "parchment";
+          anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          document.body.appendChild(anchor);
+          U.showWordPreview(anchor, "old writing material", [], {
+            document,
+            WordStorage: { getSourceLang: () => Promise.resolve("en") },
+            WordfreqUtils: wfu,
+            chromeRuntime: { lastError: null, sendMessage(_, cb) { cb({}); } },
+            TranslationUtilsRef: window.TranslationUtils,
+            contentT(key) { return { examples: "Examples", pronounce: "Pronounce" }[key] || key; },
+            getExampleText(e) { return e.text || ""; },
+            isCjkText: () => false,
+            isBoundaryMatch: () => true,
+          });
+          await waitFor(() => !!document.querySelector(".la-zipf-badge--C2"));
+          const badge = document.querySelector(".la-zipf-badge--C2");
+          assert(badge, "expected C2 badge");
+          assertEqual(badge.textContent, "C2");
+          assert(badge.title.includes("2.1"), "expected title to include zipf score 2.1");
+          U.hideWordPreview(0);
+          await new Promise((r) => setTimeout(r, 10));
+          anchor.remove();
+        },
+      },
+
+      {
+        name: "showWordPreview shows no zipf badge when WordfreqUtils is absent",
+        async run() {
+          const anchor = document.createElement("span");
+          anchor.textContent = "book";
+          anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          document.body.appendChild(anchor);
+          U.showWordPreview(anchor, "a reading item", [], {
+            document,
+            WordStorage: { getSourceLang: () => Promise.resolve("en") },
+            // WordfreqUtils intentionally omitted
+            chromeRuntime: { lastError: null, sendMessage(_, cb) { cb({}); } },
+            TranslationUtilsRef: window.TranslationUtils,
+            contentT(key) { return { examples: "Examples", pronounce: "Pronounce" }[key] || key; },
+            getExampleText(e) { return e.text || ""; },
+            isCjkText: () => false,
+            isBoundaryMatch: () => true,
+          });
+          await new Promise((r) => setTimeout(r, 80));
+          const badge = document.querySelector(".la-zipf-badge");
+          assert(!badge, "expected no zipf badge when WordfreqUtils absent");
+          U.hideWordPreview(0);
+          await new Promise((r) => setTimeout(r, 10));
+          anchor.remove();
+        },
+      },
+
+      // ═══ Zipf badge — showTranslation ══════════════════════════════════════
+
+      {
+        name: "showTranslation renders B1 zipf badge for source word",
+        async run() {
+          const wfu = makeMockWordfreqUtils(BADGE_FREQ);
+          const sel = window.getSelection();
+          const range = document.createRange();
+          const textNode = document.createTextNode("book");
+          document.body.appendChild(textNode);
+          range.selectNodeContents(textNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          U.showTranslation("書", {
+            document,
+            WordfreqUtils: wfu,
+            sourceWord: "book",
+            sourceLang: "en",
+            startContentSelectionTour() {},
+            state: { contentSelectionTourAttempted: false },
+          });
+          await waitFor(() => !!document.querySelector(".la-zipf-badge--B1"));
+          const badge = document.querySelector(".la-zipf-badge--B1");
+          assert(badge, "expected B1 badge on translation card");
+          assertEqual(badge.textContent, "B1");
+          assert(badge.title.includes("4.5"), "expected title to include zipf score 4.5");
+          document.getElementById("translationBox").remove();
+          textNode.remove();
+          sel.removeAllRanges();
+        },
+      },
+
+      {
+        name: "showTranslation badge upgrades via lemma for C2 inflected word",
+        async run() {
+          const wfu = makeMockWordfreqUtils(BADGE_FREQ);
+          // "running" is C2(1.0); lemma "run" is A2(5.0) → badge should upgrade to A2
+          const sel = window.getSelection();
+          const range = document.createRange();
+          const textNode = document.createTextNode("running");
+          document.body.appendChild(textNode);
+          range.selectNodeContents(textNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          const chromeRuntime = {
+            lastError: null,
+            sendMessage(message, callback) {
+              if (message.action === "getLemma") {
+                callback({ found: true, lemma: "run" });
+                return;
+              }
+              callback({});
+            },
+          };
+          U.showTranslation("跑步", {
+            document,
+            WordfreqUtils: wfu,
+            sourceWord: "running",
+            sourceLang: "en",
+            chromeRuntime,
+            startContentSelectionTour() {},
+            state: { contentSelectionTourAttempted: false },
+          });
+          // Wait for badge to upgrade from C2 to A2
+          await waitFor(() => !!document.querySelector(".la-zipf-badge--A2"), 1500);
+          const badge = document.querySelector(".la-zipf-badge--A2");
+          assert(badge, "expected badge to upgrade to A2 via lemma lookup");
+          assertEqual(badge.textContent, "A2");
+          document.getElementById("translationBox").remove();
+          textNode.remove();
+          sel.removeAllRanges();
         },
       },
     ]);

@@ -22,7 +22,17 @@
 	let autoFlushInstalled = false;
 
 	function isContextInvalidatedError(error) {
-		return !!(error && typeof error.message === "string" && error.message.includes("Extension context invalidated"));
+		if (!error || typeof error.message !== "string") return false;
+		const msg = error.message;
+		if (msg.includes("Extension context invalidated")) return true;
+		// chrome.storage.local/sync is undefined when extension context is stale
+		// (e.g. extension reloaded while tab was open, or sandboxed iframe context)
+		if (error instanceof TypeError && (
+			msg.includes("(reading 'local')") ||
+			msg.includes("(reading 'sync')") ||
+			msg.includes("(reading 'storage')")
+		)) return true;
+		return false;
 	}
 
 	function estimateBytes(value) {

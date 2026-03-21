@@ -399,6 +399,24 @@
             color: #847065;
             cursor: help;
         }
+        .word-zipf-badge {
+            display: inline-block;
+            font-size: 9px;
+            font-weight: 800;
+            padding: 1px 4px;
+            border-radius: 3px;
+            line-height: 1.4;
+            letter-spacing: 0.02em;
+            flex-shrink: 0;
+            vertical-align: middle;
+            margin-left: 4px;
+        }
+        .word-zipf-badge--A1 { background: #FFFFFF; color: #888; border: 1px solid #ddd; }
+        .word-zipf-badge--A2 { background: #44AA44; color: #fff; }
+        .word-zipf-badge--B1 { background: #0088FF; color: #fff; }
+        .word-zipf-badge--B2 { background: #AA00FF; color: #fff; }
+        .word-zipf-badge--C1 { background: #FFD700; color: #333; }
+        .word-zipf-badge--C2 { background: #FF0000; color: #fff; }
 
         .learned {
             color: #7c6e73;
@@ -883,6 +901,8 @@
     <script src="ui-i18n.js"></script>
     <script src="ui-tour.js"></script>
     <script src="ui-toast.js"></script>
+    <script src="packages/wordfreq.iife.js"></script>
+    <script src="lib/wordfreq-utils.js"></script>
     <script src="words.js"></script>
 </body>
 </html>

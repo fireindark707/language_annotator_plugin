@@ -826,9 +826,50 @@ function matchWordWithSearch(word, wordData, keyword) {
 	return false;
 }
 
+function applyZipfBadge(badge, word, WFU, sourceLang) {
+	const zipf = WFU.getZipf(word, sourceLang);
+	const tier = WFU.getDifficultyTier(zipf, sourceLang);
+	if (!tier) return;
+	badge.className = "word-zipf-badge word-zipf-badge--" + tier;
+	badge.textContent = tier;
+	badge.title = "Zipf: " + zipf.toFixed(1);
+	// Upgrade C1/C2 badges with lemma-aware scoring: inflected forms of common
+	// words (e.g. "dibangunkan" → lemma "bangun") should not stay marked hard.
+	if (tier === "C1" || tier === "C2") {
+		chrome.runtime.sendMessage(
+			{ action: "getLemma", text: word, sourceLang },
+			(result) => {
+				if (chrome.runtime.lastError || !result || !result.found || !result.lemma) return;
+				const lowerLemma = result.lemma.toLowerCase();
+				if (lowerLemma === word) return;
+				const lemmaZipf = WFU.getZipf(lowerLemma, sourceLang);
+				if (!lemmaZipf) return;
+				const effective = zipf ? Math.max(zipf, lemmaZipf) : lemmaZipf;
+				if (effective <= (zipf || 0)) return;
+				const newTier = WFU.getDifficultyTier(effective, sourceLang);
+				if (!newTier || newTier === tier) return;
+				badge.className = "word-zipf-badge word-zipf-badge--" + newTier;
+				badge.textContent = newTier;
+				badge.title = "Zipf: " + effective.toFixed(1);
+			}
+		);
+	}
+}
+
 function updateWordsList() {
 	wordsList.innerHTML = "";
-	WordStorage.getWords().then((words) => {
+	Promise.all([
+		WordStorage.getWords(),
+		WordStorage.getSourceLang().catch(() => ""),
+	]).then(([words, sourceLang]) => {
+		const WFU = globalThis.WordfreqUtils || null;
+		if (WFU && sourceLang && sourceLang !== "auto" && WFU.isSupported(sourceLang) && !WFU.isReady(sourceLang)) {
+			WFU.initForLang(sourceLang).then(() => {
+				document.querySelectorAll(".word-zipf-badge[data-word]").forEach((badge) => {
+					applyZipfBadge(badge, badge.getAttribute("data-word"), WFU, sourceLang);
+				});
+			}).catch(() => {});
+		}
 		let allWords = Object.keys(words);
 		if (sortMode === "alpha_asc") {
 			allWords.sort((a, b) => a.localeCompare(b));
@@ -886,6 +927,13 @@ function updateWordsList() {
 				countSpan.textContent = formatWordCount(pageCount, encounterCount);
 				countSpan.title = countTooltip;
 				countSpan.setAttribute("aria-label", countTooltip);
+
+				const badge = document.createElement("span");
+				badge.className = "word-zipf-badge";
+				badge.setAttribute("data-word", word);
+				if (WFU && WFU.isReady(sourceLang)) {
+					applyZipfBadge(badge, word, WFU, sourceLang);
+				}
 
 				const lemmaValue = typeof words[word].lemma === "string" ? words[word].lemma.trim() : "";
 				let lemmaSpan = null;
@@ -1046,6 +1094,7 @@ function updateWordsList() {
 				actionWrap.appendChild(dictButton);
 				actionWrap.appendChild(deleteButton);
 				wordTextGroup.appendChild(wordSpan);
+				wordTextGroup.appendChild(badge);
 				if (lemmaSpan) {
 					wordTextGroup.appendChild(lemmaSpan);
 				}

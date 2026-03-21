@@ -655,6 +655,43 @@ function updateWordsList() {
 			});
 
 			wordTextGroup.appendChild(wordSpan);
+			const WFU = globalThis.WordfreqUtils || null;
+			if (WFU && currentSourceLang && currentSourceLang !== "auto" && WFU.isSupported(currentSourceLang)) {
+				const badge = document.createElement("span");
+				badge.className = "word-zipf-badge";
+				const applyBadge = (w, lang) => {
+					if (!badge.isConnected) return;
+					const zipf = WFU.getZipf(w, lang);
+					const tier = WFU.getDifficultyTier(zipf, lang);
+					if (!tier) return;
+					badge.className = "word-zipf-badge word-zipf-badge--" + tier;
+					badge.textContent = tier;
+					badge.title = "Zipf: " + zipf.toFixed(1);
+					if (tier === "C1" || tier === "C2") {
+						chrome.runtime.sendMessage({ action: "getLemma", text: w, sourceLang: lang }, (result) => {
+							if (chrome.runtime.lastError || !badge.isConnected) return;
+							if (!result || !result.found || !result.lemma) return;
+							const lowerLemma = result.lemma.toLowerCase();
+							if (lowerLemma === w) return;
+							const lemmaZipf = WFU.getZipf(lowerLemma, lang);
+							if (!lemmaZipf) return;
+							const effective = zipf ? Math.max(zipf, lemmaZipf) : lemmaZipf;
+							if (effective <= (zipf || 0)) return;
+							const newTier = WFU.getDifficultyTier(effective, lang);
+							if (!newTier || newTier === tier) return;
+							badge.className = "word-zipf-badge word-zipf-badge--" + newTier;
+							badge.textContent = newTier;
+							badge.title = "Zipf: " + effective.toFixed(1);
+						});
+					}
+				};
+				if (WFU.isReady(currentSourceLang)) {
+					applyBadge(word, currentSourceLang);
+				} else {
+					WFU.initForLang(currentSourceLang).then(() => applyBadge(word, currentSourceLang)).catch(() => {});
+				}
+				wordTextGroup.appendChild(badge);
+			}
 			if (lemmaSpan) {
 				wordTextGroup.appendChild(lemmaSpan);
 			}

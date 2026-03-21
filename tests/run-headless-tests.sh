@@ -49,6 +49,7 @@ TEST_FILES=(
   "$ROOT_DIR/tests/background-wiring.html"
   "$ROOT_DIR/tests/simplemma-smoke.html"
   "$ROOT_DIR/tests/dictionary-url-smoke.html"
+  "$ROOT_DIR/tests/wordfreq-features.html"
 )
 
 FAILURES=0

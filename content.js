@@ -9,6 +9,7 @@ let contentLanguageHint = "";
 let contentLanguageHintHref = "";
 let contentLanguageHintPromise = null;
 let contentLanguageHintSample = "";
+let wordfreqPageEnabled = false;
 function requireContentDependency(name) {
 	const dependency = globalThis[name];
 	if (!dependency) {
@@ -25,6 +26,7 @@ const ContentUiRef = requireContentDependency("ContentUi");
 const ContentLookupUiRef = requireContentDependency("ContentLookupUi");
 const ContentPageProcessingRef = requireContentDependency("ContentPageProcessing");
 const TranslationUtilsRef = requireContentDependency("TranslationUtils");
+const WordfreqUtils = globalThis.WordfreqUtils || null;
 const SKIP_TEXT_TAGS = new Set([
 	"SCRIPT",
 	"STYLE",
@@ -44,6 +46,7 @@ WordStorage.getUiLanguage()
 	.catch(() => {
 		contentUiLang = "en";
 	});
+
 
 function contentT(key) {
 	if (globalThis.UiI18n && typeof globalThis.UiI18n.t === "function") {
@@ -99,7 +102,15 @@ function startContentSelectionTour(force) {
 }
 
 function isContextInvalidatedError(error) {
-	return !!(error && typeof error.message === "string" && error.message.includes("Extension context invalidated"));
+	if (!error || typeof error.message !== "string") return false;
+	const msg = error.message;
+	if (msg.includes("Extension context invalidated")) return true;
+	if (error instanceof TypeError && (
+		msg.includes("(reading 'local')") ||
+		msg.includes("(reading 'sync')") ||
+		msg.includes("(reading 'storage')")
+	)) return true;
+	return false;
 }
 
 function getExampleText(entry) {
@@ -202,6 +213,7 @@ function hideWordPreview(delay) {
 			isBoundaryMatch,
 			findWholeWordMatch: ExampleUtilsRef.findWholeWordMatch,
 			languageHint: contentLanguageHint || document.documentElement.lang || (typeof navigator !== "undefined" ? navigator.language : "en"),
+			WordfreqUtils: wordfreqPageEnabled ? WordfreqUtils : null,
 		});
 	}
 
@@ -673,25 +685,31 @@ function translateText(text) {
 				text,
 				detectedLang || sourceLang || document.documentElement.lang || navigator.language
 			);
+		// If the selected text's language doesn't match the configured source language,
+		// use "auto" so the translation API detects the actual language instead of
+		// forcing an incorrect source language (e.g. translating Chinese text when
+		// sourceLang is set to Indonesian).
+		const detectedMatchesSource = detectedLang
+			? TranslationUtilsRef.isSameLanguageFamily(detectedLang, sourceLang)
+			: true;
+		const effectiveSourceLang = (sourceLang && !detectedMatchesSource) ? "auto" : (sourceLang || "auto");
+		const targetLang = TranslationUtilsRef.getBrowserTargetLang(window.navigator) || "en";
 		return TranslationUtilsRef.requestPreferredTranslation({
 			chromeRuntime: chrome.runtime,
 			chromeI18n: chrome.i18n,
 			wordStorage: WordStorage,
 			text,
-			sourceLang,
+			sourceLang: effectiveSourceLang,
 			translationEngine,
 			detectedLanguage: detectedLang,
-			targetLang: TranslationUtilsRef.getBrowserTargetLang(window.navigator),
+			targetLang,
 			onBrowserFallback(result) {
 				showContentBrowserTranslationFallback(result && result.reason);
 			},
 		}).then((translation) => {
 			if (!translation) return;
-			showTranslation(translation);
+			showTranslation(translation, isSingleWord ? { sourceWord: text.trim(), sourceLang } : null);
 			const dictQuery = normalizeDictionaryQuery(text);
-			const detectedMatchesSource = detectedLang
-				? TranslationUtilsRef.isSameLanguageFamily(detectedLang, sourceLang)
-				: true;
 			if (!(dictionaryEnabled && isSingleWord && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery) && detectedMatchesSource)) return;
 			chrome.runtime.sendMessage(
 				{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
@@ -709,10 +727,14 @@ function translateText(text) {
 	});
 }
 
-function showTranslation(translation) {
+function showTranslation(translation, wordfreqOpts) {
 	return ContentLookupUiRef.showTranslation(translation, {
 		document,
 		startContentSelectionTour,
+		chromeRuntime: chrome.runtime,
+		WordfreqUtils: (wordfreqOpts && wordfreqPageEnabled && WordfreqUtils) || null,
+		sourceWord: wordfreqOpts && wordfreqOpts.sourceWord,
+		sourceLang: wordfreqOpts && wordfreqOpts.sourceLang,
 		state: {
 			get contentSelectionTourAttempted() {
 				return contentSelectionTourAttempted;
@@ -759,7 +781,65 @@ function checkUrlAndHighlight() {
 	});
 }
 
-function setupNavigationWatchers() {
+function pageMatchesSrcLang(srcLang) {
+	// Use detectLanguage with all candidates.
+	// Check if srcLang appears in any candidate with percentage >= 20%.
+	// This handles near-identical language pairs (e.g. id/ms) without false negatives.
+	// We intentionally skip the HTML lang attribute — page authors often set it incorrectly.
+	return new Promise((resolve) => {
+		try {
+			if (!chrome || !chrome.i18n || typeof chrome.i18n.detectLanguage !== "function") {
+				resolve(true); return;
+			}
+			const sample = (document.body && document.body.innerText || "").slice(0, 4000);
+			chrome.i18n.detectLanguage(sample, (result) => {
+				if (chrome.runtime.lastError || !result || !Array.isArray(result.languages) || result.languages.length === 0) {
+					resolve(true); return;
+				}
+				if (!result.isReliable) { resolve(true); return; }
+				const match = result.languages.some((entry) =>
+					(entry.language || "").split("-")[0].toLowerCase() === srcLang && entry.percentage >= 40
+				);
+				resolve(match);
+			});
+		} catch (_) {
+			resolve(true);
+		}
+	});
+}
+
+function checkAndActivateWordfreq(lang) {
+	if (!WordfreqUtils) return;
+	if (!lang || lang === "auto" || !WordfreqUtils.isSupported(lang)) return;
+	const srcLang = (lang || "").split("-")[0].toLowerCase();
+	Promise.resolve(pageMatchesSrcLang(srcLang)).then((match) => {
+		if (!match) return;
+		wordfreqPageEnabled = true;
+		WordfreqUtils.initForLang(srcLang);
+		if (globalThis.ContentDifficulty) {
+			globalThis.ContentDifficulty.analyzeAndShow({
+				sourceLang: lang,
+				document,
+				translate: (word) => WordStorage.getTranslationEngine().catch(() => "online").then((engine) =>
+					TranslationUtilsRef.requestPreferredTranslation({
+						chromeRuntime: chrome.runtime,
+						chromeI18n: chrome.i18n,
+						wordStorage: WordStorage,
+						text: word,
+						sourceLang: lang,
+						translationEngine: engine,
+						targetLang: TranslationUtilsRef.getBrowserTargetLang(window.navigator),
+					})
+				).catch(() => null),
+				getLemma: (word) => resolveLemma(word, lang)
+					.then((r) => (r && r.lemma) || null)
+					.catch(() => null),
+			});
+		}
+	}).catch(() => {});
+}
+
+function setupNavigationWatchers(sourceLang) {
 	return ContentPageProcessingRef.setupNavigationWatchers({
 		history,
 		window,
@@ -767,10 +847,21 @@ function setupNavigationWatchers() {
 		MutationObserver,
 		getLocationHref: () => location.href,
 		highlightWords,
+		onUrlChange: () => {
+			wordfreqPageEnabled = false;
+			setTimeout(() => checkAndActivateWordfreq(sourceLang), 300);
+		},
 	});
 }
 
 window.addEventListener("load", () => {
 	highlightWords();
-	setupNavigationWatchers();
+	if (WordfreqUtils) {
+		WordStorage.getSourceLang().then((lang) => {
+			setupNavigationWatchers(lang);
+			setTimeout(() => checkAndActivateWordfreq(lang), 300);
+		}).catch(() => { setupNavigationWatchers(""); });
+	} else {
+		setupNavigationWatchers("");
+	}
 });
