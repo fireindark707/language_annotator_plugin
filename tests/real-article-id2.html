@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>real-article-id2</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+
+  <script src="../lib/wordfreq-utils.js"></script>
+  <script src="../lib/sentence-splitter.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/content-page-processing.js"></script>
+  <script src="../lib/content-difficulty.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const WFU = window.WordfreqUtils;
+    const CD = window.ContentDifficulty;
+    const CPP = window.ContentPageProcessing;
+    const SS = window.SentenceSplitter;
+
+    // ─── Mock WordfreqLib ─────────────────────────────────────────────────────
+    // Real Indonesian words drawn from the article with realistic Zipf scores.
+    // id thresholds: A1≥5.4, A2≥4.7, B1≥4.2, B2≥3.8, C1≥3.3, C2<3.3
+    const MOCK_FREQ = {
+      "yang": 7.0, "dan": 6.8, "ini": 6.5, "itu": 6.6, "dalam": 6.3,
+      "ada": 6.4, "tidak": 6.7, "dengan": 6.9, "untuk": 6.6, "di": 7.0,
+      "juga": 6.2, "akan": 6.3, "dari": 6.5, "kita": 6.1, "bisa": 5.5,
+      "jadi": 5.8, "ke": 6.0, "atau": 6.1, "ia": 6.0, "mereka": 5.7,
+      "orang": 5.2, "kata": 5.1, "negara": 4.9, "kerja": 4.8, "bekerja": 4.7,
+      "pekerja": 4.7, "kesehatan": 4.6, "pemerintah": 4.9, "migran": 4.3,
+      "hiv": 3.9, "bipolar": 3.2, "diskriminasi": 3.5, "penyakit": 4.2,
+      "layak": 4.4, "syarat": 4.3, "medis": 4.0,
+    };
+
+    function makeMockWordfreqLib() {
+      function BrowserDataFetcher() {}
+      function Wordfreq(lang) { this._lang = lang; }
+      Wordfreq.prototype.init = function () { return Promise.resolve(); };
+      Wordfreq.prototype.zipfFrequency = function (word) {
+        const w = (word || "").toLowerCase();
+        return (w in MOCK_FREQ) ? MOCK_FREQ[w] : 0;
+      };
+      return { Wordfreq, BrowserDataFetcher };
+    }
+
+    function installMockLib() { globalThis.WordfreqLib = makeMockWordfreqLib(); }
+
+    function waitForPanel(doc, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const t0 = Date.now();
+        (function poll() {
+          const panel = doc.getElementById("laDifficultyPanel");
+          if (panel) return resolve(panel);
+          if (Date.now() - t0 > timeoutMs) return reject(new Error("difficulty panel did not appear"));
+          setTimeout(poll, 50);
+        }());
+      });
+    }
+
+    // ─── Load real article ────────────────────────────────────────────────────
+    const ARTICLE_FILE = "./real-tests/view-source_https___projectmultatuli.org_label-unfit-to-work-kandasnya-mimpi-calon-buruh-migran-dengan-hiv-dan-bipolar_.html";
+    let realArticleDoc = null;
+    let articleParagraphs = [];
+
+    async function loadRealArticle() {
+      const res = await fetch(ARTICLE_FILE);
+      const html = await res.text();
+      realArticleDoc = new DOMParser().parseFromString(html, "text/html");
+      articleParagraphs = Array.from(realArticleDoc.querySelectorAll("p"))
+        .map((p) => (p.textContent || "").replace(/\s+/g, " ").trim())
+        .filter((t) => t.length > 30);
+    }
+
+    function makeHighlightDeps(doc, words, capturedErrors) {
+      const state = { pendingExampleMap: {}, exampleMergeTimer: null, contentTourAttempted: false, contentTourPending: false };
+      return {
+        document: doc, Node,
+        skipTags: new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT"]),
+        isExtensionUiElement: () => false,
+        isCurrentDomainExcluded: () => Promise.resolve(false),
+        showWordPreview() {}, hideWordPreview() {},
+        WordStorage: {
+          getWords: () => Promise.resolve(words),
+          getSourceLang: () => Promise.resolve("id"),
+          saveWords: () => Promise.resolve(),
+        },
+        splitIntoSentences: (text) => SS ? SS.splitIntoSentences(text, "id") : [text],
+        isLowInformationExample: () => false,
+        normalizeText: (t) => (t || "").replace(/\s+/g, " ").trim(),
+        normalizeExampleList: window.ExampleUtils.normalizeExampleList,
+        hasContainmentRelation: () => false,
+        isTooSimilarToAny: () => false,
+        enforceExampleLimit: window.ExampleUtils.enforceExampleLimit,
+        sortExamples: window.ExampleUtils.sortExamples,
+        maxExamplesPerWord: 20,
+        languageHint: "id",
+        currentHref: () => "http://test/",
+        markLearned() {}, openAddWordModal() {}, startContentTour() {},
+        state,
+        onMergeError() {},
+        onHighlightError(e) { if (capturedErrors) capturedErrors.push(e); else throw e; },
+      };
+    }
+
+    // ─── Tests ────────────────────────────────────────────────────────────────
+    loadRealArticle().then(() => runTests([
+
+      // ══ 1. Article loaded ══════════════════════════════════════════════════
+
+      {
+        name: "real article: document has lang starting with 'id'",
+        run() {
+          const lang = realArticleDoc.documentElement.lang || "";
+          assert(lang.toLowerCase().startsWith("id"), `lang="${lang}"`);
+        },
+      },
+
+      {
+        name: "real article: title contains 'migran' or 'HIV'",
+        run() {
+          const title = (realArticleDoc.querySelector("title") || {}).textContent || "";
+          assert(title.toLowerCase().includes("migran") || title.toLowerCase().includes("hiv"), `title: ${title.slice(0, 80)}`);
+        },
+      },
+
+      {
+        name: "real article: at least 20 article paragraphs",
+        run() {
+          assert(articleParagraphs.length >= 20, `got ${articleParagraphs.length} paragraphs`);
+        },
+      },
+
+      // ══ 2. Key words present ═══════════════════════════════════════════════
+
+      {
+        name: "real article: key topic words present",
+        run() {
+          const text = articleParagraphs.join(" ").toLowerCase();
+          for (const word of ["migran", "hiv", "bipolar", "kesehatan", "pemerintah", "kerja"]) {
+            assert(text.includes(word), `'${word}' not found`);
+          }
+        },
+      },
+
+      {
+        name: "real article: inflected forms present (bekerja, pekerja, mendapatkan)",
+        run() {
+          const text = articleParagraphs.join(" ").toLowerCase();
+          assert(text.includes("bekerja"), "'bekerja' present");
+          assert(text.includes("pekerja"), "'pekerja' present");
+        },
+      },
+
+      // ══ 3. extractArticleText picks up article content ═════════════════════
+
+      {
+        name: "extractArticleText: returns substantial Indonesian text",
+        run() {
+          const text = CD.extractArticleText(realArticleDoc);
+          assert(text.length >= 500, `only ${text.length} chars extracted`);
+          assert(text.toLowerCase().includes("migran") || text.toLowerCase().includes("hiv"),
+            "extracted text should contain article keywords");
+        },
+      },
+
+      // ══ 4. Word boundary detection ════════════════════════════════════════
+
+      {
+        name: "containsWord: 'kerja' matches standalone but not inside 'bekerja'",
+        run() {
+          assert(CPP.containsWord("hak kerja mereka", "kerja", "id"), "'kerja' standalone");
+          assert(!CPP.containsWord("bekerja", "kerja", "id"), "'kerja' must not match inside 'bekerja'");
+        },
+      },
+
+      {
+        name: "containsWord: 'migran' found as whole word in real article",
+        run() {
+          const para = articleParagraphs.find((p) => p.toLowerCase().includes("migran"));
+          assert(para, "paragraph containing 'migran' found");
+          assert(CPP.containsWord(para, "migran", "id"), "'migran' matches as whole word");
+        },
+      },
+
+      {
+        name: "containsWord: 'kerja' does not match inside 'pekerja' or 'bekerja'",
+        run() {
+          assert(!CPP.containsWord("pekerja migran", "kerja", "id"), "'kerja' must not match in 'pekerja'");
+          assert(!CPP.containsWord("bekerja di kapal", "kerja", "id"), "'kerja' must not match in 'bekerja'");
+        },
+      },
+
+      // ══ 5. Sentence splitting ══════════════════════════════════════════════
+
+      {
+        name: "sentence splitter: first article paragraph yields at least 1 sentence",
+        async run() {
+          if (!SS) { assert(false, "SentenceSplitter not loaded"); return; }
+          await SS.init();
+          const sentences = SS.splitIntoSentences(articleParagraphs[0], "id");
+          assert(sentences.length >= 1, `got ${sentences.length} sentences`);
+        },
+      },
+
+      {
+        name: "sentence splitter: total sentence count >= paragraph count",
+        async run() {
+          if (!SS) { assert(false, "SentenceSplitter not loaded"); return; }
+          await SS.init();
+          const sentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          assert(sentences.length >= articleParagraphs.length,
+            `${sentences.length} sentences from ${articleParagraphs.length} paragraphs`);
+        },
+      },
+
+      // ══ 6. Example extraction ══════════════════════════════════════════════
+
+      {
+        name: "example extraction: 'migran' found in at least 3 sentences",
+        async run() {
+          if (!SS) { assert(false, "SentenceSplitter not loaded"); return; }
+          await SS.init();
+          const allSentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          const hits = allSentences.filter((s) => CPP.containsWord(s, "migran", "id"));
+          assert(hits.length >= 3, `only ${hits.length} sentences with 'migran'`);
+        },
+      },
+
+      {
+        name: "example extraction: 'hiv' sentences are non-trivial (>25 chars each)",
+        async run() {
+          if (!SS) { assert(false, "SentenceSplitter not loaded"); return; }
+          await SS.init();
+          const allSentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          const hits = allSentences.filter((s) => CPP.containsWord(s, "hiv", "id"));
+          assert(hits.length >= 1, "at least one 'hiv' sentence");
+          for (const s of hits) {
+            assert(s.length > 25, `sentence too short: "${s}"`);
+          }
+        },
+      },
+
+      {
+        name: "example extraction: 'pekerja' NOT matched when looking for 'kerja'",
+        async run() {
+          if (!SS) { assert(false, "SentenceSplitter not loaded"); return; }
+          await SS.init();
+          const allSentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          // Find sentences containing 'pekerja' but NOT the standalone word 'kerja'
+          const pekerjaOnly = allSentences.filter(
+            (s) => /\bpekerja\b/i.test(s) && !/(?<![a-z])kerja(?![a-z])/i.test(s.replace(/\bpekerja\b/gi, ""))
+          );
+          assert(pekerjaOnly.length >= 1, "need at least one sentence with 'pekerja' but not standalone 'kerja'");
+          for (const s of pekerjaOnly) {
+            assert(!CPP.containsWord(s, "kerja", "id"),
+              `'kerja' should not match in sentence: "${s.slice(0, 80)}"`);
+          }
+        },
+      },
+
+      // ══ 7. Wordfreq scoring ════════════════════════════════════════════════
+
+      {
+        name: "wordfreq: 'kerja' is A2 for id",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const z = WFU.getZipf("kerja", "id");
+          const tier = WFU.getDifficultyTier(z, "id");
+          assertEqual(tier, "A2");
+        },
+      },
+
+      {
+        name: "wordfreq: 'hiv' is B2 for id",
+        async run() {
+          await WFU.initForLang("id");
+          const z = WFU.getZipf("hiv", "id");
+          const tier = WFU.getDifficultyTier(z, "id");
+          assertEqual(tier, "B2");
+        },
+      },
+
+      {
+        name: "wordfreq: 'bipolar' is C2 for id",
+        async run() {
+          await WFU.initForLang("id");
+          const z = WFU.getZipf("bipolar", "id");
+          const tier = WFU.getDifficultyTier(z, "id");
+          assertEqual(tier, "C2");
+        },
+      },
+
+      // ══ 8. ContentDifficulty panel ═════════════════════════════════════════
+
+      {
+        name: "ContentDifficulty: panel appears on real article content",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const doc = realArticleDoc;
+          CD.analyzeAndShow({ sourceLang: "id", document: doc });
+          const panel = await waitForPanel(doc, 5000);
+          assert(panel, "panel appeared");
+        },
+      },
+
+      {
+        name: "ContentDifficulty: panel shows a valid CEFR tier label",
+        async run() {
+          const panel = realArticleDoc.getElementById("laDifficultyPanel");
+          assert(panel, "panel must exist from previous test");
+          const text = panel.textContent || "";
+          const tiers = ["A1", "A2", "B1", "B2", "C1", "C2"];
+          assert(tiers.some((t) => text.includes(t)), `panel text: "${text.slice(0, 80)}"`);
+        },
+      },
+
+      // ══ 9. Word highlighting ═══════════════════════════════════════════════
+
+      {
+        name: "highlightWords: 'migran' is highlighted in real article",
+        async run() {
+          const doc = new DOMParser().parseFromString(
+            (await fetch(ARTICLE_FILE).then((r) => r.text())), "text/html"
+          );
+          const words = { migran: { learned: false, meaning: "migrant worker" } };
+          const capturedErrors = [];
+          const deps = makeHighlightDeps(doc, words, capturedErrors);
+          await CPP.highlightWords(deps);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          if (capturedErrors.length) throw capturedErrors[0];
+          const spans = doc.querySelectorAll(".plugin-highlight-word");
+          assert(spans.length > 0, `expected highlighted spans, got ${spans.length}`);
+          const matched = Array.from(spans).some((s) => s.textContent.toLowerCase() === "migran");
+          assert(matched, "at least one span with 'migran'");
+        },
+      },
+
+      {
+        name: "highlightWords: 'kerja' highlighted as standalone but not inside 'bekerja'/'pekerja'",
+        async run() {
+          const doc = new DOMParser().parseFromString(
+            (await fetch(ARTICLE_FILE).then((r) => r.text())), "text/html"
+          );
+          const words = { kerja: { learned: false, meaning: "work" } };
+          const capturedErrors = [];
+          const deps = makeHighlightDeps(doc, words, capturedErrors);
+          await CPP.highlightWords(deps);
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          if (capturedErrors.length) throw capturedErrors[0];
+          const spans = Array.from(doc.querySelectorAll(".plugin-highlight-word"));
+          const wrongSpan = spans.find((s) => ["bekerja", "pekerja"].includes(s.textContent.toLowerCase()));
+          assert(!wrongSpan, `should not highlight inside bekerja/pekerja, found: "${wrongSpan && wrongSpan.textContent}"`);
+        },
+      },
+
+    ]));
+  </script>
+  <p id="test-summary" style="display:none"></p>
+</body>
+</html>

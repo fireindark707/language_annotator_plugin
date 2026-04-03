@@ -342,6 +342,140 @@
         },
       },
       {
+        name: "enqueueExampleCandidates stores contextScore on new examples when wordfreq ready",
+        async run() {
+          const savedPayloads = [];
+          const wordsData = {
+            berjalan: { learned: false, meaning: "walk", examples: [], encounterCount: 0, pageCount: 0, encounterPageKeys: [] },
+          };
+          const state = { pendingExampleMap: {}, exampleMergeTimer: null };
+          const mockWordfreq = {
+            isReady() { return true; },
+            getZipf(word) {
+              return { yang: 7.0, ke: 6.5, pasar: 4.2, mereka: 5.8, pulang: 4.0 }[word] ?? null;
+            },
+          };
+          U.enqueueExampleCandidates({
+            berjalan: [
+              { text: "Ia berjalan ke pasar.", sourceUrl: "https://example.com/a", capturedAt: 100 },
+            ],
+          }, state, {
+            WordStorage: {
+              getWords() { return Promise.resolve(JSON.parse(JSON.stringify(wordsData))); },
+              saveWords(next) { savedPayloads.push(next); return Promise.resolve(); },
+            },
+            WordfreqUtils: mockWordfreq,
+            sourceLang: "id",
+            normalizeExampleList: window.ExampleUtils.normalizeExampleList,
+            normalizeText(text) { return (text || "").replace(/\s+/g, " ").trim(); },
+            isLowInformationExample: window.ExampleUtils.isLowInformationExample,
+            hasContainmentRelation: window.ExampleUtils.hasContainmentRelation,
+            isTooSimilarToAny: window.ExampleUtils.isTooSimilarToAny,
+            sortExamples: window.ExampleUtils.sortExamples,
+            enforceExampleLimit: window.ExampleUtils.enforceExampleLimit,
+            maxExamplesPerWord: 20,
+            currentHref: "https://example.com/a",
+            onError(error) { throw error; },
+          });
+          await new Promise((resolve) => setTimeout(resolve, 1300));
+          assertEqual(savedPayloads.length, 1);
+          const ex = savedPayloads[0].berjalan.examples[0];
+          assertEqual(ex.text, "Ia berjalan ke pasar.");
+          assertEqual(typeof ex.contextScore, "number", "contextScore should be a number");
+          assert(ex.contextScore > 0, "contextScore should be positive");
+        },
+      },
+      {
+        name: "enqueueExampleCandidates: higher contextScore example sorts first",
+        async run() {
+          const savedPayloads = [];
+          const wordsData = {
+            berjalan: { learned: false, meaning: "walk", examples: [], encounterCount: 0, pageCount: 0, encounterPageKeys: [] },
+          };
+          const state = { pendingExampleMap: {}, exampleMergeTimer: null };
+          // "Ia berjalan ke pasar": context words ke(6.5), pasar(4.2), ia(~5) → average ~5.2
+          // "Mengimplementasikan berjalan secara efisien": context words are rare → low score
+          const scores = { ke: 6.5, pasar: 4.2, ia: 5.0, secara: 4.0, mengimplementasikan: 1.5, efisien: 2.0 };
+          const mockWordfreq = {
+            isReady() { return true; },
+            getZipf(word) { return scores[word] ?? null; },
+          };
+          U.enqueueExampleCandidates({
+            berjalan: [
+              { text: "Mengimplementasikan berjalan secara efisien.", capturedAt: 200 },
+              { text: "Ia berjalan ke pasar.", capturedAt: 100 },
+            ],
+          }, state, {
+            WordStorage: {
+              getWords() { return Promise.resolve(JSON.parse(JSON.stringify(wordsData))); },
+              saveWords(next) { savedPayloads.push(next); return Promise.resolve(); },
+            },
+            WordfreqUtils: mockWordfreq,
+            sourceLang: "id",
+            normalizeExampleList: window.ExampleUtils.normalizeExampleList,
+            normalizeText(text) { return (text || "").replace(/\s+/g, " ").trim(); },
+            isLowInformationExample: window.ExampleUtils.isLowInformationExample,
+            hasContainmentRelation: window.ExampleUtils.hasContainmentRelation,
+            isTooSimilarToAny: window.ExampleUtils.isTooSimilarToAny,
+            sortExamples: window.ExampleUtils.sortExamples,
+            enforceExampleLimit: window.ExampleUtils.enforceExampleLimit,
+            maxExamplesPerWord: 20,
+            currentHref: "https://example.com/b",
+            onError(error) { throw error; },
+          });
+          await new Promise((resolve) => setTimeout(resolve, 1300));
+          assertEqual(savedPayloads.length, 1);
+          const examples = savedPayloads[0].berjalan.examples;
+          assertEqual(examples[0].text, "Ia berjalan ke pasar.", "simpler context sentence should rank first");
+        },
+      },
+      {
+        name: "enqueueExampleCandidates retroactively scores existing examples without contextScore",
+        async run() {
+          const savedPayloads = [];
+          const wordsData = {
+            berjalan: {
+              learned: false, meaning: "walk",
+              examples: [{ text: "Ia berjalan ke pasar.", pinned: false, createdAt: 50, capturedAt: 50 }],
+              encounterCount: 1, pageCount: 0, encounterPageKeys: [],
+            },
+          };
+          const state = { pendingExampleMap: {}, exampleMergeTimer: null };
+          const mockWordfreq = {
+            isReady() { return true; },
+            getZipf(word) { return { ke: 6.5, pasar: 4.2, ia: 5.0 }[word] ?? null; },
+          };
+          // Send the same sentence again — it's in existingSet, so retroactive scoring kicks in
+          U.enqueueExampleCandidates({
+            berjalan: [
+              { text: "Ia berjalan ke pasar.", capturedAt: 50 },
+            ],
+          }, state, {
+            WordStorage: {
+              getWords() { return Promise.resolve(JSON.parse(JSON.stringify(wordsData))); },
+              saveWords(next) { savedPayloads.push(next); return Promise.resolve(); },
+            },
+            WordfreqUtils: mockWordfreq,
+            sourceLang: "id",
+            normalizeExampleList: window.ExampleUtils.normalizeExampleList,
+            normalizeText(text) { return (text || "").replace(/\s+/g, " ").trim(); },
+            isLowInformationExample: window.ExampleUtils.isLowInformationExample,
+            hasContainmentRelation: window.ExampleUtils.hasContainmentRelation,
+            isTooSimilarToAny: window.ExampleUtils.isTooSimilarToAny,
+            sortExamples: window.ExampleUtils.sortExamples,
+            enforceExampleLimit: window.ExampleUtils.enforceExampleLimit,
+            maxExamplesPerWord: 20,
+            currentHref: "https://example.com/c",
+            onError(error) { throw error; },
+          });
+          await new Promise((resolve) => setTimeout(resolve, 1300));
+          assertEqual(savedPayloads.length, 1, "should save since contextScore was added");
+          const ex = savedPayloads[0].berjalan.examples[0];
+          assertEqual(typeof ex.contextScore, "number", "retroactive contextScore should be set");
+          assert(ex.contextScore > 0);
+        },
+      },
+      {
         name: "highlightWords triggers content tour after visible highlights appear",
         async run() {
           const host = document.createElement("div");

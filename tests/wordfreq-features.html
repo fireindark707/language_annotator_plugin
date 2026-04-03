@@ -364,12 +364,12 @@
       },
 
       {
-        name: "tokenizeArticle: Korean lang (ko) — individual chars tokenized",
+        name: "tokenizeArticle: Korean lang (ko) — tokens extracted",
         run() {
           const tokens = CD.tokenizeArticle("이것이 한국어", 500, "ko");
           assert(tokens.length > 0, "ko tokens extracted");
-          // Character-level tokenization for ko: individual chars are tokens
-          assert(tokens.includes("이") || tokens.includes("것") || tokens.includes("한"), "ko individual char included");
+          // Intl.Segmenter may produce word-level segments (이것이, 한국어) rather than single chars
+          assert(tokens.some((t) => "이것이한국어".includes(t)), "ko token content present");
         },
       },
 
@@ -1077,9 +1077,10 @@
           installMockLib();
           await WFU.initForLang("zh");
 
-          // 26 unique CJK chars (each char is a token in zh mode); text repeated → ≥100 chars
-          const chars = "的是在了我他学习中国词频率璎珞琮今日本語文化世界人口";
-          const doc = makeIsolatedDoc(chars.repeat(4));
+          // Enough CJK content so tokenizeArticle yields ≥ 20 unique tokens regardless
+          // of whether Intl.Segmenter splits by word or char.
+          const chars = "的是在了我他学习中国词频率璎珞琮今日本語文化世界人口经济发展政府社会企业生产安全工作管理技术环境";
+          const doc = makeIsolatedDoc(chars.repeat(6));
 
           let lemmaCallCount = 0;
           CD.analyzeAndShow({

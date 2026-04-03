@@ -791,16 +791,28 @@ function pageMatchesSrcLang(srcLang) {
 			if (!chrome || !chrome.i18n || typeof chrome.i18n.detectLanguage !== "function") {
 				resolve(true); return;
 			}
-			const sample = (document.body && document.body.innerText || "").slice(0, 4000);
+			const rawSample = globalThis.ContentDifficulty
+				? globalThis.ContentDifficulty.extractArticleText(document)
+				: (document.body && document.body.innerText || "");
+			// If article extraction yields too little text (dynamic page not yet rendered,
+			// or unusual structure), fall back to body text for a better sample.
+			const fullSample = rawSample.length >= 200 ? rawSample : (document.body && document.body.innerText || "");
+			const sample = fullSample.slice(0, 4000);
+			// Not enough text to make a reliable judgement — allow through.
+			if (sample.length < 100) { resolve(true); return; }
 			chrome.i18n.detectLanguage(sample, (result) => {
 				if (chrome.runtime.lastError || !result || !Array.isArray(result.languages) || result.languages.length === 0) {
 					resolve(true); return;
 				}
-				if (!result.isReliable) { resolve(true); return; }
-				const match = result.languages.some((entry) =>
-					(entry.language || "").split("-")[0].toLowerCase() === srcLang && entry.percentage >= 40
-				);
-				resolve(match);
+				// Always check the top detected language — don't blindly allow through when
+				// isReliable is false, because that's exactly when mixed-language pages slip in.
+				const top = result.languages[0];
+				if (!top) { resolve(true); return; }
+				const topLang = (top.language || "").split("-")[0].toLowerCase();
+				// id and ms (Indonesian / Malay) are nearly identical — treat as equivalent.
+				const LANG_ALIASES = { "id": "ms", "ms": "id" };
+				const topMatches = topLang === srcLang || LANG_ALIASES[srcLang] === topLang;
+				resolve(topMatches && top.percentage >= 40);
 			});
 		} catch (_) {
 			resolve(true);

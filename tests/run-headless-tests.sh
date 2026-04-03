@@ -50,13 +50,15 @@ TEST_FILES=(
   "$ROOT_DIR/tests/simplemma-smoke.html"
   "$ROOT_DIR/tests/dictionary-url-smoke.html"
   "$ROOT_DIR/tests/wordfreq-features.html"
+  "$ROOT_DIR/tests/real-article-id.html"
+  "$ROOT_DIR/tests/real-article-id2.html"
 )
 
 FAILURES=0
 for test_file in "${TEST_FILES[@]}"; do
   echo "Running $(basename "$test_file")"
   test_name="$(basename "$test_file")"
-  if [[ "$test_name" == "sentence-splitter.html" ]]; then
+  if [[ "$test_name" == "sentence-splitter.html" || "$test_name" == "real-article-id.html" || "$test_name" == "real-article-id2.html" ]]; then
     if [[ -z "$SERVER_PID" ]]; then
       cd "$ROOT_DIR"
       python3 -m http.server "$SERVER_PORT" --bind "$SERVER_HOST" >/tmp/la-test-http.log 2>&1 &

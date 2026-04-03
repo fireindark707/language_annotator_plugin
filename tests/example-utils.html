@@ -48,6 +48,54 @@
         },
       },
       {
+        name: "sortExamples ranks higher contextScore first among unpinned",
+        run() {
+          const sorted = U.sortExamples([
+            { text: "low",  pinned: false, createdAt: 100, contextScore: 2.0 },
+            { text: "high", pinned: false, createdAt: 100, contextScore: 5.5 },
+            { text: "mid",  pinned: false, createdAt: 100, contextScore: 3.8 },
+          ]);
+          assertEqual(sorted[0].text, "high");
+          assertEqual(sorted[1].text, "mid");
+          assertEqual(sorted[2].text, "low");
+        },
+      },
+      {
+        name: "sortExamples: contextScore beats newer createdAt for unpinned",
+        run() {
+          const sorted = U.sortExamples([
+            { text: "newer-but-worse", pinned: false, createdAt: 999, contextScore: 1.5 },
+            { text: "older-but-better", pinned: false, createdAt: 1,   contextScore: 6.0 },
+          ]);
+          assertEqual(sorted[0].text, "older-but-better");
+          assertEqual(sorted[1].text, "newer-but-worse");
+        },
+      },
+      {
+        name: "sortExamples: pinned items are unaffected by contextScore",
+        run() {
+          const sorted = U.sortExamples([
+            { text: "pinned-low",  pinned: true,  pinnedAt: 5, contextScore: 1.0 },
+            { text: "unpinned-high", pinned: false, createdAt: 1, contextScore: 9.0 },
+            { text: "pinned-high", pinned: true,  pinnedAt: 10, contextScore: 9.0 },
+          ]);
+          assertEqual(sorted[0].text, "pinned-high");
+          assertEqual(sorted[1].text, "pinned-low");
+          assertEqual(sorted[2].text, "unpinned-high");
+        },
+      },
+      {
+        name: "sortExamples: entries without contextScore sort after scored entries",
+        run() {
+          const sorted = U.sortExamples([
+            { text: "no-score",  pinned: false, createdAt: 100 },
+            { text: "has-score", pinned: false, createdAt: 1,   contextScore: 3.0 },
+          ]);
+          assertEqual(sorted[0].text, "has-score");
+          assertEqual(sorted[1].text, "no-score");
+        },
+      },
+      {
         name: "enforceExampleLimit keeps pinned items outside unpinned cap",
         run() {
           const result = U.enforceExampleLimit([

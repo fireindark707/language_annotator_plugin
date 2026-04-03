@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>real-article-id</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+
+  <script src="../lib/wordfreq-utils.js"></script>
+  <script src="../lib/sentence-splitter.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/content-page-processing.js"></script>
+  <script src="../lib/content-difficulty.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const WFU = window.WordfreqUtils;
+    const CD = window.ContentDifficulty;
+    const CPP = window.ContentPageProcessing;
+    const SS = window.SentenceSplitter;
+
+    // ─── Mock WordfreqLib ─────────────────────────────────────────────────────
+    // Real Indonesian words drawn from the article with realistic Zipf scores.
+    // id thresholds: A1≥5.4, A2≥4.7, B1≥4.2, B2≥3.8, C1≥3.3, C2<3.3
+    const MOCK_FREQ = {
+      // A1 (≥5.4) — high-frequency function words
+      "yang": 7.0, "dan": 6.8, "ini": 6.5, "itu": 6.6, "dalam": 6.3,
+      "ada": 6.4, "tidak": 6.7, "dengan": 6.9, "untuk": 6.6, "di": 7.0,
+      "juga": 6.2, "akan": 6.3, "dari": 6.5, "kita": 6.1, "bisa": 5.5,
+      "dapat": 5.6, "jadi": 5.8, "ke": 6.0, "atau": 6.1, "saya": 5.9,
+      "mereka": 5.7, "lebih": 5.5, "ia": 6.0,
+      // A2 (≥4.7) — common nouns present in the article
+      "bahasa": 5.0, "forum": 4.8, "negara": 4.9, "sekolah": 4.8,
+      "orang": 5.2, "dunia": 5.0, "kata": 5.1, "hal": 4.9,
+      // B1 (≥4.2) — less frequent nouns/verbs in the article
+      "resmi": 4.3, "internasional": 4.5, "mendapatkan": 4.4, "generasi": 4.2,
+      // B2 (≥3.8) — rarer words in the article
+      "validasi": 3.9, "panggung": 3.9, "merata": 3.8,
+      // C1 (≥3.3)
+      "fasih": 3.4, "porsi": 3.5,
+      // C2 (<3.3) — morphologically complex inflected forms from the article
+      "mengungkapkan": 2.5, "digunakan": 2.8,
+      // Lemmas for C2 upgrade tests
+      "ungkap": 4.9,   // A2 — base of "mengungkapkan"
+      "guna": 5.0,     // A2 — base of "digunakan"
+    };
+
+    function makeMockWordfreqLib() {
+      function BrowserDataFetcher() {}
+      function Wordfreq(lang) { this._lang = lang; }
+      Wordfreq.prototype.init = function () { return Promise.resolve(); };
+      Wordfreq.prototype.zipfFrequency = function (word) {
+        const w = (word || "").toLowerCase();
+        return (w in MOCK_FREQ) ? MOCK_FREQ[w] : 0;
+      };
+      return { Wordfreq, BrowserDataFetcher };
+    }
+
+    function installMockLib() { globalThis.WordfreqLib = makeMockWordfreqLib(); }
+    function uninstallMockLib() { delete globalThis.WordfreqLib; }
+
+    // ─── Load real article ────────────────────────────────────────────────────
+    let realArticleDoc = null;
+    let articleParagraphs = [];
+
+    async function loadRealArticle() {
+      const res = await fetch("./real-tests/example_id.html");
+      const html = await res.text();
+      realArticleDoc = new DOMParser().parseFromString(html, "text/html");
+      articleParagraphs = Array.from(
+        realArticleDoc.querySelectorAll(".wrap__article-detail-content p")
+      ).map((p) => (p.textContent || "").replace(/\s+/g, " ").trim()).filter(Boolean);
+    }
+
+    function waitForPanel(doc, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const t0 = Date.now();
+        (function poll() {
+          const panel = doc.getElementById("laDifficultyPanel");
+          if (panel) return resolve(panel);
+          if (Date.now() - t0 > timeoutMs) return reject(new Error("difficulty panel did not appear"));
+          setTimeout(poll, 50);
+        }());
+      });
+    }
+
+    function makeHighlightDeps(doc, words, capturedErrors) {
+      const state = { pendingExampleMap: {}, exampleMergeTimer: null, contentTourAttempted: false, contentTourPending: false };
+      return {
+        document: doc,
+        Node,
+        skipTags: new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT"]),
+        isExtensionUiElement: () => false,
+        isCurrentDomainExcluded: () => Promise.resolve(false),
+        showWordPreview() {},
+        hideWordPreview() {},
+        WordStorage: {
+          getWords: () => Promise.resolve(words),
+          getSourceLang: () => Promise.resolve("id"),
+          saveWords: () => Promise.resolve(),
+        },
+        splitIntoSentences: (text) => SS ? SS.splitIntoSentences(text, "id") : [text],
+        isLowInformationExample: () => false,
+        normalizeText: (t) => (t || "").replace(/\s+/g, " ").trim(),
+        normalizeExampleList: (arr) => arr,
+        hasContainmentRelation: () => false,
+        isTooSimilarToAny: () => false,
+        enforceExampleLimit: (arr) => arr,
+        sortExamples: (arr) => arr,
+        maxExamplesPerWord: 20,
+        languageHint: "id",
+        currentHref: () => "http://test/",
+        markLearned() {},
+        openAddWordModal() {},
+        startContentTour() {},
+        state,
+        onMergeError() {},
+        onHighlightError(e) { if (capturedErrors) capturedErrors.push(e); else throw e; },
+      };
+    }
+
+    // ─── Tests ────────────────────────────────────────────────────────────────
+    loadRealArticle().then(() => runTests([
+
+      // ══ 1. Article loaded correctly ════════════════════════════════════════
+
+      {
+        name: "real article: document has lang='id'",
+        run() {
+          assertEqual(realArticleDoc.documentElement.lang, "id");
+        },
+      },
+
+      {
+        name: "real article: title contains 'Kadin' and 'UNESCO'",
+        run() {
+          const title = realArticleDoc.querySelector("title").textContent || "";
+          assert(title.includes("Kadin"), "title contains 'Kadin'");
+          assert(title.includes("UNESCO"), "title contains 'UNESCO'");
+        },
+      },
+
+      {
+        name: "real article: at least 5 article paragraphs extracted",
+        run() {
+          assert(articleParagraphs.length >= 5, `got ${articleParagraphs.length} paragraphs`);
+        },
+      },
+
+      // ══ 2. Key words present in article text ═══════════════════════════════
+
+      {
+        name: "real article: key Indonesian words appear in article text",
+        run() {
+          const text = articleParagraphs.join(" ").toLowerCase();
+          for (const word of ["bahasa", "indonesia", "forum", "resmi", "validasi", "internasional"]) {
+            assert(text.includes(word), `word '${word}' not found in article`);
+          }
+        },
+      },
+
+      {
+        name: "real article: prefixed/inflected forms present (berbahasa, mengungkapkan)",
+        run() {
+          const text = articleParagraphs.join(" ").toLowerCase();
+          assert(text.includes("berbahasa"), "'berbahasa' present");
+          assert(text.includes("mengungkapkan"), "'mengungkapkan' present");
+        },
+      },
+
+      // ══ 3. Word boundary detection ════════════════════════════════════════
+
+      {
+        name: "containsWord: 'bahasa' matches standalone but not inside 'berbahasa'",
+        run() {
+          assert(CPP.containsWord("bahasa Indonesia", "bahasa", "id"), "'bahasa' standalone");
+          assert(!CPP.containsWord("berbahasa", "bahasa", "id"), "'bahasa' must not match inside 'berbahasa'");
+        },
+      },
+
+      {
+        name: "containsWord: 'forum' found as whole word in real article paragraph",
+        run() {
+          const para = articleParagraphs.find((p) => p.toLowerCase().includes("forum"));
+          assert(para, "found paragraph containing 'forum'");
+          assert(CPP.containsWord(para, "forum", "id"), "'forum' matches as whole word");
+        },
+      },
+
+      {
+        name: "containsWord: 'resmi' matches standalone but not inside 'diresmikan'",
+        run() {
+          assert(CPP.containsWord("bahasa resmi dalam", "resmi", "id"), "'resmi' standalone");
+          assert(!CPP.containsWord("diresmikan", "resmi", "id"), "'resmi' must not match inside 'diresmikan'");
+        },
+      },
+
+      {
+        name: "containsWord: 'mendapatkan' found in real article paragraph",
+        run() {
+          const para = articleParagraphs.find((p) => p.toLowerCase().includes("mendapatkan"));
+          assert(para, "paragraph with 'mendapatkan' found");
+          assert(CPP.containsWord(para, "mendapatkan", "id"), "'mendapatkan' matches as whole word");
+        },
+      },
+
+      // ══ 4. Sentence splitting on real paragraphs ══════════════════════════
+
+      {
+        name: "sentence splitter: first article paragraph yields at least 1 sentence",
+        run() {
+          const sentences = SS.splitIntoSentences(articleParagraphs[0], "id");
+          assert(Array.isArray(sentences) && sentences.length >= 1,
+            `expected ≥1 sentence, got ${sentences && sentences.length}`);
+          sentences.forEach((s, i) => {
+            assert(s.trim().length > 0, `sentence[${i}] is empty`);
+          });
+        },
+      },
+
+      {
+        name: "sentence splitter: no sentence exceeds 600 chars (reasonable split)",
+        run() {
+          const allSentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          for (const s of allSentences) {
+            assert(s.length <= 600, `sentence too long (${s.length} chars): "${s.slice(0, 60)}..."`);
+          }
+        },
+      },
+
+      {
+        name: "sentence splitter: total sentence count >= paragraph count (no paragraph lost)",
+        run() {
+          const allSentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          assert(allSentences.length >= articleParagraphs.length,
+            `expected ≥${articleParagraphs.length} sentences, got ${allSentences.length}`);
+        },
+      },
+
+      // ══ 5. Example sentence extraction for 'bahasa' ════════════════════════
+
+      {
+        name: "example extraction: at least 3 sentences contain 'bahasa' as a whole word",
+        run() {
+          const allSentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          const examples = allSentences.filter((s) => CPP.containsWord(s, "bahasa", "id"));
+          assert(examples.length >= 3, `expected ≥3 examples for 'bahasa', got ${examples.length}`);
+        },
+      },
+
+      {
+        name: "example extraction: 'bahasa' sentences are non-trivial (>25 chars each)",
+        run() {
+          const allSentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          const examples = allSentences.filter((s) => CPP.containsWord(s, "bahasa", "id"));
+          examples.forEach((s, i) => {
+            assert(s.trim().length > 25, `example[${i}] too short: "${s}"`);
+          });
+        },
+      },
+
+      {
+        name: "example extraction: 'validasi' found in at least 1 sentence",
+        run() {
+          const allSentences = articleParagraphs.flatMap((p) => SS.splitIntoSentences(p, "id"));
+          const examples = allSentences.filter((s) => CPP.containsWord(s, "validasi", "id"));
+          assert(examples.length >= 1, `expected ≥1 example for 'validasi', got ${examples.length}`);
+        },
+      },
+
+      {
+        name: "example extraction: 'berbahasa' NOT matched when looking for 'bahasa' examples",
+        run() {
+          // 'berbahasa' paragraphs should not contribute 'bahasa' examples
+          const berBahasa = "Ia sangat fasih berbahasa Inggris di tempat kerja.";
+          assert(!CPP.containsWord(berBahasa, "bahasa", "id"),
+            "'bahasa' must not match inside 'berbahasa' when extracting examples");
+        },
+      },
+
+      // ══ 6. WordfreqUtils on real article words ═════════════════════════════
+
+      {
+        name: "wordfreq: function word 'yang' is A1 for id",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const tier = WFU.getDifficultyTier(WFU.getZipf("yang", "id"), "id");
+          assertEqual(tier, "A1");
+          uninstallMockLib();
+        },
+      },
+
+      {
+        name: "wordfreq: 'bahasa' is A2 for id",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const tier = WFU.getDifficultyTier(WFU.getZipf("bahasa", "id"), "id");
+          assertEqual(tier, "A2");
+          uninstallMockLib();
+        },
+      },
+
+      {
+        name: "wordfreq: 'validasi' is B2 for id",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const tier = WFU.getDifficultyTier(WFU.getZipf("validasi", "id"), "id");
+          assertEqual(tier, "B2");
+          uninstallMockLib();
+        },
+      },
+
+      {
+        name: "wordfreq: 'mengungkapkan' (inflected form) is C2 for id",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const tier = WFU.getDifficultyTier(WFU.getZipf("mengungkapkan", "id"), "id");
+          assertEqual(tier, "C2");
+          uninstallMockLib();
+        },
+      },
+
+      {
+        name: "wordfreq: words not in dataset return null tier",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          // "qwerty" definitely not in dataset — zipfFrequency returns 0
+          const tier = WFU.getDifficultyTier(WFU.getZipf("qwerty", "id"), "id");
+          assertEqual(tier, null, "unknown word should return null tier");
+          uninstallMockLib();
+        },
+      },
+
+      // ══ 7. ContentDifficulty panel on real article DOM ═════════════════════
+
+      {
+        name: "ContentDifficulty: panel appears on real article content",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const doc = document.implementation.createHTMLDocument("test");
+          const src = realArticleDoc.querySelector(".wrap__article-detail-content");
+          doc.body.innerHTML = src ? src.innerHTML : articleParagraphs.map((p) => `<p>${p}</p>`).join("");
+          CD.analyzeAndShow({
+            sourceLang: "id",
+            document: doc,
+            translate: () => Promise.resolve(null),
+            getLemma: () => Promise.resolve(null),
+          });
+          const panel = await waitForPanel(doc, 3000);
+          assert(panel.textContent.trim().length > 0, "panel is non-empty");
+          uninstallMockLib();
+        },
+      },
+
+      {
+        name: "ContentDifficulty: panel shows a valid CEFR tier label",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const doc = document.implementation.createHTMLDocument("test");
+          const src = realArticleDoc.querySelector(".wrap__article-detail-content");
+          doc.body.innerHTML = src ? src.innerHTML : articleParagraphs.map((p) => `<p>${p}</p>`).join("");
+          CD.analyzeAndShow({
+            sourceLang: "id",
+            document: doc,
+            translate: () => Promise.resolve(null),
+            getLemma: () => Promise.resolve(null),
+          });
+          const panel = await waitForPanel(doc, 3000);
+          const text = panel.textContent || "";
+          assert(
+            ["A1", "A2", "B1", "B2", "C1", "C2"].some((t) => text.includes(t)),
+            `panel text does not contain a CEFR tier: "${text.slice(0, 80)}"`
+          );
+          uninstallMockLib();
+        },
+      },
+
+      {
+        name: "ContentDifficulty: panel reports a distribution (percentage breakdown)",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("id");
+          const doc = document.implementation.createHTMLDocument("test");
+          const src = realArticleDoc.querySelector(".wrap__article-detail-content");
+          doc.body.innerHTML = src ? src.innerHTML : articleParagraphs.map((p) => `<p>${p}</p>`).join("");
+          CD.analyzeAndShow({
+            sourceLang: "id",
+            document: doc,
+            translate: () => Promise.resolve(null),
+            getLemma: () => Promise.resolve(null),
+          });
+          const panel = await waitForPanel(doc, 3000);
+          // Panel should contain "%" somewhere in the distribution breakdown
+          assert(panel.textContent.includes("%"), "panel should include percentage distribution");
+          uninstallMockLib();
+        },
+      },
+
+      // ══ 8. Word highlighting on real article DOM ═══════════════════════════
+
+      {
+        name: "highlightWords: buildHighlightedFragment creates spans directly (sync diagnostic)",
+        run() {
+          const doc = document.implementation.createHTMLDocument("test");
+          const targets = CPP.buildHighlightTargets(["validasi"], {
+            validasi: { meaning: "validation", learned: false, examples: [], familyForms: ["validasi"] },
+          });
+          assert(targets.length > 0, `expected ≥1 target, got ${targets.length}`);
+          const frag = CPP.buildHighlightedFragment(
+            "Ini merupakan bentuk validasi dunia.",
+            targets,
+            { validasi: { meaning: "validation", learned: false, examples: [] } },
+            { document: doc, languageHint: "id", showWordPreview() {}, hideWordPreview() {} }
+          );
+          assert(frag !== null, "expected non-null fragment");
+          const wrapper = doc.createElement("div");
+          wrapper.appendChild(frag);
+          const spans = wrapper.querySelectorAll(".plugin-highlight-word");
+          assert(spans.length === 1, `expected 1 span, got ${spans.length}`);
+          assertEqual(spans[0].textContent.toLowerCase(), "validasi");
+        },
+      },
+
+      {
+        name: "highlightWords: 'validasi' is highlighted in real article",
+        async run() {
+          const doc = document.implementation.createHTMLDocument("test");
+          const src = realArticleDoc.querySelector(".wrap__article-detail-content");
+          doc.body.innerHTML = src ? src.innerHTML : articleParagraphs.map((p) => `<p>${p}</p>`).join("");
+          const words = {
+            validasi: { meaning: "validation", learned: false, examples: [], familyForms: ["validasi"] },
+          };
+          const errs = [];
+          CPP.highlightWords(makeHighlightDeps(doc, words, errs));
+          await wait(150);
+          assert(errs.length === 0, `highlightWords threw: ${errs.map((e) => e && e.message).join("; ")}`);
+          const spans = doc.querySelectorAll(".plugin-highlight-word");
+          assert(spans.length > 0, "no highlighted spans found");
+          assert(
+            Array.from(spans).some((s) => s.textContent.toLowerCase() === "validasi"),
+            "'validasi' span not found"
+          );
+        },
+      },
+
+      {
+        name: "highlightWords: 'bahasa' is highlighted as standalone word",
+        async run() {
+          const doc = document.implementation.createHTMLDocument("test");
+          doc.body.innerHTML = `<p>Bahasa Indonesia telah menjadi bahasa resmi dalam forum rapat UNESCO.</p>`;
+          const words = {
+            bahasa: { meaning: "language", learned: false, examples: [], familyForms: ["bahasa"] },
+          };
+          const errs = [];
+          CPP.highlightWords(makeHighlightDeps(doc, words, errs));
+          await wait(150);
+          assert(errs.length === 0, `highlightWords threw: ${errs.map((e) => e && e.message).join("; ")}`);
+          const spans = Array.from(doc.querySelectorAll(".plugin-highlight-word"));
+          assert(spans.length >= 1, "no highlights for 'bahasa'");
+          spans.forEach((s) => {
+            assertEqual(s.textContent.toLowerCase(), "bahasa",
+              `span text should be 'bahasa', got '${s.textContent}'`);
+          });
+        },
+      },
+
+      {
+        name: "highlightWords: 'berbahasa' is NOT highlighted when only 'bahasa' is in word list",
+        async run() {
+          const doc = document.implementation.createHTMLDocument("test");
+          doc.body.innerHTML = `<p>Ia sangat fasih berbahasa Inggris. Bahasa Indonesia itu indah.</p>`;
+          const words = {
+            bahasa: { meaning: "language", learned: false, examples: [], familyForms: ["bahasa"] },
+          };
+          const errs = [];
+          CPP.highlightWords(makeHighlightDeps(doc, words, errs));
+          await wait(150);
+          assert(errs.length === 0, `highlightWords threw: ${errs.map((e) => e && e.message).join("; ")}`);
+          const spans = Array.from(doc.querySelectorAll(".plugin-highlight-word"));
+          // Only "Bahasa" in "Bahasa Indonesia" should be highlighted
+          spans.forEach((s) => {
+            assert(s.textContent.toLowerCase() === "bahasa",
+              `unexpected highlight: '${s.textContent}' (expected only standalone 'bahasa')`);
+          });
+          // The word "berbahasa" must not be wrapped in a span
+          assert(
+            !doc.body.innerHTML.includes(">berbahasa<") ||
+            !doc.body.innerHTML.includes("plugin-highlight-word\">berbahasa"),
+            "'berbahasa' should not be inside a highlight span"
+          );
+        },
+      },
+
+      {
+        name: "highlightWords: 'learned' words are not highlighted",
+        async run() {
+          const doc = document.implementation.createHTMLDocument("test");
+          doc.body.innerHTML = `<p>Bahasa Indonesia sangat kaya. Validasi dari dunia sangat penting.</p>`;
+          const words = {
+            bahasa: { meaning: "language", learned: true, examples: [], familyForms: ["bahasa"] },
+            validasi: { meaning: "validation", learned: false, examples: [], familyForms: ["validasi"] },
+          };
+          const errs = [];
+          CPP.highlightWords(makeHighlightDeps(doc, words, errs));
+          await wait(150);
+          assert(errs.length === 0, `highlightWords threw: ${errs.map((e) => e && e.message).join("; ")}`);
+          const spans = Array.from(doc.querySelectorAll(".plugin-highlight-word"));
+          // Only 'validasi' should be highlighted, not 'bahasa' (learned)
+          assert(spans.every((s) => s.textContent.toLowerCase() !== "bahasa"),
+            "'bahasa' (learned) should not be highlighted");
+          assert(spans.some((s) => s.textContent.toLowerCase() === "validasi"),
+            "'validasi' should be highlighted");
+        },
+      },
+
+      {
+        name: "highlightWords: multiple different words highlighted in real article",
+        async run() {
+          const doc = document.implementation.createHTMLDocument("test");
+          const src = realArticleDoc.querySelector(".wrap__article-detail-content");
+          doc.body.innerHTML = src ? src.innerHTML : articleParagraphs.map((p) => `<p>${p}</p>`).join("");
+          const words = {
+            validasi: { meaning: "validation", learned: false, examples: [], familyForms: ["validasi"] },
+            forum:    { meaning: "forum",      learned: false, examples: [], familyForms: ["forum"] },
+            panggung: { meaning: "stage",      learned: false, examples: [], familyForms: ["panggung"] },
+          };
+          const errs = [];
+          CPP.highlightWords(makeHighlightDeps(doc, words, errs));
+          await wait(150);
+          assert(errs.length === 0, `highlightWords threw: ${errs.map((e) => e && e.message).join("; ")}`);
+          const spanTexts = new Set(
+            Array.from(doc.querySelectorAll(".plugin-highlight-word"))
+              .map((s) => s.textContent.toLowerCase())
+          );
+          assert(spanTexts.has("validasi"), "'validasi' not highlighted");
+          assert(spanTexts.has("forum"), "'forum' not highlighted");
+          assert(spanTexts.has("panggung"), "'panggung' not highlighted");
+        },
+      },
+
+    ]));
+  </script>
+</body>
+</html>
