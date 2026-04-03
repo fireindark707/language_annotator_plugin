@@ -37,6 +37,61 @@
         },
       },
       {
+        name: "requestContextualWordTranslation sends contextual payload and preserves metadata",
+        async run() {
+          const chromeRuntime = {
+            lastError: null,
+            sendMessage(message, callback) {
+              assertEqual(message.action, "translateContextualWord");
+              assertEqual(message.sentence, "We sat on the river bank.");
+              assertEqual(message.word, "bank");
+              assertEqual(message.wordPos, 20);
+              callback({
+                translation: "河岸",
+                method: "Marker: HTML_u",
+                usedContext: true,
+                fallback: false,
+              });
+            },
+          };
+          const result = await U.requestContextualWordTranslation({
+            chromeRuntime,
+            sentence: "We sat on the river bank.",
+            word: "bank",
+            wordPos: 20,
+            sourceLang: "en",
+            targetLang: "zh-TW",
+          });
+          assertEqual(result.translation, "河岸");
+          assertEqual(result.method, "Marker: HTML_u");
+          assertEqual(result.usedContext, true);
+          assertEqual(result.fallback, false);
+        },
+      },
+      {
+        name: "requestContextualWordTranslation returns stable empty result on runtime failure",
+        async run() {
+          const chromeRuntime = {
+            lastError: null,
+            sendMessage(_message, _callback) {
+              chromeRuntime.lastError = { message: "failed" };
+              _callback();
+            },
+          };
+          const result = await U.requestContextualWordTranslation({
+            chromeRuntime,
+            sentence: "We sat on the river bank.",
+            word: "bank",
+            wordPos: 20,
+            sourceLang: "en",
+          });
+          assertEqual(result.translation, "");
+          assertEqual(result.method, "");
+          assertEqual(result.usedContext, false);
+          assertEqual(result.fallback, true);
+        },
+      },
+      {
         name: "translateWithGoogle composes API url and joins sentence translations",
         async run() {
           let capturedUrl = "";

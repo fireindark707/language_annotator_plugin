@@ -203,6 +203,7 @@
               contentT: (key) => key === "meaning_placeholder" ? "placeholder" : key,
               supportsDictionaryBySourceLang: () => true,
               shouldLookupDictionaryQuery: () => true,
+              translateWordInContext: () => Promise.resolve("语境里的车"),
               mapDictionarySections: () => Promise.resolve([{
                 mode: "surface",
                 query: "mobilnya",
@@ -221,7 +222,7 @@
             },
           });
           await new Promise((resolve) => setTimeout(resolve, 0));
-          assertEqual(input.value, "他的車");
+          assertEqual(input.value, "语境里的车");
           assertEqual(input.placeholder, "placeholder");
           assertEqual(overlay.dataset.lemma, "mobil");
           assertEqual(overlay.dataset.dictPos, "Nomina");
@@ -253,6 +254,7 @@
               contentT: (key) => key === "meaning_placeholder" ? "placeholder" : key,
               supportsDictionaryBySourceLang: () => true,
               shouldLookupDictionaryQuery: () => true,
+              translateWordInContext: () => Promise.resolve(""),
               mapDictionarySections: () => Promise.resolve([]),
               TranslationUtilsRef: window.TranslationUtils,
               chromeRuntime: createRuntime({

@@ -11,6 +11,7 @@
     const clickListeners = [];
     const translationCalls = [];
     const initCalls = [];
+    let contextualExtractCalls = 0;
     window.navigator.language = 'en-US';
     window.chrome = {
       runtime: {
@@ -18,6 +19,15 @@
         onInstalled: { addListener(fn) { installedListeners.push(fn); } },
         onStartup: { addListener(fn) { startupListeners.push(fn); } },
         onMessage: { addListener(fn) { window.__bgMessageListener = fn; } },
+      },
+      i18n: {
+        detectLanguage(text, callback) {
+          if (String(text).includes('river-bank-in-english')) {
+            callback({ languages: [{ language: 'en', percentage: 100 }] });
+            return;
+          }
+          callback({ languages: [{ language: 'zh-TW', percentage: 100 }] });
+        },
       },
       contextMenus: {
         create(payload) { createdMenus.push(payload); },
@@ -38,9 +48,35 @@
       },
     };
     window.TranslationUtils = {
+      normalizeTranslationLang(lang) {
+        if (!lang) return "";
+        return String(lang).trim();
+      },
+      isSameLanguageFamily(left, right) {
+        const a = String(left || "").split("-")[0].toLowerCase();
+        const b = String(right || "").split("-")[0].toLowerCase();
+        return !!a && a === b;
+      },
+      getBrowserTargetLang() {
+        return 'en-US';
+      },
       translateWithGoogle(text, sourceLang, targetLang) {
         translationCalls.push({ text, sourceLang, targetLang });
         return Promise.resolve('translated:' + text);
+      },
+    };
+    window.CleverTranslate = {
+      ContextualTranslator: function ContextualTranslator() {
+        this.extractWordTranslation = function (sentence, word, options) {
+          contextualExtractCalls += 1;
+          if (word === 'bank' && sentence.includes('river')) {
+            if (sentence.includes('english')) {
+              return Promise.resolve({ translation: 'river-bank-in-english', method: 'Marker: HTML_u', options });
+            }
+            return Promise.resolve({ translation: '河岸', method: 'Marker: HTML_u', options });
+          }
+          return Promise.resolve({ translation: '', method: 'Fallback: Empty' });
+        };
       },
     };
     window.WordStorage = { init() { initCalls.push('init'); return Promise.resolve(); } };
@@ -80,10 +116,21 @@
         },
       },
       {
-        name: 'message listener handles translate, getLemma, getLemmaVariations, and lookupDictionary',
+        name: 'message listener handles translate, contextual translate, getLemma, getLemmaVariations, and lookupDictionary',
         async run() {
           const translateRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'translate', text: 'hello', sourceLang: 'en', targetLang: 'zh-TW' }, null, resolve));
           assertEqual(translateRes.translation, 'translated:hello');
+          const contextualRes = await new Promise((resolve) => window.__bgMessageListener({
+            action: 'translateContextualWord',
+            sentence: 'We sat on the river bank.',
+            word: 'bank',
+            wordPos: 20,
+            sourceLang: 'en',
+            targetLang: 'zh-TW',
+          }, null, resolve));
+          assertEqual(contextualRes.translation, '河岸');
+          assertEqual(contextualRes.usedContext, true);
+          assertEqual(contextualRes.fallback, false);
           const lemmaRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'getLemma', text: 'running', sourceLang: 'en' }, null, resolve));
           assertEqual(lemmaRes.lemma, 'run');
           const variationRes = await new Promise((resolve) => window.__bgMessageListener({ action: 'getLemmaVariations', text: 'running', lemma: 'run', sourceLang: 'en' }, null, resolve));
@@ -93,6 +140,63 @@
           assert(dictRes.found, 'expected dictionary result');
           assertEqual(Array.isArray(dictRes.sections), true);
           assertEqual(translationCalls.length > 0, true);
+        },
+      },
+      {
+        name: 'contextual translate falls back to google when clever translate has no hit',
+        async run() {
+          const beforeCalls = translationCalls.length;
+          const response = await new Promise((resolve) => window.__bgMessageListener({
+            action: 'translateContextualWord',
+            sentence: 'The bank opens at nine.',
+            word: 'bank',
+            wordPos: 4,
+            sourceLang: 'en',
+            targetLang: 'zh-TW',
+          }, null, resolve));
+          assertEqual(response.translation, 'translated:bank');
+          assertEqual(response.usedContext, false);
+          assertEqual(response.fallback, true);
+          assertEqual(translationCalls.length, beforeCalls + 1);
+          assertEqual(translationCalls[translationCalls.length - 1].text, 'bank');
+        },
+      },
+      {
+        name: 'contextual translate falls back to google when clever result language mismatches target language',
+        async run() {
+          const beforeCalls = translationCalls.length;
+          const response = await new Promise((resolve) => window.__bgMessageListener({
+            action: 'translateContextualWord',
+            sentence: 'We sat on the river bank in english.',
+            word: 'bank',
+            wordPos: 20,
+            sourceLang: 'en',
+            targetLang: 'zh-TW',
+          }, null, resolve));
+          assertEqual(response.translation, 'translated:bank');
+          assertEqual(response.usedContext, false);
+          assertEqual(response.fallback, true);
+          assertEqual(response.method, 'Fallback: Target Language Mismatch');
+          assertEqual(translationCalls.length, beforeCalls + 1);
+        },
+      },
+      {
+        name: 'contextual translate reuses cached result for identical requests',
+        async run() {
+          contextualExtractCalls = 0;
+          const payload = {
+            action: 'translateContextualWord',
+            sentence: 'We camped by the river bank at sunset.',
+            word: 'bank',
+            wordPos: 24,
+            sourceLang: 'en',
+            targetLang: 'zh-TW',
+          };
+          const first = await new Promise((resolve) => window.__bgMessageListener(payload, null, resolve));
+          const second = await new Promise((resolve) => window.__bgMessageListener(payload, null, resolve));
+          assertEqual(first.translation, '河岸');
+          assertEqual(second.translation, '河岸');
+          assertEqual(contextualExtractCalls, 1);
         },
       },
     ]);

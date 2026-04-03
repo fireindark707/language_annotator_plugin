@@ -158,6 +158,17 @@
       });
     }
 
+    function waitForCondition(check, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const t0 = Date.now();
+        (function poll() {
+          if (check()) return resolve(true);
+          if (Date.now() - t0 > timeoutMs) return reject(new Error("condition did not pass"));
+          setTimeout(poll, 50);
+        }());
+      });
+    }
+
     runTests([
 
       // ═══ 1. WordfreqUtils — basic API ══════════════════════════════════════
@@ -1026,6 +1037,39 @@
           const CEFR_ORDER = { A1: 0, A2: 1, B1: 2, B2: 3, C1: 4, C2: 5 };
           assert(CEFR_ORDER[levelWithLemma] < CEFR_ORDER[levelNoLemma],
             `level with getLemma (${levelWithLemma}) should be easier than without (${levelNoLemma})`);
+        },
+      },
+      {
+        name: "analyzeAndShow: C2 glosses resolve asynchronously with contextual translations",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const doc = makeIsolatedDoc(C2_ARTICLE);
+          const calls = [];
+          let resolved = false;
+          CD.analyzeAndShow({
+            sourceLang: "en",
+            document: doc,
+            translateWordInContext({ word, sentence, wordPos }) {
+              calls.push({ word, sentence, wordPos });
+              return new Promise((resolve) => {
+                setTimeout(() => {
+                  resolved = true;
+                  resolve("语境义");
+                }, 120);
+              });
+            },
+          });
+          const panel = await waitForPanel(doc, 3000);
+          assert(panel !== null, "panel should appear before contextual glosses resolve");
+          assertEqual(resolved, false, "contextual glosses should not block panel rendering");
+          await waitForCondition(function () {
+            const gloss = doc.querySelector(".la-c2-gloss");
+            return !!(gloss && gloss.textContent.includes("语境义"));
+          }, 3000);
+          assert(calls.length > 0, "expected contextual translation calls");
+          assert(typeof calls[0].sentence === "string" && calls[0].sentence.length > 0, "expected sentence context");
+          assertEqual(typeof calls[0].wordPos, "number");
         },
       },
 

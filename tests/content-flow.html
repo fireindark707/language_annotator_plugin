@@ -17,8 +17,35 @@
         lastError: null,
         sendMessage(message, callback) {
           runtimeMessages.push(message);
+          if (message.action === 'translateContextualWord') {
+            if (message.word === 'delayedword') {
+              window.setTimeout(() => {
+                callback({ translation: '慢到但更准', method: 'Marker: HTML_u', usedContext: true, fallback: false });
+              }, 250);
+              return;
+            }
+            if (message.word === 'sameword') {
+              window.setTimeout(() => {
+                callback({ translation: '相同翻譯', method: 'Marker: HTML_u', usedContext: true, fallback: false });
+              }, 180);
+              return;
+            }
+            if (message.word === 'bank') {
+              return callback({ translation: message.wordPos === 20 ? '河岸' : '银行', method: 'Marker: HTML_u', usedContext: true, fallback: false });
+            }
+            return callback({ translation: '语境:' + message.word, method: 'Marker: HTML_u', usedContext: true, fallback: false });
+          }
+          if (message.action === 'translate' && message.text === 'delayedword') {
+            return callback({ translation: '快速普通翻譯' });
+          }
+          if (message.action === 'translate' && message.text === 'sameword') {
+            return callback({ translation: '相同翻譯' });
+          }
           if (message.action === 'translate') return callback({ translation: '翻譯:' + message.text });
-          if (message.action === 'getLemma') return callback({ found: true, lemma: 'run' });
+          if (message.action === 'getLemma') {
+            if (message.text === 'running') return callback({ found: true, lemma: 'run' });
+            return callback({ found: true, lemma: message.text });
+          }
           if (message.action === 'lookupDictionary') {
             dictionaryLookupCalls += 1;
             return callback({ found: true, source: 'dictionaryapi', query: 'running', lemma: 'run', usedLemma: false, sections: [{ mode: 'surface', query: 'running', source: 'dictionaryapi', entries: [{ pos: 'verb', definition: 'move fast' }] }, { mode: 'lemma', query: 'run', source: 'dictionaryapi', entries: [{ pos: 'verb', definition: 'move' }] }], entries: [{ pos: 'verb', definition: 'move fast' }] });
@@ -42,6 +69,19 @@
     window.UiI18n = { t: (_lang, key) => key, langAttr: (lang) => lang || 'en', dir: () => 'ltr' };
     window.UiToast = { show(message, type) { shownToasts.push({ message, type }); } };
     window.UiTour = { start(opts) { tourCalls.push(opts.storageKey); }, maybeStartOnce(opts) { tourCalls.push(opts.storageKey); }, getSteps() { return []; }, getLabel() { return 'replay'; } };
+    window.WordfreqUtils = {
+      isSupported(lang) { return (lang || '').split('-')[0].toLowerCase() === 'en'; },
+      initForLang() { return Promise.resolve(true); },
+      getZipf(word) {
+        const normalized = String(word || '').toLowerCase();
+        if (normalized === 'the') return 7.0;
+        return 0;
+      },
+      getDifficultyTier(zipf) {
+        if (!zipf || zipf <= 0) return null;
+        return zipf >= 5.3 ? 'A1' : 'C2';
+      },
+    };
     window.speechSynthesis = { getVoices() { return []; }, speak() {} };
     window.SpeechSynthesisUtterance = function SpeechSynthesisUtterance(text) { this.text = text; };
     window.IntersectionObserver = class { constructor(cb) { this.cb = cb; } observe(el) { this.cb([{ isIntersecting: true, target: el }], this); } unobserve() {} disconnect() {} };
@@ -61,48 +101,364 @@
   <script>
     const { assert, assertEqual, runTests } = window.TestHarness;
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+    async function waitFor(condition, timeout = 600) {
+      const startedAt = Date.now();
+      while (Date.now() - startedAt < timeout) {
+        if (condition()) return;
+        await wait(20);
+      }
+      throw new Error('waitFor timeout');
+    }
     runTests([
       {
         name: 'selection flow shows translation box with dictionary sections',
         async run() {
           tourCalls.length = 0;
+          runtimeMessages.length = 0;
           const selection = window.getSelection();
-          const textNode = document.createTextNode('running');
-          document.body.appendChild(textNode);
+          const host = document.createElement('p');
+          const textNode = document.createTextNode('We keep running every morning.');
+          host.appendChild(textNode);
+          document.body.appendChild(host);
           const range = document.createRange();
-          range.selectNodeContents(textNode);
+          const start = textNode.nodeValue.indexOf('running');
+          range.setStart(textNode, start);
+          range.setEnd(textNode, start + 'running'.length);
           range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
           selection.removeAllRanges();
           selection.addRange(range);
           document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
           await wait(220);
           assert(document.getElementById('translationBox'), 'expected translation box');
+          assert(document.getElementById('translationBox').textContent.includes('语境:running'), 'expected contextual word translation');
+          assert(document.querySelector('#translationBox .la-translation-text').classList.contains('is-contextual'), 'expected contextual emphasis marker');
+          assert(runtimeMessages.some((message) => message.action === 'translateContextualWord'), 'expected contextual translation message');
           assert(tourCalls.includes('content_selection_v1'), 'expected content selection tour on first translation box');
           assert(document.getElementById('translationDictionary').textContent.includes('dict_selected_form'), 'expected dictionary section label');
-          textNode.remove();
+          host.remove();
+          selection.removeAllRanges();
+        },
+      },
+      {
+        name: 'single-word contextual translation disambiguates repeated words by wordPos',
+        async run() {
+          runtimeMessages.length = 0;
+          const selection = window.getSelection();
+          const host = document.createElement('p');
+          host.textContent = 'We sat on the river bank and then went to the bank.';
+          document.body.appendChild(host);
+          const textNode = host.firstChild;
+          const firstIndex = textNode.nodeValue.indexOf('bank');
+          const secondIndex = textNode.nodeValue.lastIndexOf('bank');
+
+          const firstRange = document.createRange();
+          firstRange.setStart(textNode, firstIndex);
+          firstRange.setEnd(textNode, firstIndex + 4);
+          firstRange.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 40, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(firstRange);
+          await translateText('bank');
+          await wait(80);
+          assert(document.getElementById('translationBox').textContent.includes('河岸'), 'expected first bank to use river meaning');
+
+          const secondRange = document.createRange();
+          secondRange.setStart(textNode, secondIndex);
+          secondRange.setEnd(textNode, secondIndex + 4);
+          secondRange.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 40, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(secondRange);
+          await translateText('bank');
+          await wait(80);
+          assert(document.getElementById('translationBox').textContent.includes('银行'), 'expected second bank to use finance meaning');
+
+          const contextualCalls = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'bank');
+          assertEqual(contextualCalls.length >= 2, true);
+          assertEqual(contextualCalls[0].wordPos !== contextualCalls[1].wordPos, true);
+          host.remove();
+          selection.removeAllRanges();
+        },
+      },
+      {
+        name: 'single-word translation shows fast fallback first, then upgrades when contextual result arrives',
+        async run() {
+          const selection = window.getSelection();
+          const host = document.createElement('p');
+          host.textContent = 'We saw delayedword yesterday.';
+          document.body.appendChild(host);
+          const textNode = host.firstChild;
+          const start = textNode.nodeValue.indexOf('delayedword');
+          const range = document.createRange();
+          range.setStart(textNode, start);
+          range.setEnd(textNode, start + 'delayedword'.length);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 60, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
+          await translateText('delayedword');
+          await wait(80);
+          assert(document.getElementById('translationBox').textContent.includes('快速普通翻譯'), 'expected fast online translation first');
+          assertEqual(document.querySelector('#translationBox .la-translation-text').classList.contains('is-contextual'), false);
+          await wait(260);
+          assert(document.getElementById('translationBox').textContent.includes('慢到但更准'), 'expected later contextual upgrade');
+          assert(document.querySelector('#translationBox .la-translation-text').classList.contains('is-contextual'), 'expected contextual emphasis after upgrade');
+          host.remove();
+          selection.removeAllRanges();
+        },
+      },
+      {
+        name: 'single-word contextual upgrade still marks and animates when text matches fallback',
+        async run() {
+          const selection = window.getSelection();
+          const host = document.createElement('p');
+          host.textContent = 'We saw sameword yesterday.';
+          document.body.appendChild(host);
+          const textNode = host.firstChild;
+          const start = textNode.nodeValue.indexOf('sameword');
+          const range = document.createRange();
+          range.setStart(textNode, start);
+          range.setEnd(textNode, start + 'sameword'.length);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 60, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
+          await translateText('sameword');
+          await wait(80);
+          assert(document.getElementById('translationBox').textContent.includes('相同翻譯'), 'expected fast translation to appear');
+          assertEqual(document.querySelector('#translationBox .la-translation-text').classList.contains('is-contextual'), false);
+          await wait(180);
+          assert(document.getElementById('translationBox').textContent.includes('相同翻譯'), 'expected same visible translation after contextual resolution');
+          assert(document.querySelector('#translationBox .la-translation-text').classList.contains('is-contextual'), 'expected contextual emphasis even when text is unchanged');
+          assert(document.getElementById('translationBox').classList.contains('is-refined'), 'expected refine animation state even when text is unchanged');
+          host.remove();
+          selection.removeAllRanges();
+        },
+      },
+      {
+        name: 'single-word contextual translation uses sentence language instead of configured source language',
+        async run() {
+          runtimeMessages.length = 0;
+          const originalGetSourceLang = window.WordStorage.getSourceLang;
+          const originalDetectLanguage = window.chrome.i18n.detectLanguage;
+          window.WordStorage.getSourceLang = () => Promise.resolve('id');
+          window.chrome.i18n.detectLanguage = (text, callback) => {
+            if (String(text).includes('We keep sprintrun every morning.')) {
+              callback({ languages: [{ language: 'en', percentage: 100 }] });
+              return;
+            }
+            callback({ languages: [{ language: 'en', percentage: 100 }] });
+          };
+          const selection = window.getSelection();
+          const host = document.createElement('p');
+          const textNode = document.createTextNode('We keep sprintrun every morning.');
+          host.appendChild(textNode);
+          document.body.appendChild(host);
+          const start = textNode.nodeValue.indexOf('sprintrun');
+          const range = document.createRange();
+          range.setStart(textNode, start);
+          range.setEnd(textNode, start + 'sprintrun'.length);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
+          try {
+            await translateText('sprintrun');
+            await wait(120);
+            const contextualCall = runtimeMessages.find((message) => message.action === 'translateContextualWord' && message.word === 'sprintrun');
+            assert(contextualCall, 'expected contextual translation message');
+            assertEqual(contextualCall.sourceLang, 'en');
+          } finally {
+            host.remove();
+            selection.removeAllRanges();
+            window.WordStorage.getSourceLang = originalGetSourceLang;
+            window.chrome.i18n.detectLanguage = originalDetectLanguage;
+          }
+        },
+      },
+      {
+        name: 'A1 single words skip clever contextual translation and use simple translation only',
+        async run() {
+          runtimeMessages.length = 0;
+          const selection = window.getSelection();
+          const host = document.createElement('p');
+          host.textContent = 'We saw the same sign yesterday.';
+          document.body.appendChild(host);
+          const textNode = host.firstChild;
+          const start = textNode.nodeValue.indexOf('the');
+          const range = document.createRange();
+          range.setStart(textNode, start);
+          range.setEnd(textNode, start + 'the'.length);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 30, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
+          await translateText('the');
+          await wait(120);
+          assert(document.getElementById('translationBox').textContent.includes('翻譯:the'), 'expected simple translation for A1 word');
+          assertEqual(runtimeMessages.some((message) => message.action === 'translateContextualWord' && message.word === 'the'), false, 'expected no contextual translation request for A1 word');
+          host.remove();
           selection.removeAllRanges();
         },
       },
       {
         name: 'runtime message opens add-word modal and save persists selected word',
         async run() {
+          runtimeMessages.length = 0;
+          const selection = window.getSelection();
+          const host = document.createElement('p');
+          const textNode = document.createTextNode('We keep running every morning.');
+          host.appendChild(textNode);
+          document.body.appendChild(host);
+          const start = textNode.nodeValue.indexOf('running');
+          const range = document.createRange();
+          range.setStart(textNode, start);
+          range.setEnd(textNode, start + 'running'.length);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
+          await translateText('running');
+          await wait(120);
+          const contextualCallsBefore = runtimeMessages.filter((message) => message.action === 'translateContextualWord').length;
           window.__contentListener({ action: 'openAddWordModal', word: 'running' }, null, function () {});
           await wait(80);
           const overlay = document.querySelector('.la-addword-overlay');
           assert(overlay, 'expected add-word modal');
           const input = overlay.querySelector('textarea');
-          await wait(60);
-          assert(input.value.includes('翻譯:running') || input.value.length > 0, 'expected prefilled meaning');
+          await wait(120);
+          assert(input.value.trim().length > 0, 'expected prefilled meaning');
+          const contextualCallsAfter = runtimeMessages.filter((message) => message.action === 'translateContextualWord').length;
+          assertEqual(contextualCallsAfter, contextualCallsBefore, 'expected add-word prefill to reuse contextual cache');
           overlay.querySelector('.la-addword-save').click();
           await wait(50);
           assert(saveSnapshots.length > 0, 'expected words saved');
           assert(wordsState.running, 'expected saved word record');
+          host.remove();
+          selection.removeAllRanges();
+        },
+      },
+      {
+        name: 'add-word prefill reuses recent clever cache even when draw-word used auto source detection',
+        async run() {
+          runtimeMessages.length = 0;
+          const originalGetSourceLang = window.WordStorage.getSourceLang;
+          const originalDetectLanguage = window.chrome.i18n.detectLanguage;
+          window.WordStorage.getSourceLang = () => Promise.resolve('id');
+          window.chrome.i18n.detectLanguage = (_text, callback) => {
+            callback({ languages: [{ language: 'en', percentage: 100 }] });
+          };
+          const selection = window.getSelection();
+          const host = document.createElement('p');
+          const textNode = document.createTextNode('We keep cacheword every morning.');
+          host.appendChild(textNode);
+          document.body.appendChild(host);
+          const start = textNode.nodeValue.indexOf('cacheword');
+          const range = document.createRange();
+          range.setStart(textNode, start);
+          range.setEnd(textNode, start + 'cacheword'.length);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
+          try {
+            await translateText('cacheword');
+            await wait(120);
+            const contextualCallsBefore = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
+            window.__contentListener({ action: 'openAddWordModal', word: 'cacheword' }, null, function () {});
+            await wait(180);
+            const overlay = document.querySelector('.la-addword-overlay');
+            assert(overlay, 'expected add-word modal');
+            const input = overlay.querySelector('textarea');
+            assert(input.value.includes('语境:cacheword'), 'expected prefill to reuse recent contextual translation');
+            const contextualCallsAfter = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
+            assertEqual(contextualCallsAfter, contextualCallsBefore, 'expected add-word prefill to reuse recent contextual cache without another contextual request');
+            overlay.remove();
+          } finally {
+            host.remove();
+            selection.removeAllRanges();
+            window.WordStorage.getSourceLang = originalGetSourceLang;
+            window.chrome.i18n.detectLanguage = originalDetectLanguage;
+          }
+        },
+      },
+      {
+        name: 'add-word prefill still finds the correct clever cache after another contextual lookup completes later',
+        async run() {
+          runtimeMessages.length = 0;
+          const selection = window.getSelection();
+          const host = document.createElement('p');
+          const textNode = document.createTextNode('We keep cacheword every morning. We saw laterword too.');
+          host.appendChild(textNode);
+          document.body.appendChild(host);
+          const cachewordStart = textNode.nodeValue.indexOf('cacheword');
+          const laterwordStart = textNode.nodeValue.indexOf('laterword');
+          try {
+            const firstRange = document.createRange();
+            firstRange.setStart(textNode, cachewordStart);
+            firstRange.setEnd(textNode, cachewordStart + 'cacheword'.length);
+            firstRange.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+            selection.removeAllRanges();
+            selection.addRange(firstRange);
+            await translateText('cacheword');
+            await wait(140);
+
+            const secondRange = document.createRange();
+            secondRange.setStart(textNode, laterwordStart);
+            secondRange.setEnd(textNode, laterwordStart + 'laterword'.length);
+            secondRange.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+            selection.removeAllRanges();
+            selection.addRange(secondRange);
+            await translateText('laterword');
+            await wait(140);
+
+            const contextualCallsBefore = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
+            window.__contentListener({ action: 'openAddWordModal', word: 'cacheword' }, null, function () {});
+            await wait(180);
+            const overlay = document.querySelector('.la-addword-overlay');
+            assert(overlay, 'expected add-word modal');
+            const input = overlay.querySelector('textarea');
+            assert(input.value.includes('语境:cacheword'), 'expected add-word prefill to reuse cacheword contextual translation');
+            const contextualCallsAfter = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
+            assertEqual(contextualCallsAfter, contextualCallsBefore, 'expected no second contextual request for cacheword');
+            overlay.remove();
+          } finally {
+            host.remove();
+            selection.removeAllRanges();
+          }
+        },
+      },
+      {
+        name: 'add-word prefill does not wait for inflight contextual translation and falls back immediately',
+        async run() {
+          runtimeMessages.length = 0;
+          const originalRequestWordTranslationInContext = window.requestWordTranslationInContext;
+          window.requestWordTranslationInContext = function requestWordTranslationInContextStub(options) {
+            if (options && options.cacheOnly) {
+              return Promise.resolve('');
+            }
+            return new Promise((resolve) => {
+              window.setTimeout(() => resolve('晚到的语境结果'), 250);
+            });
+          };
+          try {
+            window.__contentListener({ action: 'openAddWordModal', word: 'running' }, null, function () {});
+            await wait(80);
+            const overlay = document.querySelector('.la-addword-overlay');
+            assert(overlay, 'expected add-word modal');
+            const input = overlay.querySelector('textarea');
+            await wait(120);
+            assert(input.value.includes('翻譯:running'), 'expected immediate normal-translation fallback');
+            overlay.remove();
+          } finally {
+            window.requestWordTranslationInContext = originalRequestWordTranslationInContext;
+          }
         },
       },
       {
         name: 'browser translation pair failure falls back online and shows user-facing reason',
         async run() {
           shownToasts.length = 0;
+          const selection = window.getSelection();
+          const textNode = document.createTextNode('running quickly');
+          document.body.appendChild(textNode);
+          const range = document.createRange();
+          range.selectNodeContents(textNode);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 90, height: 10 });
+          selection.removeAllRanges();
+          selection.addRange(range);
           const originalRequestPreferredTranslation = window.TranslationUtils.requestPreferredTranslation;
           window.TranslationUtils.requestPreferredTranslation = function requestPreferredTranslationStub(options) {
             if (options && typeof options.onBrowserFallback === 'function') {
@@ -120,6 +476,8 @@
           assert(shownToasts.some((item) => item.message === 'browser_translation_pair_unavailable' && item.type === 'error'), 'expected fallback reason toast');
           window.TranslationUtils.requestPreferredTranslation = originalRequestPreferredTranslation;
           box.remove();
+          textNode.remove();
+          selection.removeAllRanges();
         },
       },
       {
@@ -128,6 +486,7 @@
           wordsState = { running: { meaning: '奔跑', learned: false, examples: [] } };
           document.getElementById('fixture').textContent = 'running words stay visible';
           await window.highlightWords();
+          await wait(80);
           assert(document.querySelector('.plugin-highlight-word'), 'expected highlighted word');
         },
       },

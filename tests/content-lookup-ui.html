@@ -36,6 +36,10 @@
       return {
         lastError: null,
         sendMessage(message, callback) {
+          if (message.action === "translateContextualWord" && handlers.translateContextualWord) {
+            callback(handlers.translateContextualWord(message));
+            return;
+          }
           if (message.action === "translate") {
             callback(handlers.translate(message));
             return;
@@ -169,6 +173,49 @@
         },
       },
       {
+        name: "updateTranslationBox refreshes text and adds subtle refined state",
+        run() {
+          const sel = window.getSelection();
+          const range = document.createRange();
+          const textNode = document.createTextNode("sample");
+          document.body.appendChild(textNode);
+          range.selectNodeContents(textNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+
+          const box = U.showTranslation("初始翻譯", { document });
+          assert(box, "expected translation box");
+          assertEqual(U.updateTranslationBox("語境更準", { document, isContextual: true }), true);
+          assert(document.getElementById("translationBox").textContent.includes("語境更準"), "expected updated translation");
+          assert(document.getElementById("translationBox").classList.contains("is-refined"), "expected refined state class");
+          assert(document.querySelector(".la-translation-text").classList.contains("is-contextual"), "expected contextual emphasis class");
+          box.remove();
+          textNode.remove();
+          sel.removeAllRanges();
+        },
+      },
+      {
+        name: "showTranslation marks contextual results with emphasis class",
+        run() {
+          const sel = window.getSelection();
+          const range = document.createRange();
+          const textNode = document.createTextNode("sample");
+          document.body.appendChild(textNode);
+          range.selectNodeContents(textNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+
+          const box = U.showTranslation("語境譯文", { document, isContextual: true });
+          assert(box, "expected translation box");
+          assert(document.querySelector(".la-translation-text").classList.contains("is-contextual"), "expected contextual emphasis class");
+          box.remove();
+          textNode.remove();
+          sel.removeAllRanges();
+        },
+      },
+      {
         name: "showWordPreview renders meaning and translated examples",
         async run() {
           const anchor = document.createElement("span");
@@ -220,6 +267,7 @@
       {
         name: "showWordPreview family mode shows current-form translation and dictionary, with saved root info below",
         async run() {
+          const contextualMessages = [];
           const anchor = document.createElement("span");
           anchor.textContent = "running";
           anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
@@ -229,6 +277,8 @@
             currentForm: "running",
             rootWord: "run",
             rootMeaning: "move fast",
+            contextSentence: "We are running fast today.",
+            contextWordPos: 7,
             examples: [],
           }, {
             document,
@@ -236,6 +286,16 @@
             chromeRuntime: {
               lastError: null,
               sendMessage(message, callback) {
+                if (message.action === "translateContextualWord") {
+                  contextualMessages.push(message);
+                  callback({
+                    translation: "按语境是奔跑中",
+                    method: "Marker: HTML_u",
+                    usedContext: true,
+                    fallback: false,
+                  });
+                  return;
+                }
                 if (message.action === "translate") {
                   callback({
                     translation: message.text === "moving quickly" ? "快速移動中" : "正在跑",
@@ -282,10 +342,14 @@
             },
             isCjkText: () => false,
             isBoundaryMatch: () => true,
+            detectLanguage(text) {
+              if (text === "We are running fast today.") return Promise.resolve("en");
+              return Promise.resolve("");
+            },
           });
           await waitFor(() => {
             const card = document.querySelector(".la-word-preview");
-            return !!(card && card.textContent.includes("正在跑") && card.textContent.includes("快速移動中"));
+            return !!(card && card.textContent.includes("按语境是奔跑中") && card.textContent.includes("快速移動中"));
           });
           const card = document.querySelector(".la-word-preview");
           assert(card, "expected preview card");
@@ -296,7 +360,7 @@
           assert(familyAudioButton, "expected family pronounce button");
           assertEqual(familyAudioButton.getAttribute("aria-label"), "Pronounce");
           assert(!card.textContent.startsWith("Selected form: running"), "preview should not repeat current-form title above the content");
-          assert(card.textContent.includes("正在跑"), "expected translated current form");
+          assert(card.textContent.includes("按语境是奔跑中"), "expected contextual current-form translation");
           assert(card.textContent.includes("Dictionary"), "expected dictionary section");
           assert(card.textContent.includes("快速移動中"), "expected translated dictionary definition");
           assert(!card.textContent.includes("Lemma: run"), "family preview should not render lemma dictionary section");
@@ -304,6 +368,7 @@
           assert(dictWrap, "expected preview dictionary wrapper");
           assert(dictWrap.textContent.includes("Selected form: running · Free Dictionary"), "expected surface dictionary section title");
           assert(dictWrap.textContent.includes("[") || dictWrap.textContent.includes("快速移動中"), "expected dictionary entry structure");
+          assertEqual(contextualMessages[0].sourceLang, "en");
           const noteWrap = card.querySelector(".la-word-preview-note");
           assert(noteWrap, "expected saved-word block");
           assert(noteWrap.textContent.includes("Saved word"), "expected saved-word label");

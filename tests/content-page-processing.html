@@ -159,17 +159,23 @@
         name: "family highlight hover sends current form plus saved root metadata",
         run() {
           let previewPayload = null;
+          const host = document.createElement("p");
+          const sourceNode = document.createTextNode("running fast");
+          host.appendChild(sourceNode);
+          document.body.appendChild(host);
           const fragment = U.buildHighlightedFragment("running fast", [
             { form: "running", rootWord: "run", isFamily: true },
           ], {
             run: { meaning: "move fast", learned: false, examples: [{ text: "run daily" }] },
           }, {
             document,
+            languageHint: "en",
+            splitIntoSentences: window.ExampleUtils.splitIntoSentences,
             showWordPreview(anchor, payload) {
               previewPayload = { anchorText: anchor.textContent, payload };
             },
             hideWordPreview() {},
-          });
+          }, sourceNode);
           const wrapper = document.createElement("div");
           wrapper.appendChild(fragment);
           const familyEl = wrapper.querySelector(".plugin-highlight-family-word");
@@ -181,12 +187,19 @@
           assertEqual(previewPayload.payload.currentForm, "running");
           assertEqual(previewPayload.payload.rootWord, "run");
           assertEqual(previewPayload.payload.rootMeaning, "move fast");
+          assertEqual(previewPayload.payload.contextSentence, "running fast");
+          assertEqual(previewPayload.payload.contextWordPos, 0);
+          host.remove();
         },
       },
       {
         name: "clicking root highlight marks learned, clicking family highlight opens add-word flow",
         run() {
           const calls = [];
+          const host = document.createElement("p");
+          const sourceNode = document.createTextNode("run while running");
+          host.appendChild(sourceNode);
+          document.body.appendChild(host);
           const fragment = U.buildHighlightedFragment("run while running", [
             { form: "running", rootWord: "run", isFamily: true },
             { form: "run", rootWord: "run", isFamily: false },
@@ -194,9 +207,11 @@
             run: { meaning: "move fast", learned: false, examples: [] },
           }, {
             document,
+            languageHint: "en",
+            splitIntoSentences: window.ExampleUtils.splitIntoSentences,
             showWordPreview() {},
             hideWordPreview() {},
-          });
+          }, sourceNode);
           const wrapper = document.createElement("div");
           wrapper.appendChild(fragment);
           document.body.appendChild(wrapper);
@@ -204,8 +219,8 @@
             onRootClick(text) {
               calls.push(`root:${text}`);
             },
-            onFamilyClick(text) {
-              calls.push(`family:${text}`);
+            onFamilyClick(payload) {
+              calls.push(`family:${payload.word}:${payload.contextWordPos}`);
             },
           });
           const highlights = wrapper.querySelectorAll(".plugin-highlight-word");
@@ -213,8 +228,43 @@
           highlights[1].dispatchEvent(new MouseEvent("click", { bubbles: true }));
           assertEqual(calls.length, 2);
           assertEqual(calls[0], "root:run");
-          assertEqual(calls[1], "family:running");
+          assertEqual(calls[1], "family:running:10");
           wrapper.remove();
+          host.remove();
+        },
+      },
+      {
+        name: "resolveMatchSentenceContext returns sentence and exact word position",
+        run() {
+          const container = document.createElement("p");
+          const textNode = document.createTextNode("We sat on the river bank. Later, we rested.");
+          container.appendChild(textNode);
+          document.body.appendChild(container);
+          const context = U.resolveMatchSentenceContext(textNode, 20, "bank", {
+            document,
+            languageHint: "en",
+            splitIntoSentences: window.ExampleUtils.splitIntoSentences,
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement() { return false; },
+          });
+          assertEqual(context.found, true);
+          assertEqual(context.sentence, "We sat on the river bank.");
+          assertEqual(context.wordPos, 20);
+          container.remove();
+        },
+      },
+      {
+        name: "buildContextPayloadFromContainer fails safely when repeated word cannot be disambiguated",
+        run() {
+          const context = U.buildContextPayloadFromContainer(
+            "bank by the bank",
+            "bank",
+            1,
+            "en",
+            (text) => [text]
+          );
+          assertEqual(context.found, false);
+          assertEqual(context.wordPos, null);
         },
       },
       {
@@ -619,7 +669,7 @@
               calls.push(`root:${text}`);
             },
             openAddWordModal(text) {
-              calls.push(`family:${text}`);
+              calls.push(`family:${text.word}:${text.contextWordPos}`);
             },
             startContentTour() {
               return true;
@@ -639,7 +689,7 @@
             familyEl.dispatchEvent(new MouseEvent("click", { bubbles: true }));
             assertEqual(calls.length, 2);
             assertEqual(calls[0], "root:run");
-            assertEqual(calls[1], "family:running");
+            assertEqual(calls[1], "family:running:10");
           } finally {
             host.remove();
           }
