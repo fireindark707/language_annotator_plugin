@@ -62,6 +62,8 @@
       },
       translateWithGoogle(text, sourceLang, targetLang) {
         translationCalls.push({ text, sourceLang, targetLang });
+        if (text === 'bank') return Promise.resolve('銀行');
+        if (text === 'drift') return Promise.resolve('漂流');
         return Promise.resolve('translated:' + text);
       },
     };
@@ -74,6 +76,9 @@
               return Promise.resolve({ translation: 'river-bank-in-english', method: 'Marker: HTML_u', options });
             }
             return Promise.resolve({ translation: '河岸', method: 'Marker: HTML_u', options });
+          }
+          if (word === 'drift') {
+            return Promise.resolve({ translation: '這是一個明顯過長而且不可信的語境化翻譯結果', method: 'Marker: HTML_u', options });
           }
           return Promise.resolve({ translation: '', method: 'Fallback: Empty' });
         };
@@ -154,7 +159,7 @@
             sourceLang: 'en',
             targetLang: 'zh-TW',
           }, null, resolve));
-          assertEqual(response.translation, 'translated:bank');
+          assertEqual(response.translation, '銀行');
           assertEqual(response.usedContext, false);
           assertEqual(response.fallback, true);
           assertEqual(translationCalls.length, beforeCalls + 1);
@@ -173,10 +178,29 @@
             sourceLang: 'en',
             targetLang: 'zh-TW',
           }, null, resolve));
-          assertEqual(response.translation, 'translated:bank');
+          assertEqual(response.translation, '銀行');
           assertEqual(response.usedContext, false);
           assertEqual(response.fallback, true);
           assertEqual(response.method, 'Fallback: Target Language Mismatch');
+          assertEqual(translationCalls.length, beforeCalls + 1);
+        },
+      },
+      {
+        name: 'contextual translate falls back to google when clever result length deviates too much from direct translation',
+        async run() {
+          const beforeCalls = translationCalls.length;
+          const response = await new Promise((resolve) => window.__bgMessageListener({
+            action: 'translateContextualWord',
+            sentence: 'The boat began to drift slowly at dusk.',
+            word: 'drift',
+            wordPos: 18,
+            sourceLang: 'en',
+            targetLang: 'zh-TW',
+          }, null, resolve));
+          assertEqual(response.translation, '漂流');
+          assertEqual(response.usedContext, false);
+          assertEqual(response.fallback, true);
+          assertEqual(response.method, 'Fallback: Length Mismatch');
           assertEqual(translationCalls.length, beforeCalls + 1);
         },
       },

@@ -146,6 +146,20 @@ function rememberContextualTranslation(cacheKey, result) {
 	return result;
 }
 
+function normalizeTranslationLengthSample(text) {
+	return String(text || "").trim();
+}
+
+function hasSuspiciousTranslationLengthGap(contextualTranslation, directTranslation) {
+	const contextualSample = normalizeTranslationLengthSample(contextualTranslation);
+	const directSample = normalizeTranslationLengthSample(directTranslation);
+	if (!contextualSample || !directSample) return false;
+	const contextualLength = contextualSample.length;
+	const directLength = directSample.length;
+	if (directLength <= 0) return false;
+	return contextualLength >= directLength * 3 && (contextualLength - directLength) >= 4;
+}
+
 async function translateContextualWordWithFallback(sentence, word, wordPos, sourceLang, targetLang) {
 	const normalizedSentence = typeof sentence === "string" ? sentence.trim() : "";
 	const normalizedWord = typeof word === "string" ? word.trim() : "";
@@ -199,6 +213,15 @@ async function translateContextualWordWithFallback(sentence, word, wordPos, sour
 			const matchesTargetLanguage = await translationMatchesTargetLanguage(translation, normalizedTargetLang);
 			if (!matchesTargetLanguage) {
 				return fallbackTranslate("Fallback: Target Language Mismatch");
+			}
+			const directTranslation = normalizedWord
+				? await translateWithGoogle(normalizedWord, normalizedSourceLang, normalizedTargetLang).catch(() => "")
+				: "";
+			if (hasSuspiciousTranslationLengthGap(translation, directTranslation)) {
+				return rememberContextualTranslation(
+					cacheKey,
+					buildContextualTranslationResponse(directTranslation, "Fallback: Length Mismatch", false, true)
+				);
 			}
 			return rememberContextualTranslation(
 				cacheKey,
