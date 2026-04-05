@@ -55,7 +55,7 @@
           DictionaryUtils.lookupEnglishFreeDictionary = () => Promise.resolve({ found: false, source: "dictionaryapi", entries: [] });
           DictionaryUtils.lookupJotobaJapaneseDictionary = () => Promise.resolve({ found: false, source: "jotoba", entries: [] });
 
-          assertEqual(DictionaryUtils.buildDictionaryLookup("mobil", "id").sourceName, "kateglo");
+          assertEqual(DictionaryUtils.buildDictionaryLookup("mobil", "id").sourceName, "dictionaryapi");
           assertEqual(DictionaryUtils.buildDictionaryLookup("walk", "en").sourceName, "dictionaryapi");
           assertEqual(DictionaryUtils.buildDictionaryLookup("食べる", "ja").sourceName, "jotoba");
           assertEqual(DictionaryUtils.buildDictionaryLookup("andar", "es").sourceName, "dictionaryapi");

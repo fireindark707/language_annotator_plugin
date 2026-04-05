@@ -155,22 +155,16 @@
       {
         name: "buildDictionaryLookup chooses expected source strategy",
         run() {
-          assertEqual(U.buildDictionaryLookup("mobil", "id").sourceName, "kateglo");
+          assertEqual(U.buildDictionaryLookup("mobil", "id").sourceName, "dictionaryapi");
           assertEqual(U.buildDictionaryLookup("walk", "en").sourceName, "dictionaryapi");
           assertEqual(U.buildDictionaryLookup("食べる", "ja").sourceName, "jotoba");
         },
       },
       {
-        name: "indonesian dedicated dictionary falls back to Free Dictionary when Kateglo is empty",
+        name: "indonesian dictionary uses Free Dictionary directly",
         async run() {
           const originalFetch = window.fetch;
           window.fetch = (url) => {
-            if (String(url).includes("kateglo.lostfocus.org")) {
-              return Promise.resolve({
-                ok: true,
-                text: () => Promise.resolve("{}"),
-              });
-            }
             if (String(url).includes("freedictionaryapi.com/api/v1/entries/id/")) {
               return Promise.resolve({
                 ok: true,
