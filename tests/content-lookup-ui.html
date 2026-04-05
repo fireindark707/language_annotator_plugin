@@ -215,9 +215,9 @@
           sel.removeAllRanges();
         },
       },
-      {
-        name: "showWordPreview renders meaning and translated examples",
-        async run() {
+	      {
+	        name: "showWordPreview renders meaning and translated examples",
+	        async run() {
           const anchor = document.createElement("span");
           anchor.textContent = "running";
           anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
@@ -259,14 +259,56 @@
           const audioButton = card.querySelector(".la-word-preview-audio");
           assert(audioButton, "expected pronounce button");
           assertEqual(audioButton.getAttribute("aria-label"), "Pronounce");
-          U.hideWordPreview(0);
-          await new Promise((resolve) => setTimeout(resolve, 10));
-          anchor.remove();
-        },
-      },
-      {
-        name: "showWordPreview family mode shows current-form translation and dictionary, with saved root info below",
-        async run() {
+	          U.hideWordPreview(0);
+	          await new Promise((resolve) => setTimeout(resolve, 10));
+	          anchor.remove();
+	        },
+	      },
+	      {
+	        name: "showWordPreview example translation falls back to auto when detected language mismatches configured source",
+	        async run() {
+	          const translateMessages = [];
+	          const exampleSentence = "running swiftly tonight";
+	          const anchor = document.createElement("span");
+	          anchor.textContent = "running";
+	          anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+	          document.body.appendChild(anchor);
+	          U.showWordPreview(anchor, "meaning", [{ text: exampleSentence }], {
+	            document,
+	            WordStorage: { getSourceLang: () => Promise.resolve("id") },
+	            chromeRuntime: createRuntime({
+	              translate(message) {
+	                translateMessages.push(message);
+	                return { translation: "快速奔跑" };
+	              },
+	            }),
+	            TranslationUtilsRef: window.TranslationUtils,
+	            contentT(key) {
+	              return {
+	                examples: "Examples",
+	                pronounce: "Pronounce",
+	              }[key] || key;
+	            },
+	            getExampleText(entry) {
+	              return entry.text;
+	            },
+	            detectLanguage(text) {
+	              if (text === exampleSentence) return Promise.resolve("en");
+	              return Promise.resolve("");
+	            },
+	            isCjkText: () => false,
+	            isBoundaryMatch: () => true,
+	          });
+	          await waitFor(() => translateMessages.length > 0);
+	          assertEqual(translateMessages[0].sourceLang, "auto");
+	          U.hideWordPreview(0);
+	          await new Promise((resolve) => setTimeout(resolve, 10));
+	          anchor.remove();
+	        },
+	      },
+	      {
+	        name: "showWordPreview family mode shows current-form translation and dictionary, with saved root info below",
+	        async run() {
           const contextualMessages = [];
           const anchor = document.createElement("span");
           anchor.textContent = "running";
@@ -373,11 +415,64 @@
           assert(noteWrap, "expected saved-word block");
           assert(noteWrap.textContent.includes("Saved word"), "expected saved-word label");
           assert(noteWrap.textContent.includes("run · move fast"), "expected saved root info");
-          U.hideWordPreview(0);
-          await new Promise((resolve) => setTimeout(resolve, 10));
-          anchor.remove();
-        },
-      },
+	          U.hideWordPreview(0);
+	          await new Promise((resolve) => setTimeout(resolve, 10));
+	          anchor.remove();
+	        },
+	      },
+	      {
+	        name: "showWordPreview family fallback translation falls back to auto when detected language mismatches configured source",
+	        async run() {
+	          const translateMessages = [];
+	          const anchor = document.createElement("span");
+	          anchor.textContent = "running";
+	          anchor.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+	          document.body.appendChild(anchor);
+	          U.showWordPreview(anchor, {
+	            mode: "family",
+	            currentForm: "running",
+	            rootWord: "run",
+	            rootMeaning: "move fast",
+	            examples: [],
+	          }, {
+	            document,
+	            WordStorage: { getSourceLang: () => Promise.resolve("id") },
+	            chromeRuntime: createRuntime({
+	              translate(message) {
+	                translateMessages.push(message);
+	                return { translation: "正在跑" };
+	              },
+	            }),
+	            TranslationUtilsRef: window.TranslationUtils,
+	            DictionaryUtilsRef: window.DictionaryUtils,
+	            normalizeDictionaryQuery: window.DictionaryUtils.normalizeDictionaryQuery,
+	            shouldLookupDictionaryQuery: window.DictionaryUtils.shouldLookupDictionaryQuery,
+	            supportsDictionaryBySourceLang: () => false,
+	            contentT(key) {
+	              return {
+	                local_saved_words: "Saved word",
+	                examples: "Examples",
+	                pronounce: "Pronounce",
+	                no_dict_entries: "No entries",
+	              }[key] || key;
+	            },
+	            getExampleText(entry) {
+	              return entry.text;
+	            },
+	            detectLanguage(text) {
+	              if (text === "running") return Promise.resolve("en");
+	              return Promise.resolve("");
+	            },
+	            isCjkText: () => false,
+	            isBoundaryMatch: () => true,
+	          });
+	          await waitFor(() => translateMessages.length > 0);
+	          assertEqual(translateMessages[0].sourceLang, "auto");
+	          U.hideWordPreview(0);
+	          await new Promise((resolve) => setTimeout(resolve, 10));
+	          anchor.remove();
+	        },
+	      },
 
       // ═══ Zipf badge — showWordPreview ══════════════════════════════════════
 

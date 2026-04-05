@@ -501,6 +501,39 @@ function getSelectionContextForWord(selectedWord, languageHint, explicitSelectio
 	);
 }
 
+function buildEmptyContextPayload(word, languageHint) {
+	return {
+		found: false,
+		sentence: "",
+		word: typeof word === "string" ? word.trim() : "",
+		wordPos: null,
+		containerText: "",
+		containerOffset: null,
+		languageHint: languageHint || "",
+	};
+}
+
+function buildVerifiedDirectContext(sentence, word, wordPos, languageHint) {
+	const trimmedSentence = typeof sentence === "string" ? sentence.trim() : "";
+	const trimmedWord = typeof word === "string" ? word.trim() : "";
+	if (!trimmedSentence || !trimmedWord) {
+		return buildEmptyContextPayload(trimmedWord, languageHint);
+	}
+	if (typeof wordPos !== "number" || !Number.isFinite(wordPos) || wordPos < 0) {
+		return buildEmptyContextPayload(trimmedWord, languageHint);
+	}
+	const verifiedContext = buildContextPayloadFromContainer(
+		trimmedSentence,
+		trimmedWord,
+		wordPos,
+		languageHint
+	);
+	if (!verifiedContext.found || verifiedContext.sentence !== trimmedSentence || verifiedContext.wordPos !== wordPos) {
+		return buildEmptyContextPayload(trimmedWord, languageHint);
+	}
+	return verifiedContext;
+}
+
 function getContextForWord(word, options) {
 	const params = options || {};
 	const trimmedWord = typeof word === "string" ? word.trim() : "";
@@ -509,16 +542,19 @@ function getContextForWord(word, options) {
 		contentLanguageHint ||
 		document.documentElement.lang ||
 		(typeof navigator !== "undefined" ? navigator.language : "en");
-	if (params.contextSentence && typeof params.contextSentence === "string" && params.contextSentence.trim()) {
-		return {
-			found: true,
-			sentence: params.contextSentence.trim(),
-			word: trimmedWord,
-			wordPos: typeof params.contextWordPos === "number" ? params.contextWordPos : null,
-			containerText: params.contextSentence.trim(),
-			containerOffset: typeof params.contextWordPos === "number" ? params.contextWordPos : null,
-			languageHint,
-		};
+	const directContextSentence = typeof params.contextSentence === "string" && params.contextSentence.trim()
+		? params.contextSentence
+		: (typeof params.sentence === "string" && params.sentence.trim() ? params.sentence : "");
+	const directContextWordPos = typeof params.contextWordPos === "number"
+		? params.contextWordPos
+		: (typeof params.wordPos === "number" ? params.wordPos : null);
+	if (directContextSentence) {
+		return buildVerifiedDirectContext(
+			directContextSentence,
+			trimmedWord,
+			directContextWordPos,
+			languageHint
+		);
 	}
 	const selectionContext = getSelectionContextForWord(trimmedWord, languageHint, params.selection);
 	if (!selectionContext.found) return selectionContext;
@@ -572,9 +608,10 @@ function rememberContextualWordTranslation(cacheKey, translation) {
 
 function rememberLastResolvedContext(context, sourceLang, targetLang, cacheKey, translation) {
 	if (!context || !context.found || !context.sentence || !context.word) return;
+	const normalizedSentence = String(context.sentence).trim().replace(/\s+/g, " ");
 	const entry = {
 		word: String(context.word).trim().toLowerCase(),
-		sentence: context.sentence,
+		sentence: normalizedSentence,
 		wordPos: typeof context.wordPos === "number" ? context.wordPos : null,
 		sourceLang: TranslationUtilsRef.normalizeTranslationLang(sourceLang) || "auto",
 		targetLang:
@@ -583,10 +620,10 @@ function rememberLastResolvedContext(context, sourceLang, targetLang, cacheKey, 
 			"en",
 		cacheKey: cacheKey || "",
 		translation: typeof translation === "string" ? translation : "",
-		updatedAt: Date.now(),
+			updatedAt: Date.now(),
 	};
 	lastResolvedContextualWordQuery = entry;
-	const recentKey = `${entry.targetLang}__${entry.word}`;
+	const recentKey = `${entry.targetLang}__${entry.word}__${normalizedSentence}`;
 	if (recentResolvedContextualWordQueries.has(recentKey)) {
 		recentResolvedContextualWordQueries.delete(recentKey);
 	}
@@ -598,44 +635,45 @@ function rememberLastResolvedContext(context, sourceLang, targetLang, cacheKey, 
 	}
 }
 
-function isCompatibleRecentContextSourceLang(entrySourceLang, requestSourceLang) {
-	const normalizedEntry = TranslationUtilsRef.normalizeTranslationLang(entrySourceLang) || "auto";
-	const normalizedRequest = TranslationUtilsRef.normalizeTranslationLang(requestSourceLang) || "auto";
-	if (normalizedEntry === normalizedRequest) return true;
-	// A just-resolved contextual translation is still valid for add-word reuse
-	// when one side used auto-detection and the other used the configured source.
-	return normalizedEntry === "auto" || normalizedRequest === "auto";
-}
-
-function getRecentResolvedContextualEntry(word, sourceLang, targetLang) {
+function getRecentResolvedContextualEntry(word, sourceLang, targetLang, sentence) {
 	const normalizedWord = String(word || "").trim().toLowerCase();
 	const normalizedTargetLang =
 		TranslationUtilsRef.normalizeTranslationLang(targetLang) ||
 		TranslationUtilsRef.getBrowserTargetLang(window.navigator) ||
 		"en";
-	const recentKey = `${normalizedTargetLang}__${normalizedWord}`;
+	const normalizedSentence = typeof sentence === "string"
+		? String(sentence).trim().replace(/\s+/g, " ")
+		: "";
+	if (!normalizedSentence) return null;
+	const recentKey = `${normalizedTargetLang}__${normalizedWord}__${normalizedSentence}`;
 	const mappedEntry = recentResolvedContextualWordQueries.get(recentKey) || null;
-	const entry = mappedEntry || lastResolvedContextualWordQuery;
+	const entry = mappedEntry || (
+		lastResolvedContextualWordQuery &&
+		lastResolvedContextualWordQuery.word === normalizedWord &&
+		lastResolvedContextualWordQuery.targetLang === normalizedTargetLang &&
+		lastResolvedContextualWordQuery.sentence === normalizedSentence
+			? lastResolvedContextualWordQuery
+			: null
+	);
 	if (!entry) return null;
 	if (Date.now() - entry.updatedAt > 30000) return null;
 	if (entry.word !== normalizedWord) return null;
 	if (entry.targetLang !== normalizedTargetLang) return null;
+	if (entry.sentence !== normalizedSentence) return null;
 	return entry;
 }
 
-function getRecentContextForWord(word, sourceLang, targetLang) {
-	const entry = getRecentResolvedContextualEntry(word, sourceLang, targetLang);
+function getRecentContextForWord(word, sourceLang, targetLang, sentence) {
+	const entry = getRecentResolvedContextualEntry(word, sourceLang, targetLang, sentence);
 	if (!entry) return null;
 	const normalizedWord = String(word || "").trim().toLowerCase();
-	return {
-		found: true,
-		sentence: entry.sentence,
-		word: normalizedWord,
-		wordPos: entry.wordPos,
-		containerText: entry.sentence,
-		containerOffset: entry.wordPos,
-		languageHint: contentLanguageHint || document.documentElement.lang || navigator.language,
-	};
+	const verifiedContext = buildVerifiedDirectContext(
+		entry.sentence,
+		normalizedWord,
+		entry.wordPos,
+		contentLanguageHint || document.documentElement.lang || navigator.language
+	);
+	return verifiedContext.found ? verifiedContext : null;
 }
 
 function resolveContextualSourceLang(context, fallbackSourceLang) {
@@ -659,7 +697,7 @@ function shouldSkipContextualTranslationForWord(word, sourceLang) {
 			const tier = WordfreqUtils.getDifficultyTier(zipf, normalizedSourceLang);
 			return tier === "A1";
 		})
-		.catch(() => false);
+			.catch(() => false);
 }
 
 function requestWordTranslationInContext(options) {
@@ -669,15 +707,16 @@ function requestWordTranslationInContext(options) {
 	const requestedSourceLang = params.sourceLang || "auto";
 	const requestedTargetLang =
 		params.targetLang || TranslationUtilsRef.getBrowserTargetLang(window.navigator) || "en";
-	const recentResolvedEntry = params.allowRecentContextCache
-		? getRecentResolvedContextualEntry(trimmedWord, requestedSourceLang, requestedTargetLang)
-		: null;
 	let context = getContextForWord(trimmedWord, params);
+	const recentResolvedEntry = params.allowRecentContextCache && context && context.found && context.sentence
+		? getRecentResolvedContextualEntry(trimmedWord, requestedSourceLang, requestedTargetLang, context.sentence)
+		: null;
 	if ((!context || !context.found) && params.allowRecentContextCache) {
 		context = getRecentContextForWord(
 			trimmedWord,
 			requestedSourceLang,
-			requestedTargetLang
+			requestedTargetLang,
+			typeof params.contextSentence === "string" ? params.contextSentence : ""
 		) || context;
 	}
 	if (!context.found || !context.sentence) {
@@ -703,25 +742,29 @@ function requestWordTranslationInContext(options) {
 				}
 				return "";
 			}
-			if (cacheKey && contextualWordTranslationInflight.has(cacheKey)) {
-				return contextualWordTranslationInflight.get(cacheKey);
-			}
-			const translationPromise = TranslationUtilsRef.requestContextualWordTranslation({
-				chromeRuntime: chrome.runtime,
+				if (cacheKey && contextualWordTranslationInflight.has(cacheKey)) {
+					return contextualWordTranslationInflight.get(cacheKey);
+				}
+				const translationPromise = TranslationUtilsRef.requestContextualWordTranslation({
+					chromeRuntime: chrome.runtime,
 				sentence: context.sentence,
 				word: trimmedWord,
-				wordPos: typeof context.wordPos === "number" ? context.wordPos : null,
-				sourceLang: effectiveSourceLang,
-				targetLang: requestedTargetLang,
-			}).then((result) => {
-				const translation = result && typeof result.translation === "string" ? result.translation : "";
-				const rememberedTranslation = rememberContextualWordTranslation(cacheKey, translation);
-				if (rememberedTranslation) {
-					rememberLastResolvedContext(
-						context,
-						effectiveSourceLang,
-						requestedTargetLang,
-						cacheKey,
+					wordPos: typeof context.wordPos === "number" ? context.wordPos : null,
+						sourceLang: effectiveSourceLang,
+						targetLang: requestedTargetLang,
+					}).then((result) => {
+						const translation = result && typeof result.translation === "string" ? result.translation : "";
+						const isTrueContextualHit = !!(result && result.usedContext && !result.fallback && translation);
+						if (!isTrueContextualHit) {
+							return "";
+						}
+						const rememberedTranslation = rememberContextualWordTranslation(cacheKey, translation);
+						if (rememberedTranslation) {
+						rememberLastResolvedContext(
+							context,
+							effectiveSourceLang,
+							requestedTargetLang,
+							cacheKey,
 						rememberedTranslation
 					);
 				}
@@ -821,6 +864,17 @@ function showAddWordModal(word) {
 		? word
 		: { word };
 	const normalizedWord = String(modalOptions.word || "").trim().toLowerCase();
+	const capturedSelectionContext = (!modalOptions.contextSentence && normalizedWord)
+		? getContextForWord(normalizedWord, { expectedWord: normalizedWord })
+		: null;
+	const modalContextSentence = modalOptions.contextSentence ||
+		(capturedSelectionContext && capturedSelectionContext.found ? capturedSelectionContext.sentence : "");
+	const modalContextWordPos =
+		typeof modalOptions.contextWordPos === "number"
+			? modalOptions.contextWordPos
+			: (capturedSelectionContext && typeof capturedSelectionContext.wordPos === "number"
+				? capturedSelectionContext.wordPos
+				: null);
 	const modalUi = ContentAddWordRef.createAddWordModal({
 		document,
 		normalizedWord,
@@ -955,13 +1009,13 @@ async function saveWord() {
 		wordLine,
 		input,
 		() => userEdited,
-		overlay,
-		{
-			getTargetWord,
-			contextSentence: modalOptions.contextSentence || "",
-			contextWordPos: modalOptions.contextWordPos,
-		},
-		(dictPayload) => {
+			overlay,
+			{
+				getTargetWord,
+				contextSentence: modalContextSentence,
+				contextWordPos: modalContextWordPos,
+			},
+			(dictPayload) => {
 			const sections = dictPayload && Array.isArray(dictPayload.sections)
 				? dictPayload.sections
 				: [];
@@ -1314,15 +1368,15 @@ function checkAndActivateWordfreq(lang) {
 						targetLang: TranslationUtilsRef.getBrowserTargetLang(window.navigator),
 					})
 				).catch(() => null),
-				translateWordInContext: ({ word, sentence, wordPos }) => (
-					requestWordTranslationInContext({
-						word,
-						sourceLang: lang,
-						targetLang: TranslationUtilsRef.getBrowserTargetLang(window.navigator),
-						contextSentence: sentence,
-						contextWordPos: wordPos,
-					}).then((translated) => translated || null)
-				).catch(() => null),
+					translateWordInContext: ({ word, sentence, wordPos }) => (
+						requestWordTranslationInContext({
+							word,
+							sourceLang: lang,
+							targetLang: TranslationUtilsRef.getBrowserTargetLang(window.navigator),
+							contextSentence: sentence,
+							contextWordPos: wordPos,
+						}).then((translated) => translated || null)
+					).catch(() => null),
 				getLemma: (word) => resolveLemma(word, lang)
 					.then((r) => (r && r.lemma) || null)
 					.catch(() => null),

@@ -33,6 +33,9 @@
             if (message.word === 'bank') {
               return callback({ translation: message.wordPos === 20 ? '河岸' : '银行', method: 'Marker: HTML_u', usedContext: true, fallback: false });
             }
+            if (message.word === 'c2fallback') {
+              return callback({ translation: '圍裙', method: 'Fallback: Direct', usedContext: false, fallback: true });
+            }
             return callback({ translation: '语境:' + message.word, method: 'Marker: HTML_u', usedContext: true, fallback: false });
           }
           if (message.action === 'translate' && message.text === 'delayedword') {
@@ -374,9 +377,9 @@
           }
         },
       },
-      {
-        name: 'add-word prefill still finds the correct clever cache after another contextual lookup completes later',
-        async run() {
+	      {
+	        name: 'add-word prefill still finds the correct clever cache after another contextual lookup completes later',
+	        async run() {
           runtimeMessages.length = 0;
           const selection = window.getSelection();
           const host = document.createElement('p');
@@ -404,11 +407,18 @@
             await translateText('laterword');
             await wait(140);
 
-            const contextualCallsBefore = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
-            window.__contentListener({ action: 'openAddWordModal', word: 'cacheword' }, null, function () {});
-            await wait(180);
-            const overlay = document.querySelector('.la-addword-overlay');
-            assert(overlay, 'expected add-word modal');
+	            const contextualCallsBefore = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
+	            window.__contentListener({
+	              action: 'openAddWordModal',
+	              word: {
+	                word: 'cacheword',
+	                contextSentence: 'We keep cacheword every morning.',
+	                contextWordPos: 8,
+	              },
+	            }, null, function () {});
+	            await wait(180);
+	            const overlay = document.querySelector('.la-addword-overlay');
+	            assert(overlay, 'expected add-word modal');
             const input = overlay.querySelector('textarea');
             assert(input.value.includes('语境:cacheword'), 'expected add-word prefill to reuse cacheword contextual translation');
             const contextualCallsAfter = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
@@ -417,12 +427,56 @@
           } finally {
             host.remove();
             selection.removeAllRanges();
-          }
-        },
-      },
-      {
-        name: 'add-word prefill does not wait for inflight contextual translation and falls back immediately',
-        async run() {
+	          }
+	        },
+	      },
+	      {
+	        name: 'add-word prefill does not reuse recent clever cache for the same word in a different sentence',
+	        async run() {
+	          runtimeMessages.length = 0;
+	          const selection = window.getSelection();
+	          const host = document.createElement('p');
+	          const textNode = document.createTextNode('We keep cacheword every morning.');
+	          host.appendChild(textNode);
+	          document.body.appendChild(host);
+	          const cachewordStart = textNode.nodeValue.indexOf('cacheword');
+	          try {
+	            const range = document.createRange();
+	            range.setStart(textNode, cachewordStart);
+	            range.setEnd(textNode, cachewordStart + 'cacheword'.length);
+	            range.getBoundingClientRect = () => ({ left: 10, top: 10, bottom: 20, width: 50, height: 10 });
+	            selection.removeAllRanges();
+	            selection.addRange(range);
+	            await translateText('cacheword');
+	            await wait(140);
+
+	            const contextualCallsBefore = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
+	            window.__contentListener({
+	              action: 'openAddWordModal',
+	              word: {
+	                word: 'cacheword',
+	                contextSentence: 'They keep cacheword at night.',
+	                contextWordPos: 10,
+	              },
+	            }, null, function () {});
+	            await wait(180);
+	            const overlay = document.querySelector('.la-addword-overlay');
+	            assert(overlay, 'expected add-word modal');
+	            const input = overlay.querySelector('textarea');
+	            assert(input.value.includes('翻譯:cacheword'), 'expected normal translation fallback for different-sentence cache miss');
+	            assert(!input.value.includes('语境:cacheword'), 'expected no cross-sentence clever cache reuse');
+	            const contextualCallsAfter = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'cacheword').length;
+	            assertEqual(contextualCallsAfter, contextualCallsBefore, 'expected cacheOnly add-word prefill to miss quietly without a second contextual request');
+	            overlay.remove();
+	          } finally {
+	            host.remove();
+	            selection.removeAllRanges();
+	          }
+	        },
+	      },
+	      {
+	        name: 'add-word prefill does not wait for inflight contextual translation and falls back immediately',
+	        async run() {
           runtimeMessages.length = 0;
           const originalRequestWordTranslationInContext = window.requestWordTranslationInContext;
           window.requestWordTranslationInContext = function requestWordTranslationInContextStub(options) {
@@ -447,9 +501,9 @@
           }
         },
       },
-      {
-        name: 'browser translation pair failure falls back online and shows user-facing reason',
-        async run() {
+	      {
+	        name: 'browser translation pair failure falls back online and shows user-facing reason',
+	        async run() {
           shownToasts.length = 0;
           const selection = window.getSelection();
           const textNode = document.createTextNode('running quickly');
@@ -476,13 +530,122 @@
           assert(shownToasts.some((item) => item.message === 'browser_translation_pair_unavailable' && item.type === 'error'), 'expected fallback reason toast');
           window.TranslationUtils.requestPreferredTranslation = originalRequestPreferredTranslation;
           box.remove();
-          textNode.remove();
-          selection.removeAllRanges();
-        },
-      },
-      {
-        name: 'highlightWords delegates to page processing and wraps stored word',
-        async run() {
+	          textNode.remove();
+	          selection.removeAllRanges();
+	        },
+	      },
+	      {
+	        name: 'wordfreq C2 contextual wrapper maps sentence and wordPos into content contextual params',
+	        async run() {
+	          const originalContentDifficulty = window.ContentDifficulty;
+	          const originalRequestWordTranslationInContext = window.requestWordTranslationInContext;
+	          const originalDetectLanguage = window.chrome.i18n.detectLanguage;
+	          const capturedCalls = [];
+	          window.chrome.i18n.detectLanguage = (_text, callback) => {
+	            callback({ languages: [{ language: 'en', percentage: 100 }] });
+	          };
+	          window.requestWordTranslationInContext = function requestWordTranslationInContextStub(options) {
+	            capturedCalls.push(options);
+	            return Promise.resolve('语境:C2');
+	          };
+	          window.ContentDifficulty = {
+	            analyzeAndShow(options) {
+	              return Promise.resolve(
+	                options.translateWordInContext({
+	                  word: 'obscure',
+	                  sentence: 'This obscure term appears here.',
+	                  wordPos: 5,
+	                })
+	              );
+	            },
+	          };
+	          try {
+	            await window.checkAndActivateWordfreq('en');
+	            await wait(40);
+	            assertEqual(capturedCalls.length, 1);
+	            assertEqual(capturedCalls[0].word, 'obscure');
+	            assertEqual(capturedCalls[0].contextSentence, 'This obscure term appears here.');
+	            assertEqual(capturedCalls[0].contextWordPos, 5);
+	          } finally {
+	            window.ContentDifficulty = originalContentDifficulty;
+	            window.requestWordTranslationInContext = originalRequestWordTranslationInContext;
+	            window.chrome.i18n.detectLanguage = originalDetectLanguage;
+	          }
+	        },
+	      },
+	      {
+	        name: 'wordfreq C2 contextual wrapper rejects fallback-only results instead of treating them as contextual glosses',
+	        async run() {
+	          const originalContentDifficulty = window.ContentDifficulty;
+	          const originalDetectLanguage = window.chrome.i18n.detectLanguage;
+	          const contextualMessagesBefore = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'c2fallback').length;
+	          let resolvedValue = 'not-run';
+	          window.chrome.i18n.detectLanguage = (_text, callback) => {
+	            callback({ languages: [{ language: 'en', percentage: 100 }] });
+	          };
+	          window.ContentDifficulty = {
+	            analyzeAndShow(options) {
+	              return Promise.resolve(
+	                options.translateWordInContext({
+	                  word: 'c2fallback',
+	                  sentence: 'The c2fallback term appears here.',
+	                  wordPos: 4,
+	                })
+	              ).then((value) => {
+	                resolvedValue = value;
+	              });
+	            },
+	          };
+	          try {
+	            await window.checkAndActivateWordfreq('en');
+	            await wait(40);
+	            const contextualMessagesAfter = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'c2fallback').length;
+	            assertEqual(contextualMessagesAfter, contextualMessagesBefore + 1, 'expected real contextual runtime request');
+	            assertEqual(resolvedValue, null, 'expected fallback-only contextual result to be suppressed for C2 glosses');
+	          } finally {
+	            window.ContentDifficulty = originalContentDifficulty;
+	            window.chrome.i18n.detectLanguage = originalDetectLanguage;
+	          }
+	        },
+	      },
+	      {
+	        name: 'wordfreq C2 contextual wrapper rejects mismatched wordPos before runtime request',
+	        async run() {
+	          const originalContentDifficulty = window.ContentDifficulty;
+	          const originalDetectLanguage = window.chrome.i18n.detectLanguage;
+	          const contextualMessagesBefore = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'obscure').length;
+	          let resolvedValue = 'not-run';
+	          window.chrome.i18n.detectLanguage = (_text, callback) => {
+	            callback({ languages: [{ language: 'en', percentage: 100 }] });
+	          };
+	          window.ContentDifficulty = {
+	            analyzeAndShow(options) {
+	              return Promise.resolve(
+	                options.translateWordInContext({
+	                  word: 'obscure',
+	                  sentence: 'This obscure term appears here.',
+	                  wordPos: 0,
+	                })
+	              ).then((value) => {
+	                resolvedValue = value;
+	              });
+	            },
+	          };
+	          try {
+	            await window.checkAndActivateWordfreq('en');
+	            await wait(40);
+	            const contextualMessagesAfter = runtimeMessages.filter((message) => message.action === 'translateContextualWord' && message.word === 'obscure').length;
+	            assertEqual(contextualMessagesAfter, contextualMessagesBefore, 'expected no contextual runtime request for mismatched wordPos');
+	            assertEqual(resolvedValue, null, 'expected invalid contextual offset to be suppressed');
+	          } finally {
+	            window.ContentDifficulty = originalContentDifficulty;
+	            window.chrome.i18n.detectLanguage = originalDetectLanguage;
+	          }
+	        },
+	      },
+	      {
+	        name: 'highlightWords delegates to page processing and wraps stored word',
+	        async run() {
           wordsState = { running: { meaning: '奔跑', learned: false, examples: [] } };
           document.getElementById('fixture').textContent = 'running words stay visible';
           await window.highlightWords();

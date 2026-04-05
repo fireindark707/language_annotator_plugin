@@ -62,6 +62,19 @@
         },
       },
       {
+        name: "repairSegments does not merge uppercase time-zone abbreviations into the next sentence",
+        run() {
+          U.__resetForTests();
+          const repaired = U.repairSegments([
+            "Sebagai informasi, jenazah tiba sekitar pukul 18.00 WIB.",
+            "Pesawat yang membawa mereka mendarat di apron.",
+          ], "id");
+          assertEqual(repaired.length, 2);
+          assertEqual(repaired[0], "Sebagai informasi, jenazah tiba sekitar pukul 18.00 WIB.");
+          assertEqual(repaired[1], "Pesawat yang membawa mereka mendarat di apron.");
+        },
+      },
+      {
         name: "splitIntoSentences uses mocked sentencex api and repairs its output",
         run() {
           U.__resetForTests();

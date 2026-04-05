@@ -1072,6 +1072,34 @@
           assertEqual(typeof calls[0].wordPos, "number");
         },
       },
+      {
+        name: "analyzeAndShow: C2 gloss wordPos points to the exact word even with multiple C2 words in one sentence",
+        async run() {
+          installMockLib();
+          await WFU.initForLang("en");
+          const doc = makeIsolatedDoc([
+            "the and was she they you have had are parchment lexicon codex",
+            "this sentence just padding that text exceeds hundred characters minimum content",
+          ].join(" "));
+          const calls = [];
+          CD.analyzeAndShow({
+            sourceLang: "en",
+            document: doc,
+            translateWordInContext({ word, sentence, wordPos }) {
+              calls.push({ word, sentence, wordPos });
+              return Promise.resolve("语境义");
+            },
+          });
+          await waitForCondition(function () {
+            return calls.length >= 3;
+          }, 3000);
+          assert(calls.length >= 3, "expected multiple C2 contextual translation calls");
+          calls.forEach(function (call) {
+            const extracted = call.sentence.slice(call.wordPos, call.wordPos + call.word.length).toLowerCase();
+            assertEqual(extracted, call.word, "expected wordPos to point at the exact C2 word");
+          });
+        },
+      },
 
       {
         name: "analyzeAndShow: getLemma returning null for a token leaves that token unchanged",

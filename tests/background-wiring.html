@@ -64,6 +64,7 @@
         translationCalls.push({ text, sourceLang, targetLang });
         if (text === 'bank') return Promise.resolve('銀行');
         if (text === 'drift') return Promise.resolve('漂流');
+        if (text === 'apron') return Promise.resolve('停機坪');
         return Promise.resolve('translated:' + text);
       },
     };
@@ -79,6 +80,9 @@
           }
           if (word === 'drift') {
             return Promise.resolve({ translation: '這是一個明顯過長而且不可信的語境化翻譯結果', method: 'Marker: HTML_u', options });
+          }
+          if (word === 'apron') {
+            return Promise.resolve({ translation: '圍裙', method: 'Fallback: Isolated Translation', options });
           }
           return Promise.resolve({ translation: '', method: 'Fallback: Empty' });
         };
@@ -164,6 +168,26 @@
           assertEqual(response.fallback, true);
           assertEqual(translationCalls.length, beforeCalls + 1);
           assertEqual(translationCalls[translationCalls.length - 1].text, 'bank');
+        },
+      },
+      {
+        name: 'contextual translate treats clever isolated fallback as non-contextual and falls back to google',
+        async run() {
+          const beforeCalls = translationCalls.length;
+          const response = await new Promise((resolve) => window.__bgMessageListener({
+            action: 'translateContextualWord',
+            sentence: 'Pesawat yang membawa mereka mendarat dan berjajar rapi di apron.',
+            word: 'apron',
+            wordPos: 58,
+            sourceLang: 'id',
+            targetLang: 'zh-TW',
+          }, null, resolve));
+          assertEqual(response.translation, '停機坪');
+          assertEqual(response.usedContext, false);
+          assertEqual(response.fallback, true);
+          assertEqual(response.method, 'Fallback: Isolated Translation');
+          assertEqual(translationCalls.length, beforeCalls + 1);
+          assertEqual(translationCalls[translationCalls.length - 1].text, 'apron');
         },
       },
       {

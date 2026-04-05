@@ -160,6 +160,11 @@ function hasSuspiciousTranslationLengthGap(contextualTranslation, directTranslat
 	return contextualLength >= directLength * 3 && (contextualLength - directLength) >= 4;
 }
 
+function isNonContextualCleverMethod(method) {
+	const normalizedMethod = typeof method === "string" ? method.trim().toLowerCase() : "";
+	return normalizedMethod.startsWith("fallback:");
+}
+
 async function translateContextualWordWithFallback(sentence, word, wordPos, sourceLang, targetLang) {
 	const normalizedSentence = typeof sentence === "string" ? sentence.trim() : "";
 	const normalizedWord = typeof word === "string" ? word.trim() : "";
@@ -210,6 +215,9 @@ async function translateContextualWordWithFallback(sentence, word, wordPos, sour
 		const result = await translator.extractWordTranslation(normalizedSentence, normalizedWord, options);
 		if (result && typeof result.translation === "string" && result.translation.trim()) {
 			const translation = result.translation.trim();
+			if (isNonContextualCleverMethod(result.method)) {
+				return fallbackTranslate(result.method || "Fallback: Isolated Translation");
+			}
 			const matchesTargetLanguage = await translationMatchesTargetLanguage(translation, normalizedTargetLang);
 			if (!matchesTargetLanguage) {
 				return fallbackTranslate("Fallback: Target Language Mismatch");
