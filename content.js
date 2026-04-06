@@ -324,8 +324,7 @@ async function resolveContentLanguageHint() {
 	return contentLanguageHintPromise;
 }
 
-async function shouldSkipTranslateAndDictionary(text) {
-	const detected = await detectTextLanguageWithBrowserApi(text);
+function shouldSkipTranslateAndDictionaryForLang(detected) {
 	if (!detected) return false;
 	const browserLang = getBrowserBaseLang();
 	const normalizedDetected = detected === "fil" ? "tl" : detected;
@@ -371,6 +370,22 @@ function splitIntoSentences(text) {
 
 function findNearestContextContainer(node) {
 	return ContentPageProcessingRef.findNearestContextContainerForNode(node, { document }) || document.body;
+}
+
+// Build container text from filtered text nodes — same space as computeNodeOffsetWithinContainer.
+// This excludes extension UI elements (C2 gloss spans, highlight spans, etc.) so the
+// sentence sent to CleverTranslate is not contaminated with injected translations.
+function getCleanContainerText(container) {
+	const nodes = ContentPageProcessingRef.collectContainerTextNodes(container, {
+		document,
+		skipTags: SKIP_TEXT_TAGS,
+		isExtensionUiElement,
+	});
+	let text = "";
+	for (let i = 0; i < nodes.length; i += 1) {
+		text += (nodes[i] && nodes[i].nodeValue) || "";
+	}
+	return text;
 }
 
 function collectTextNodesWithOffsets(container) {
@@ -473,7 +488,7 @@ function getRangeContextForWord(range, selectedWord, languageHint) {
 		};
 	}
 	return buildContextPayloadFromContainer(
-		container.textContent || "",
+		getCleanContainerText(container),
 		trimmedWord,
 		absoluteOffset,
 		languageHint || contentLanguageHint || document.documentElement.lang || navigator.language
@@ -676,7 +691,8 @@ function getRecentContextForWord(word, sourceLang, targetLang, sentence) {
 	return verifiedContext.found ? verifiedContext : null;
 }
 
-function resolveContextualSourceLang(context, fallbackSourceLang) {
+function resolveContextualSourceLang(context, fallbackSourceLang, detectedLangHint) {
+	if (detectedLangHint) return Promise.resolve(detectedLangHint);
 	if (!context || !context.found || !context.sentence) {
 		return Promise.resolve(fallbackSourceLang || "auto");
 	}
@@ -725,22 +741,21 @@ function requestWordTranslationInContext(options) {
 		}
 		return Promise.resolve("");
 	}
-	return resolveContextualSourceLang(context, requestedSourceLang).then((effectiveSourceLang) => {
+	return resolveContextualSourceLang(context, requestedSourceLang, params.detectedLang || "").then((effectiveSourceLang) => {
+		const cacheKey = buildContextualWordCacheKey(context, effectiveSourceLang, requestedTargetLang);
+		if (cacheKey && contextualWordTranslationCache.has(cacheKey)) {
+			return contextualWordTranslationCache.get(cacheKey) || "";
+		}
+		if (params.cacheOnly) {
+			if (recentResolvedEntry && recentResolvedEntry.translation) {
+				return recentResolvedEntry.translation;
+			}
+			return "";
+		}
 		return shouldSkipContextualTranslationForWord(trimmedWord, effectiveSourceLang).then((shouldSkip) => {
 			if (shouldSkip) return "";
-			const cacheKey = buildContextualWordCacheKey(
-				context,
-				effectiveSourceLang,
-				requestedTargetLang
-			);
 			if (cacheKey && contextualWordTranslationCache.has(cacheKey)) {
 				return contextualWordTranslationCache.get(cacheKey) || "";
-			}
-			if (params.cacheOnly) {
-				if (recentResolvedEntry && recentResolvedEntry.translation) {
-					return recentResolvedEntry.translation;
-				}
-				return "";
 			}
 				if (cacheKey && contextualWordTranslationInflight.has(cacheKey)) {
 					return contextualWordTranslationInflight.get(cacheKey);
@@ -834,9 +849,9 @@ function getContentPageProcessingDeps(languageHint) {
 	};
 }
 
-function highlightWords() {
+function highlightWords(roots) {
 	return resolveContentLanguageHint().then((languageHint) => (
-		ContentPageProcessingRef.highlightWords(getContentPageProcessingDeps(languageHint))
+		ContentPageProcessingRef.highlightWords(getContentPageProcessingDeps(languageHint), roots)
 	));
 }
 if (typeof window !== "undefined") {
@@ -1142,16 +1157,17 @@ document.addEventListener("mouseup", function () {
 });
 
 function translateText(text) {
-	shouldSkipTranslateAndDictionary(text).then((shouldSkip) => {
-		if (shouldSkip) return;
-		return Promise.all([
+	// Detect language and load settings in parallel — previously detect was called
+	// twice sequentially (shouldSkip + detectLang). Now one shared call feeds both.
+	Promise.all([
+		detectTextLanguageWithBrowserApi(text),
 		WordStorage.getSourceLang(),
 		typeof WordStorage.getTranslationEngine === "function"
 			? WordStorage.getTranslationEngine().catch(() => "online")
 			: Promise.resolve("online"),
 		WordStorage.getDictionaryLookupEnabled().catch(() => true),
-	]).then(async ([sourceLang, translationEngine, dictionaryEnabled]) => {
-		const detectedLang = await detectTextLanguageWithBrowserApi(text);
+	]).then(([detectedLang, sourceLang, translationEngine, dictionaryEnabled]) => {
+		if (shouldSkipTranslateAndDictionaryForLang(detectedLang)) return;
 		if (detectedLang && TranslationUtilsRef.isSameLanguageFamily(detectedLang, TranslationUtilsRef.getBrowserTargetLang(window.navigator))) {
 			return;
 		}
@@ -1175,6 +1191,9 @@ function translateText(text) {
 				word: text,
 				sourceLang: effectiveSourceLang,
 				targetLang,
+				// Do not pass detectedLang: single-word detection is unreliable
+				// (e.g. "lelaki" may be detected as "ms" not "id").
+				// resolveContextualSourceLang detects from the full sentence instead.
 				languageHint: detectedLang || sourceLang || document.documentElement.lang || navigator.language,
 			})
 			: Promise.resolve("");
@@ -1235,7 +1254,6 @@ function translateText(text) {
 					appendDictionaryToTranslationBox(dictResponse, sourceLang || "auto");
 				}
 			);
-		});
 		});
 	}).catch((error) => {
 		if (!isContextInvalidatedError(error)) {

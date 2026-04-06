@@ -696,6 +696,250 @@
         },
       },
       {
+        name: "findTextNodes handles deeply nested DOM without stack overflow",
+        run() {
+          // Build 200-level deep nesting — recursive version would risk overflow
+          let inner = document.createElement("div");
+          inner.appendChild(document.createTextNode("deep text"));
+          for (let i = 0; i < 200; i += 1) {
+            const wrapper = document.createElement("div");
+            wrapper.appendChild(inner);
+            inner = wrapper;
+          }
+          document.body.appendChild(inner);
+          const nodes = U.findTextNodes(inner, {
+            Node,
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement() { return false; },
+          });
+          assertEqual(nodes.length, 1);
+          assertEqual(nodes[0].nodeValue, "deep text");
+          inner.remove();
+        },
+      },
+      {
+        name: "findTextNodes returns all text nodes across siblings and nesting",
+        run() {
+          const host = document.createElement("div");
+          host.innerHTML = `
+            <p>first paragraph</p>
+            <div><span>nested span</span><em>italic</em></div>
+            <script>skipped script<\/script>
+            <p>third paragraph</p>
+          `;
+          document.body.appendChild(host);
+          const nodes = U.findTextNodes(host, {
+            Node,
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement() { return false; },
+          });
+          const texts = nodes.map((n) => n.nodeValue.trim()).filter(Boolean);
+          assert(texts.includes("first paragraph"), "expected first paragraph");
+          assert(texts.includes("nested span"), "expected nested span");
+          assert(texts.includes("italic"), "expected italic");
+          assert(texts.includes("third paragraph"), "expected third paragraph");
+          assert(!texts.includes("skipped script"), "script content must be excluded");
+          host.remove();
+        },
+      },
+      {
+        name: "highlightWords with roots only highlights within those roots",
+        async run() {
+          const outsideHost = document.createElement("div");
+          outsideHost.textContent = "run outside";
+          const insideHost = document.createElement("div");
+          insideHost.textContent = "run inside";
+          document.body.appendChild(outsideHost);
+          document.body.appendChild(insideHost);
+          const state = { pendingExampleMap: {}, exampleMergeTimer: null, contentTourAttempted: true, contentTourPending: false };
+          U.highlightWords({
+            document,
+            Node,
+            WordStorage: {
+              getWords() { return Promise.resolve({ run: { meaning: "move", learned: false, examples: [] } }); },
+              saveWords() { return Promise.resolve(); },
+            },
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement() { return false; },
+            showWordPreview() {},
+            hideWordPreview() {},
+            splitIntoSentences(text) { return [text]; },
+            isLowInformationExample() { return false; },
+            normalizeText(text) { return (text || "").replace(/\s+/g, " ").trim(); },
+            normalizeExampleList(e) { return e || []; },
+            hasContainmentRelation() { return false; },
+            isTooSimilarToAny() { return false; },
+            enforceExampleLimit(e) { return e; },
+            sortExamples(e) { return e; },
+            maxExamplesPerWord: 20,
+            currentHref() { return "https://example.com/"; },
+            onMergeError(e) { throw e; },
+            onHighlightError(e) { throw e; },
+            markLearned() {},
+            openAddWordModal() {},
+            startContentTour() { return false; },
+            isCurrentDomainExcluded() { return Promise.resolve(false); },
+            state,
+          }, [insideHost]); // <-- roots: only scan insideHost
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          assert(!outsideHost.querySelector(".plugin-highlight-word"), "outside host must NOT be highlighted");
+          assert(insideHost.querySelector(".plugin-highlight-word"), "inside host must be highlighted");
+          outsideHost.remove();
+          insideHost.remove();
+        },
+      },
+      {
+        name: "highlightWords with null roots highlights entire body",
+        async run() {
+          const hostA = document.createElement("div");
+          hostA.textContent = "run first";
+          const hostB = document.createElement("div");
+          hostB.textContent = "run second";
+          document.body.appendChild(hostA);
+          document.body.appendChild(hostB);
+          const state = { pendingExampleMap: {}, exampleMergeTimer: null, contentTourAttempted: true, contentTourPending: false };
+          U.highlightWords({
+            document,
+            Node,
+            WordStorage: {
+              getWords() { return Promise.resolve({ run: { meaning: "move", learned: false, examples: [] } }); },
+              saveWords() { return Promise.resolve(); },
+            },
+            skipTags: new Set(["SCRIPT", "STYLE"]),
+            isExtensionUiElement() { return false; },
+            showWordPreview() {},
+            hideWordPreview() {},
+            splitIntoSentences(text) { return [text]; },
+            isLowInformationExample() { return false; },
+            normalizeText(text) { return (text || "").replace(/\s+/g, " ").trim(); },
+            normalizeExampleList(e) { return e || []; },
+            hasContainmentRelation() { return false; },
+            isTooSimilarToAny() { return false; },
+            enforceExampleLimit(e) { return e; },
+            sortExamples(e) { return e; },
+            maxExamplesPerWord: 20,
+            currentHref() { return "https://example.com/"; },
+            onMergeError(e) { throw e; },
+            onHighlightError(e) { throw e; },
+            markLearned() {},
+            openAddWordModal() {},
+            startContentTour() { return false; },
+            isCurrentDomainExcluded() { return Promise.resolve(false); },
+            state,
+          }, null); // <-- null roots: full body scan
+          await new Promise((resolve) => setTimeout(resolve, 30));
+          assert(hostA.querySelector(".plugin-highlight-word"), "hostA must be highlighted with null roots");
+          assert(hostB.querySelector(".plugin-highlight-word"), "hostB must be highlighted with null roots");
+          hostA.remove();
+          hostB.remove();
+        },
+      },
+      {
+        name: "setupNavigationWatchers: extension highlight span mutations do NOT trigger highlightWords",
+        async run() {
+          let highlightCallCount = 0;
+          const host = document.createElement("div");
+          document.body.appendChild(host);
+          const observer = U.setupNavigationWatchers({
+            document,
+            window,
+            history,
+            MutationObserver,
+            Node,
+            getLocationHref() { return location.href; },
+            highlightWords() { highlightCallCount += 1; },
+            onUrlChange() {},
+          });
+          // Insert extension's own highlight span — must NOT trigger highlightWords
+          const span = document.createElement("span");
+          span.className = "plugin-highlight-word";
+          span.textContent = "run";
+          host.appendChild(span);
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          assertEqual(highlightCallCount, 0, "extension span insertion must not trigger highlightWords");
+          observer.disconnect();
+          host.remove();
+        },
+      },
+      {
+        name: "setupNavigationWatchers: non-extension DOM addition triggers highlightWords",
+        async run() {
+          let highlightCallCount = 0;
+          let lastRoots;
+          const host = document.createElement("div");
+          document.body.appendChild(host);
+          const observer = U.setupNavigationWatchers({
+            document,
+            window,
+            history,
+            MutationObserver,
+            Node,
+            getLocationHref() { return location.href; },
+            highlightWords(roots) {
+              highlightCallCount += 1;
+              lastRoots = roots;
+            },
+            onUrlChange() {},
+          });
+          // Insert a real content element — must trigger highlightWords
+          const newPara = document.createElement("p");
+          newPara.textContent = "new SPA content loaded";
+          host.appendChild(newPara);
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          assert(highlightCallCount >= 1, "new content addition must trigger highlightWords");
+          assert(Array.isArray(lastRoots), "roots should be an array for incremental scan");
+          assert(lastRoots.includes(newPara), "new paragraph should be in roots");
+          observer.disconnect();
+          host.remove();
+        },
+      },
+      {
+        name: "highlightWords with disconnected roots skips them gracefully",
+        async run() {
+          const host = document.createElement("div");
+          host.textContent = "run away";
+          // Note: host is NOT appended to document.body, so it's disconnected
+          const state = { pendingExampleMap: {}, exampleMergeTimer: null, contentTourAttempted: true, contentTourPending: false };
+          let threw = false;
+          try {
+            U.highlightWords({
+              document,
+              Node,
+              WordStorage: {
+                getWords() { return Promise.resolve({ run: { meaning: "move", learned: false, examples: [] } }); },
+                saveWords() { return Promise.resolve(); },
+              },
+              skipTags: new Set(["SCRIPT", "STYLE"]),
+              isExtensionUiElement() { return false; },
+              showWordPreview() {},
+              hideWordPreview() {},
+              splitIntoSentences(text) { return [text]; },
+              isLowInformationExample() { return false; },
+              normalizeText(text) { return (text || "").replace(/\s+/g, " ").trim(); },
+              normalizeExampleList(e) { return e || []; },
+              hasContainmentRelation() { return false; },
+              isTooSimilarToAny() { return false; },
+              enforceExampleLimit(e) { return e; },
+              sortExamples(e) { return e; },
+              maxExamplesPerWord: 20,
+              currentHref() { return "https://example.com/"; },
+              onMergeError(e) { throw e; },
+              onHighlightError(e) { throw e; },
+              markLearned() {},
+              openAddWordModal() {},
+              startContentTour() { return false; },
+              isCurrentDomainExcluded() { return Promise.resolve(false); },
+              state,
+            }, [host]); // disconnected host
+            await new Promise((resolve) => setTimeout(resolve, 30));
+          } catch (e) {
+            threw = true;
+          }
+          assert(!threw, "disconnected roots must not throw");
+          assert(!host.querySelector(".plugin-highlight-word"), "disconnected root must not be highlighted");
+        },
+      },
+      {
         name: "highlightWords uses explicit stored root when another word family form conflicts",
         async run() {
           const host = document.createElement("div");

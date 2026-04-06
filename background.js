@@ -150,14 +150,19 @@ function normalizeTranslationLengthSample(text) {
 	return String(text || "").trim();
 }
 
-function hasSuspiciousTranslationLengthGap(contextualTranslation, directTranslation) {
-	const contextualSample = normalizeTranslationLengthSample(contextualTranslation);
-	const directSample = normalizeTranslationLengthSample(directTranslation);
-	if (!contextualSample || !directSample) return false;
-	const contextualLength = contextualSample.length;
-	const directLength = directSample.length;
-	if (directLength <= 0) return false;
-	return contextualLength >= directLength * 3 && (contextualLength - directLength) >= 4;
+function hasSuspiciousContextualLength(contextualTranslation, sourceWord) {
+	const contextual = normalizeTranslationLengthSample(contextualTranslation);
+	const source = normalizeTranslationLengthSample(sourceWord);
+	if (!contextual || !source) return false;
+	const isCjkOutput = /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(contextual);
+	if (isCjkOutput) {
+		// CJK: single-word translations are normally 1–6 chars; much longer is suspicious
+		return contextual.length > Math.max(source.length * 1.5, 8);
+	}
+	// Non-CJK: more than 5 words suggests a sentence rather than a word translation
+	const wordCount = contextual.split(/\s+/).filter(Boolean).length;
+	if (wordCount > 5) return true;
+	return contextual.length > Math.max(source.length * 4, 25);
 }
 
 function isNonContextualCleverMethod(method) {
@@ -181,13 +186,14 @@ async function translateContextualWordWithFallback(sentence, word, wordPos, sour
 		normalizedTargetLang
 	);
 
-	async function fallbackTranslate(method) {
-		const translation = normalizedWord
-			? await translateWithGoogle(normalizedWord, normalizedSourceLang, normalizedTargetLang).catch(() => "")
-			: "";
-		return rememberContextualTranslation(
-			cacheKey,
-			buildContextualTranslationResponse(translation, method, false, true)
+	function fallbackTranslate(method) {
+		// Content-side ignores fallback=true results entirely, so skip the Google
+		// Translate call here — it would be a wasted round-trip.
+		return Promise.resolve(
+			rememberContextualTranslation(
+				cacheKey,
+				buildContextualTranslationResponse("", method, false, true)
+			)
 		);
 	}
 
@@ -222,13 +228,10 @@ async function translateContextualWordWithFallback(sentence, word, wordPos, sour
 			if (!matchesTargetLanguage) {
 				return fallbackTranslate("Fallback: Target Language Mismatch");
 			}
-			const directTranslation = normalizedWord
-				? await translateWithGoogle(normalizedWord, normalizedSourceLang, normalizedTargetLang).catch(() => "")
-				: "";
-			if (hasSuspiciousTranslationLengthGap(translation, directTranslation)) {
+			if (hasSuspiciousContextualLength(translation, normalizedWord)) {
 				return rememberContextualTranslation(
 					cacheKey,
-					buildContextualTranslationResponse(directTranslation, "Fallback: Length Mismatch", false, true)
+					buildContextualTranslationResponse("", "Fallback: Length Mismatch", false, true)
 				);
 			}
 			return rememberContextualTranslation(

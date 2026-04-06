@@ -152,7 +152,7 @@
         },
       },
       {
-        name: 'contextual translate falls back to google when clever translate has no hit',
+        name: 'contextual translate returns fallback with empty translation when clever translate has no hit',
         async run() {
           const beforeCalls = translationCalls.length;
           const response = await new Promise((resolve) => window.__bgMessageListener({
@@ -163,15 +163,15 @@
             sourceLang: 'en',
             targetLang: 'zh-TW',
           }, null, resolve));
-          assertEqual(response.translation, '銀行');
+          assertEqual(response.translation, '');
           assertEqual(response.usedContext, false);
           assertEqual(response.fallback, true);
-          assertEqual(translationCalls.length, beforeCalls + 1);
-          assertEqual(translationCalls[translationCalls.length - 1].text, 'bank');
+          // No Google call — content-side ignores fallback results anyway
+          assertEqual(translationCalls.length, beforeCalls);
         },
       },
       {
-        name: 'contextual translate treats clever isolated fallback as non-contextual and falls back to google',
+        name: 'contextual translate treats clever isolated fallback as non-contextual without calling google',
         async run() {
           const beforeCalls = translationCalls.length;
           const response = await new Promise((resolve) => window.__bgMessageListener({
@@ -182,16 +182,15 @@
             sourceLang: 'id',
             targetLang: 'zh-TW',
           }, null, resolve));
-          assertEqual(response.translation, '停機坪');
+          assertEqual(response.translation, '');
           assertEqual(response.usedContext, false);
           assertEqual(response.fallback, true);
           assertEqual(response.method, 'Fallback: Isolated Translation');
-          assertEqual(translationCalls.length, beforeCalls + 1);
-          assertEqual(translationCalls[translationCalls.length - 1].text, 'apron');
+          assertEqual(translationCalls.length, beforeCalls);
         },
       },
       {
-        name: 'contextual translate falls back to google when clever result language mismatches target language',
+        name: 'contextual translate returns fallback when clever result language mismatches target language',
         async run() {
           const beforeCalls = translationCalls.length;
           const response = await new Promise((resolve) => window.__bgMessageListener({
@@ -202,15 +201,15 @@
             sourceLang: 'en',
             targetLang: 'zh-TW',
           }, null, resolve));
-          assertEqual(response.translation, '銀行');
+          assertEqual(response.translation, '');
           assertEqual(response.usedContext, false);
           assertEqual(response.fallback, true);
           assertEqual(response.method, 'Fallback: Target Language Mismatch');
-          assertEqual(translationCalls.length, beforeCalls + 1);
+          assertEqual(translationCalls.length, beforeCalls);
         },
       },
       {
-        name: 'contextual translate falls back to google when clever result length deviates too much from direct translation',
+        name: 'contextual translate detects suspicious length via local heuristic without calling google',
         async run() {
           const beforeCalls = translationCalls.length;
           const response = await new Promise((resolve) => window.__bgMessageListener({
@@ -221,11 +220,12 @@
             sourceLang: 'en',
             targetLang: 'zh-TW',
           }, null, resolve));
-          assertEqual(response.translation, '漂流');
+          assertEqual(response.translation, '');
           assertEqual(response.usedContext, false);
           assertEqual(response.fallback, true);
           assertEqual(response.method, 'Fallback: Length Mismatch');
-          assertEqual(translationCalls.length, beforeCalls + 1);
+          // No extra Google call — length check now uses local heuristic
+          assertEqual(translationCalls.length, beforeCalls);
         },
       },
       {
