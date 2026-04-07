@@ -1344,21 +1344,22 @@ function pageMatchesSrcLang(srcLang) {
 			// or unusual structure), fall back to body text for a better sample.
 			const fullSample = rawSample.length >= 200 ? rawSample : (document.body && document.body.innerText || "");
 			const sample = fullSample.slice(0, 4000);
-			// Not enough text to make a reliable judgement — allow through.
-			if (sample.length < 100) { resolve(true); return; }
+			// Not enough text to make a reliable judgement — deny rather than allow through
+			// (avoids false positives on SPA pages that haven't fully rendered yet).
+			if (sample.length < 200) { resolve(false); return; }
 			chrome.i18n.detectLanguage(sample, (result) => {
 				if (chrome.runtime.lastError || !result || !Array.isArray(result.languages) || result.languages.length === 0) {
-					resolve(true); return;
+					resolve(false); return;
 				}
-				// Always check the top detected language — don't blindly allow through when
-				// isReliable is false, because that's exactly when mixed-language pages slip in.
+				// Require the top detected language to be srcLang with clear dominance.
+				// 55% threshold avoids false positives on mixed-language or English-heavy pages.
 				const top = result.languages[0];
-				if (!top) { resolve(true); return; }
+				if (!top) { resolve(false); return; }
 				const topLang = (top.language || "").split("-")[0].toLowerCase();
 				// id and ms (Indonesian / Malay) are nearly identical — treat as equivalent.
 				const LANG_ALIASES = { "id": "ms", "ms": "id" };
 				const topMatches = topLang === srcLang || LANG_ALIASES[srcLang] === topLang;
-				resolve(topMatches && top.percentage >= 40);
+				resolve(topMatches && top.percentage >= 55);
 			});
 		} catch (_) {
 			resolve(true);
@@ -1416,7 +1417,9 @@ function setupNavigationWatchers(sourceLang) {
 		highlightWords,
 		onUrlChange: () => {
 			wordfreqPageEnabled = false;
-			setTimeout(() => checkAndActivateWordfreq(sourceLang), 300);
+			// Use a longer delay after SPA navigation to let the new page content render
+			// before sampling text for language detection.
+			setTimeout(() => checkAndActivateWordfreq(sourceLang), 1200);
 		},
 	});
 }
