@@ -671,7 +671,10 @@ function getRecentResolvedContextualEntry(word, sourceLang, targetLang, sentence
 			: null
 	);
 	if (!entry) return null;
-	if (Date.now() - entry.updatedAt > 30000) return null;
+	if (Date.now() - entry.updatedAt > 30000) {
+		recentResolvedContextualWordQueries.delete(recentKey);
+		return null;
+	}
 	if (entry.word !== normalizedWord) return null;
 	if (entry.targetLang !== normalizedTargetLang) return null;
 	if (entry.sentence !== normalizedSentence) return null;
