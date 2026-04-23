@@ -108,6 +108,16 @@ function startContentSelectionTour(force) {
 	});
 }
 
+function startContentDifficultyTour(force) {
+	if (!globalThis.UiTour) return;
+	const run = force ? UiTour.start : UiTour.maybeStartOnce;
+	return run({
+		storageKey: "content_difficulty_v1",
+		lang: contentUiLang,
+		steps: UiTour.getSteps(contentUiLang, "contentDifficulty"),
+	});
+}
+
 function isContextInvalidatedError(error) {
 	if (!error || typeof error.message !== "string") return false;
 	const msg = error.message;
@@ -1403,6 +1413,8 @@ function checkAndActivateWordfreq(lang) {
 					.then((r) => (r && r.lemma) || null)
 					.catch(() => null),
 			});
+		// Give the panel a moment to render before starting the tour.
+		setTimeout(() => startContentDifficultyTour(false), 1500);
 		}
 	}).catch(() => {});
 }

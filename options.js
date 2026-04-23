@@ -18,7 +18,10 @@ document.addEventListener("DOMContentLoaded", function () {
 	const saveStatus = document.getElementById("saveStatus");
 	const syncBtn = document.getElementById("syncBtn");
 	const helpBtn = document.getElementById("helpBtn");
+	const exportMenuBtn = document.getElementById("exportMenuBtn");
+	const exportMenu = document.getElementById("exportMenu");
 	const exportBtn = document.getElementById("exportBtn");
+	const exportCsvBtn = document.getElementById("exportCsvBtn");
 	const importBtn = document.getElementById("importBtn");
 	const importFile = document.getElementById("importFile");
 	const simpleImportInput = document.getElementById("simpleImportInput");
@@ -171,7 +174,9 @@ document.addEventListener("DOMContentLoaded", function () {
 		addExcludedDomainBtn.textContent = t(uiLang, "add");
 		saveBtn.textContent = t(uiLang, "save");
 		syncBtn.textContent = t(uiLang, "sync_now");
-		exportBtn.textContent = t(uiLang, "export");
+		exportMenuBtn.textContent = t(uiLang, "export") + " ▾";
+		exportBtn.textContent = t(uiLang, "export_json");
+		exportCsvBtn.textContent = t(uiLang, "export_csv");
 		importBtn.textContent = t(uiLang, "import");
 		if (helpBtn && globalThis.UiTour) {
 			helpBtn.title = UiTour.getLabel(uiLang, "replay");
@@ -554,7 +559,17 @@ document.addEventListener("DOMContentLoaded", function () {
 		});
 	});
 
+	exportMenuBtn.addEventListener("click", function (e) {
+		e.stopPropagation();
+		exportMenu.classList.toggle("open");
+	});
+
+	document.addEventListener("click", function () {
+		exportMenu.classList.remove("open");
+	});
+
 	exportBtn.addEventListener("click", function () {
+		exportMenu.classList.remove("open");
 		const uiLanguage = uiLanguageSelect.value || "zh-TW";
 		WordStorage.exportData().then(function (items) {
 			const dataStr =
@@ -567,6 +582,45 @@ document.addEventListener("DOMContentLoaded", function () {
 			a.click();
 			a.remove();
 			UiToast.show(t(uiLanguage, "exported"), "success");
+		}).catch(function () {
+			UiToast.show(t(uiLanguage, "save_failed"), "error");
+		});
+	});
+
+	exportCsvBtn.addEventListener("click", function () {
+		exportMenu.classList.remove("open");
+		const uiLanguage = uiLanguageSelect.value || "zh-TW";
+		WordStorage.exportData().then(function (data) {
+			const words = data && data.words ? data.words : {};
+			// RFC 4180: wrap field in double quotes if it contains comma, double-quote, or newline;
+			// escape internal double quotes by doubling them.
+			function csvField(val) {
+				const s = String(val == null ? "" : val);
+				if (s.includes('"') || s.includes(',') || s.includes('\n') || s.includes('\r')) {
+					return '"' + s.replace(/"/g, '""') + '"';
+				}
+				return s;
+			}
+			const lines = [["Word", "Meaning", "Example", "Example Translation"].map(csvField).join(",")];
+			Object.keys(words).forEach(function (word) {
+				const d = words[word] || {};
+				const meaning = d.meaning || "";
+				const examples = Array.isArray(d.examples) ? d.examples : [];
+				const ex = examples.find(function (e) { return e && e.text; }) || {};
+				const exText = ex.text || "";
+				const exTranslation = ex.translation || "";
+				lines.push([csvField(word), csvField(meaning), csvField(exText), csvField(exTranslation)].join(","));
+			});
+			const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement("a");
+			a.setAttribute("href", url);
+			a.setAttribute("download", "wordlist-anki.csv");
+			document.body.appendChild(a);
+			a.click();
+			a.remove();
+			URL.revokeObjectURL(url);
+			UiToast.show(t(uiLanguage, "exported_csv"), "success");
 		}).catch(function () {
 			UiToast.show(t(uiLanguage, "save_failed"), "error");
 		});
@@ -591,7 +645,9 @@ document.addEventListener("DOMContentLoaded", function () {
 	importFile.addEventListener("change", function (event) {
 		const file = event.target.files[0];
 		const uiLanguage = uiLanguageSelect.value || "zh-TW";
-		if (!(file && file.type === "application/json")) {
+		if (!file) return;
+		const isJson = file.type === "application/json" || file.name.toLowerCase().endsWith(".json");
+		if (!isJson) {
 			UiToast.show(t(uiLanguage, "import_failed"), "error");
 			return;
 		}
@@ -599,8 +655,14 @@ document.addEventListener("DOMContentLoaded", function () {
 		reader.onload = function (e) {
 			try {
 				const items = JSON.parse(e.target.result);
+				if (!items || typeof items.words !== "object" || Array.isArray(items.words)) {
+					UiToast.show(t(uiLanguage, "import_failed"), "error");
+					return;
+				}
+				const count = Object.keys(items.words).length;
 				WordStorage.importData(items).then(function () {
-					UiToast.show(t(uiLanguage, "imported"), "success");
+					const msg = t(uiLanguage, "imported_count").replace("{count}", count);
+					UiToast.show(msg, "success");
 				}).catch(function () {
 					UiToast.show(t(uiLanguage, "import_failed"), "error");
 				});

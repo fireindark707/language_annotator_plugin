@@ -45,6 +45,9 @@
       contentSelection: [
         { target: "#translationBox", title: "這裡是即時翻譯結果", body: "當你選取頁面文字時，外掛會直接在原頁面旁邊顯示翻譯；若是單詞，也可能同時補上發音、詞典與原型相關提示。", placement: "bottom" },
         { target: "#translationDictionary", title: "單詞被查到時也會帶出詞典", body: "如果這次選取的是可查詞典的單詞，這裡會補上詞性與解釋，必要時也會提示目前詞形與原型版本。若想正式加入字庫，請保持選字後按右鍵使用外掛選單。", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "這是文章難度評估面板", body: "當外掛偵測到目前頁面是你的學習語言，且文章夠長時，會自動分析詞彙分佈並在左下角顯示 CEFR 等級（A1 到 C2）。色條顯示各等級詞彙的比例；若有 C2 罕見詞，會直接在文章中標注翻譯供你參考。", placement: "right" }
       ]
     },
     "zh-CN": {
@@ -89,6 +92,9 @@
       contentSelection: [
         { target: "#translationBox", title: "这里是即时翻译结果", body: "当你选取页面文字时，扩展会直接在原页面旁边显示翻译；如果是单词，也可能同时补上发音、词典与原型提示。", placement: "bottom" },
         { target: "#translationDictionary", title: "查得到时也会补上词典", body: "如果这次选取的是可查词典的单词，这里会补上词性与解释，必要时也会提示当前词形与原型版本。若你想把它正式加入词库，请保持选字后右键使用扩展菜单。", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "这是文章难度评估面板", body: "当插件检测到当前页面是你的学习语言且文章足够长时，会自动分析词汇分布并在左下角显示 CEFR 等级（A1 到 C2）。色条显示各等级词汇的比例；若有 C2 罕见词，会直接在文章中标注翻译供你参考。", placement: "right" }
       ]
     },
     en: {
@@ -133,6 +139,9 @@
       contentSelection: [
         { target: "#translationBox", title: "This is the instant translation box", body: "When you select text on a page, the extension shows the translation right beside your reading flow. For single words, it may also add pronunciation, dictionary results, and base-form hints.", placement: "bottom" },
         { target: "#translationDictionary", title: "Dictionary data appears when available", body: "If the selected text is a dictionary-supported word, this area adds part of speech and definitions, and may also explain the current form versus the base form. To save it properly, keep the selection and use the extension from the right-click menu.", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "This is the article difficulty panel", body: "When the extension detects that the current page is in your study language and the article is long enough, it automatically analyses the vocabulary distribution and shows a CEFR level (A1 to C2) in the bottom-left corner. The colour bar shows the proportion of words at each level. Rare C2 words are annotated inline with translations so you can read without stopping.", placement: "right" }
       ]
     },
     fr: {
@@ -177,6 +186,9 @@
       contentSelection: [
         { target: "#translationBox", title: "Voici la bulle de traduction instantanée", body: "Quand vous sélectionnez du texte dans une page, l'extension affiche la traduction juste à côté. Pour un mot seul, elle peut aussi ajouter la prononciation, le dictionnaire et des indications sur la forme de base.", placement: "bottom" },
         { target: "#translationDictionary", title: "Les données du dictionnaire apparaissent si disponibles", body: "Si le texte sélectionné correspond à un mot pris en charge par le dictionnaire, cette zone ajoute la catégorie grammaticale et les définitions, et peut aussi distinguer la forme actuelle de la forme de base. Pour l'enregistrer correctement, gardez la sélection puis utilisez le menu de l'extension avec le clic droit.", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "Voici le panneau de difficulté de l'article", body: "Quand l'extension détecte que la page est dans votre langue d'apprentissage et que l'article est assez long, elle analyse automatiquement la distribution du vocabulaire et affiche le niveau CECRL (A1 à C2) en bas à gauche. La barre de couleur montre la proportion de mots par niveau. Les mots rares C2 sont annotés directement dans le texte avec leur traduction.", placement: "right" }
       ]
     },
     pt: {
@@ -221,6 +233,9 @@
       contentSelection: [
         { target: "#translationBox", title: "Esta é a caixa de tradução instantânea", body: "Quando você seleciona texto em uma página, a extensão mostra a tradução ao lado da leitura. Para palavras isoladas, ela também pode acrescentar pronúncia, dicionário e pistas sobre a forma base.", placement: "bottom" },
         { target: "#translationDictionary", title: "Os dados do dicionário aparecem quando disponíveis", body: "Se o texto selecionado for uma palavra suportada pelo dicionário, esta área acrescenta classe gramatical e definições, e pode explicar a forma atual em relação à forma base. Para salvá-la corretamente, mantenha a seleção e use o menu da extensão com o botão direito.", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "Este é o painel de dificuldade do artigo", body: "Quando a extensão detecta que a página está no seu idioma de estudo e o artigo é longo o suficiente, ela analisa automaticamente a distribuição do vocabulário e mostra o nível CEFR (A1 a C2) no canto inferior esquerdo. A barra colorida mostra a proporção de palavras em cada nível. As palavras raras C2 são anotadas diretamente no texto com traduções.", placement: "right" }
       ]
     },
     ar: {
@@ -265,6 +280,9 @@
       contentSelection: [
         { target: "#translationBox", title: "هذه نافذة الترجمة الفورية", body: "عندما تحدد نصاً في الصفحة، تعرض الإضافة الترجمة بجانب قراءتك. وإذا كان التحديد كلمة واحدة، فقد تضيف أيضاً النطق ونتائج القاموس وإشارة إلى الصيغة الأساسية.", placement: "bottom" },
         { target: "#translationDictionary", title: "تظهر بيانات القاموس عند توفرها", body: "إذا كان النص المحدد كلمة مدعومة في القاموس، تضيف هذه المنطقة نوع الكلمة والتعريفات، وقد تشرح أيضاً الفرق بين الصيغة الحالية والصيغة الأساسية. لحفظها بشكل صحيح، أبقِ التحديد واستخدم قائمة الإضافة عبر الزر الأيمن.", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "هذه لوحة صعوبة المقال", body: "عندما تكتشف الإضافة أن الصفحة مكتوبة بلغتك المدروسة وأن المقال طويل بما يكفي، تحلل تلقائياً توزيع المفردات وتعرض مستوى CEFR (من A1 إلى C2) في الزاوية السفلية اليسرى. يوضح الشريط الملوّن نسبة الكلمات في كل مستوى. تُشرح الكلمات النادرة C2 مباشرةً في النص بترجمة مدمجة.", placement: "right" }
       ]
     },
     hi: {
@@ -309,6 +327,9 @@
       contentSelection: [
         { target: "#translationBox", title: "यह त्वरित अनुवाद बॉक्स है", body: "जब आप पेज पर टेक्स्ट चुनते हैं, एक्सटेंशन पढ़ने के प्रवाह के पास ही अनुवाद दिखाता है। यदि चयन एक शब्द है, तो यह उच्चारण, शब्दकोश और मूल रूप से जुड़ी जानकारी भी दिखा सकता है।", placement: "bottom" },
         { target: "#translationDictionary", title: "उपलब्ध होने पर शब्दकोश डेटा दिखता है", body: "अगर चुना गया टेक्स्ट शब्दकोश-सपोर्टेड शब्द है, तो यह क्षेत्र शब्द-भेद और परिभाषाएँ जोड़ता है, और ज़रूरत होने पर वर्तमान रूप और मूल रूप का अंतर भी बताता है। इसे सही तरह सहेजने के लिए चयन बनाए रखें और राइट-क्लिक मेनू से एक्सटेंशन का उपयोग करें।", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "यह लेख कठिनाई पैनल है", body: "जब एक्सटेंशन पता लगाता है कि पेज आपकी अध्ययन भाषा में है और लेख पर्याप्त लंबा है, तो यह स्वचालित रूप से शब्दावली वितरण का विश्लेषण करता है और नीचे-बाईं ओर CEFR स्तर (A1 से C2) दिखाता है। रंगीन पट्टी प्रत्येक स्तर पर शब्दों का अनुपात दर्शाती है। दुर्लभ C2 शब्दों को सीधे पाठ में अनुवाद के साथ चिह्नित किया जाता है।", placement: "right" }
       ]
     },
     ja: {
@@ -353,6 +374,9 @@
       contentSelection: [
         { target: "#translationBox", title: "これは即時翻訳ボックスです", body: "ページ上で文字を選択すると、読書の流れを止めずにその場で翻訳が表示されます。単語を選んだ場合は、発音・辞書・基本形のヒントも追加されることがあります。", placement: "bottom" },
         { target: "#translationDictionary", title: "利用可能なら辞書情報も表示されます", body: "選択した文字が辞書対応の単語なら、この領域に品詞や定義が追加され、必要に応じて現在の語形と基本形の違いも示されます。正しく保存したい場合は、選択状態を保ったまま右クリックメニューから拡張機能を使ってください。", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "これは記事難易度パネルです", body: "拡張機能が現在のページを学習言語と検出し、かつ記事が十分な長さであれば、自動的に語彙分布を分析して左下に CEFR レベル（A1 〜 C2）を表示します。カラーバーは各レベルの単語の割合を示します。希少な C2 単語は翻訳付きでテキスト内に直接注釈表示されます。", placement: "right" }
       ]
     },
     ko: {
@@ -397,6 +421,9 @@
       contentSelection: [
         { target: "#translationBox", title: "이것이 즉시 번역 상자입니다", body: "페이지에서 텍스트를 선택하면 읽는 흐름을 끊지 않고 바로 옆에 번역이 표시됩니다. 단어를 선택한 경우 발음, 사전, 기본형 관련 힌트도 함께 나타날 수 있습니다.", placement: "bottom" },
         { target: "#translationDictionary", title: "가능할 때 사전 정보도 함께 나옵니다", body: "선택한 텍스트가 사전 지원 단어라면 이 영역에 품사와 정의가 추가되고, 필요하면 현재 형태와 기본형의 차이도 설명합니다. 제대로 저장하려면 선택 상태를 유지한 채 오른쪽 클릭 메뉴에서 확장 기능을 사용하세요.", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "이것은 글 난이도 패널입니다", body: "확장 기능이 현재 페이지가 학습 언어로 작성되었고 글이 충분히 길다고 감지하면, 자동으로 어휘 분포를 분석하여 왼쪽 하단에 CEFR 수준(A1~C2)을 표시합니다. 색상 막대는 각 수준별 단어 비율을 나타냅니다. 드문 C2 단어는 번역과 함께 본문에 직접 표시됩니다.", placement: "right" }
       ]
     },
     id: {
@@ -441,6 +468,9 @@
       contentSelection: [
         { target: "#translationBox", title: "Ini adalah kotak terjemahan instan", body: "Saat kamu memilih teks di halaman, ekstensi menampilkan terjemahan tepat di samping alur membaca. Untuk kata tunggal, ekstensi juga bisa menambahkan pelafalan, kamus, dan petunjuk tentang bentuk dasar.", placement: "bottom" },
         { target: "#translationDictionary", title: "Data kamus muncul bila tersedia", body: "Jika teks yang dipilih adalah kata yang didukung kamus, area ini menambahkan kelas kata dan definisi, dan bila perlu juga menjelaskan bentuk saat ini dibanding bentuk dasarnya. Untuk menyimpannya dengan benar, pertahankan seleksi lalu gunakan ekstensi dari menu klik kanan.", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "Ini adalah panel kesulitan artikel", body: "Saat ekstensi mendeteksi bahwa halaman menggunakan bahasa belajarmu dan artikelnya cukup panjang, ekstensi otomatis menganalisis distribusi kosakata dan menampilkan level CEFR (A1 hingga C2) di pojok kiri bawah. Bilah warna menunjukkan proporsi kata di setiap level. Kata-kata C2 yang jarang digunakan diberi anotasi langsung di teks beserta terjemahannya.", placement: "right" }
       ]
     },
     ru: {
@@ -485,6 +515,9 @@
       contentSelection: [
         { target: "#translationBox", title: "Это окно мгновенного перевода", body: "Когда вы выделяете текст на странице, расширение показывает перевод прямо рядом с чтением. Для отдельных слов оно также может добавить произношение, словарь и подсказки о базовой форме.", placement: "bottom" },
         { target: "#translationDictionary", title: "Данные словаря появляются, если доступны", body: "Если выделенный текст — слово, поддерживаемое словарём, эта область добавит часть речи и определения, а при необходимости также объяснит текущую форму и базовую форму. Чтобы сохранить его правильно, удерживайте выделение и используйте расширение через контекстное меню.", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "Это панель сложности статьи", body: "Когда расширение определяет, что страница написана на изучаемом вами языке и статья достаточно длинная, оно автоматически анализирует распределение лексики и показывает уровень CEFR (от A1 до C2) в левом нижнем углу. Цветная полоса отображает долю слов каждого уровня. Редкие слова C2 аннотируются прямо в тексте с переводом.", placement: "right" }
       ]
     },
     es: {
@@ -529,6 +562,9 @@
       contentSelection: [
         { target: "#translationBox", title: "Esta es la caja de traducción instantánea", body: "Cuando seleccionas texto en una página, la extensión muestra la traducción justo al lado de tu lectura. Si seleccionas una sola palabra, también puede añadir pronunciación, diccionario y pistas sobre la forma base.", placement: "bottom" },
         { target: "#translationDictionary", title: "Los datos del diccionario aparecen cuando están disponibles", body: "Si el texto seleccionado es una palabra compatible con el diccionario, esta zona añade categoría gramatical y definiciones, y cuando hace falta también explica la forma actual frente a la forma base. Para guardarla correctamente, mantén la selección y usa la extensión desde el menú del clic derecho.", placement: "top" }
+      ],
+      contentDifficulty: [
+        { target: "#laDifficultyPanel", title: "Este es el panel de dificultad del artículo", body: "Cuando la extensión detecta que la página está en tu idioma de estudio y el artículo es suficientemente largo, analiza automáticamente la distribución del vocabulario y muestra el nivel MCER (A1 a C2) en la esquina inferior izquierda. La barra de color muestra la proporción de palabras en cada nivel. Las palabras raras C2 aparecen anotadas directamente en el texto con su traducción.", placement: "right" }
       ]
     }
   };
