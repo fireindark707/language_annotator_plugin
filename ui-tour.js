@@ -48,6 +48,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "這是文章難度評估面板", body: "當外掛偵測到目前頁面是你的學習語言，且文章夠長時，會自動分析詞彙分佈並在左下角顯示 CEFR 等級（A1 到 C2）。色條顯示各等級詞彙的比例；若有 C2 罕見詞，會直接在文章中標注翻譯供你參考。", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "目錄側欄", body: "點擊這個按鈕可以展開或收起左側目錄，快速跳到任意章節。", placement: "bottom" },
+        { target: "#chapterNav", title: "章節導航", body: "用左右箭頭切換上下章節，或直接在下拉選單選擇任意章節跳轉。", placement: "bottom" },
+        { target: "#fontSelect", title: "字體選擇", body: "從 15 種預設字體中選擇，涵蓋西文、CJK、阿拉伯語等主要語系。選取後自動從 Google Fonts 載入，離線時則退回系統字體。", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "字體大小與粗細", body: "A− / A+ 調整字級，旁邊三個 W 按鈕調整字重（細 / 常規 / 粗）。設定會自動保留，下次開啟時恢復。", placement: "bottom" },
+        { target: "#widthGroup", title: "閱讀寬度", body: "拖動滑桿控制文字欄最大寬度。窄一點更護眼，寬一點資訊密度更高。", placement: "bottom" },
+        { target: "#themeToggle", title: "主題切換", body: "☕ 溫暖米色（預設）、☀ 明亮白底、🌙 夜間深色，三種主題，適合不同光線環境。", placement: "bottom" },
+        { target: "#shelfBtn", title: "返回書架", body: "點此回到書架頁，可以切換書籍或拖入新的 epub / mobi / pdf 檔案。閱讀進度會自動記住。", placement: "bottom" }
       ]
     },
     "zh-CN": {
@@ -95,6 +104,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "这是文章难度评估面板", body: "当插件检测到当前页面是你的学习语言且文章足够长时，会自动分析词汇分布并在左下角显示 CEFR 等级（A1 到 C2）。色条显示各等级词汇的比例；若有 C2 罕见词，会直接在文章中标注翻译供你参考。", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "目录侧栏", body: "点击此按钮可以展开或收起左侧目录，快速跳到任意章节。", placement: "bottom" },
+        { target: "#chapterNav", title: "章节导航", body: "用左右箭头切换上下章节，或直接在下拉菜单选择任意章节跳转。", placement: "bottom" },
+        { target: "#fontSelect", title: "字体选择", body: "从 15 种预设字体中选择，涵盖西文、CJK、阿拉伯语等主要语系。选取后自动从 Google Fonts 载入，离线时退回系统字体。", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "字体大小与粗细", body: "A− / A+ 调整字级，旁边三个 W 按钮调整字重（细 / 常规 / 粗）。设定会自动保留，下次打开时恢复。", placement: "bottom" },
+        { target: "#widthGroup", title: "阅读宽度", body: "拖动滑块控制文字栏最大宽度。窄一点更护眼，宽一点信息密度更高。", placement: "bottom" },
+        { target: "#themeToggle", title: "主题切换", body: "☕ 温暖米色（默认）、☀ 明亮白底、🌙 夜间深色，三种主题适合不同光线环境。", placement: "bottom" },
+        { target: "#shelfBtn", title: "返回书架", body: "点此回到书架页，可以切换书籍或拖入新的 epub / mobi / pdf 文件。阅读进度会自动记住。", placement: "bottom" }
       ]
     },
     en: {
@@ -142,6 +160,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "This is the article difficulty panel", body: "When the extension detects that the current page is in your study language and the article is long enough, it automatically analyses the vocabulary distribution and shows a CEFR level (A1 to C2) in the bottom-left corner. The colour bar shows the proportion of words at each level. Rare C2 words are annotated inline with translations so you can read without stopping.", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "Table of contents", body: "Click this button to open or close the chapter sidebar. Jump to any chapter instantly.", placement: "bottom" },
+        { target: "#chapterNav", title: "Chapter navigation", body: "Use the arrows to move between chapters, or pick any chapter directly from the dropdown.", placement: "bottom" },
+        { target: "#fontSelect", title: "Font family", body: "Choose from 15 presets covering Latin, CJK, Arabic, and Devanagari. Selected fonts load from Google Fonts; system fallbacks apply when offline.", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "Font size and weight", body: "A− / A+ adjusts the text size. The three W buttons set the weight: light, regular, or bold. Your preferences are saved automatically.", placement: "bottom" },
+        { target: "#widthGroup", title: "Reading column width", body: "Drag the slider to control the maximum width of the text column. Narrower is easier on the eyes; wider shows more at once.", placement: "bottom" },
+        { target: "#themeToggle", title: "Theme", body: "☕ warm sepia (default), ☀ bright white, or 🌙 dark mode — choose based on your lighting conditions.", placement: "bottom" },
+        { target: "#shelfBtn", title: "Back to shelf", body: "Return to the bookshelf to switch books or open a new epub, mobi, or pdf file. Your reading position is saved automatically.", placement: "bottom" }
       ]
     },
     fr: {
@@ -189,6 +216,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "Voici le panneau de difficulté de l'article", body: "Quand l'extension détecte que la page est dans votre langue d'apprentissage et que l'article est assez long, elle analyse automatiquement la distribution du vocabulaire et affiche le niveau CECRL (A1 à C2) en bas à gauche. La barre de couleur montre la proportion de mots par niveau. Les mots rares C2 sont annotés directement dans le texte avec leur traduction.", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "Table des matières", body: "Cliquez ce bouton pour ouvrir ou fermer le panneau latéral des chapitres. Naviguez directement vers n'importe quel chapitre.", placement: "bottom" },
+        { target: "#chapterNav", title: "Navigation entre chapitres", body: "Utilisez les flèches pour changer de chapitre, ou choisissez directement dans le menu déroulant.", placement: "bottom" },
+        { target: "#fontSelect", title: "Police de caractères", body: "Choisissez parmi 15 polices couvrant le latin, le CJK, l'arabe et le devanagari. Les polices se chargent depuis Google Fonts; des polices système sont utilisées hors ligne.", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "Taille et graisse du texte", body: "A− / A+ règle la taille. Les trois boutons W définissent la graisse : léger, normal ou gras. Vos préférences sont sauvegardées automatiquement.", placement: "bottom" },
+        { target: "#widthGroup", title: "Largeur de lecture", body: "Faites glisser le curseur pour contrôler la largeur maximale de la colonne de texte.", placement: "bottom" },
+        { target: "#themeToggle", title: "Thème", body: "☕ sépia chaleureux (défaut), ☀ blanc lumineux ou 🌙 mode sombre — choisissez selon votre éclairage.", placement: "bottom" },
+        { target: "#shelfBtn", title: "Retour à la bibliothèque", body: "Revenez à la bibliothèque pour changer de livre ou ouvrir un nouveau fichier epub, mobi ou pdf. Votre position est sauvegardée.", placement: "bottom" }
       ]
     },
     pt: {
@@ -236,6 +272,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "Este é o painel de dificuldade do artigo", body: "Quando a extensão detecta que a página está no seu idioma de estudo e o artigo é longo o suficiente, ela analisa automaticamente a distribuição do vocabulário e mostra o nível CEFR (A1 a C2) no canto inferior esquerdo. A barra colorida mostra a proporção de palavras em cada nível. As palavras raras C2 são anotadas diretamente no texto com traduções.", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "Índice", body: "Clique neste botão para abrir ou fechar o painel lateral de capítulos. Navegue para qualquer capítulo instantaneamente.", placement: "bottom" },
+        { target: "#chapterNav", title: "Navegação de capítulos", body: "Use as setas para mudar de capítulo, ou escolha diretamente no menu suspenso.", placement: "bottom" },
+        { target: "#fontSelect", title: "Fonte", body: "Escolha entre 15 fontes cobrindo latim, CJK, árabe e devanagari. As fontes são carregadas do Google Fonts; fontes do sistema são usadas offline.", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "Tamanho e peso da fonte", body: "A− / A+ ajusta o tamanho. Os três botões W definem o peso: leve, normal ou negrito. Suas preferências são salvas automaticamente.", placement: "bottom" },
+        { target: "#widthGroup", title: "Largura de leitura", body: "Arraste o controle deslizante para controlar a largura máxima da coluna de texto.", placement: "bottom" },
+        { target: "#themeToggle", title: "Tema", body: "☕ sépia quente (padrão), ☀ branco brilhante ou 🌙 modo escuro — escolha de acordo com a iluminação.", placement: "bottom" },
+        { target: "#shelfBtn", title: "Voltar à estante", body: "Retorne à estante para trocar de livro ou abrir um novo arquivo epub, mobi ou pdf. Sua posição é salva automaticamente.", placement: "bottom" }
       ]
     },
     ar: {
@@ -283,6 +328,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "هذه لوحة صعوبة المقال", body: "عندما تكتشف الإضافة أن الصفحة مكتوبة بلغتك المدروسة وأن المقال طويل بما يكفي، تحلل تلقائياً توزيع المفردات وتعرض مستوى CEFR (من A1 إلى C2) في الزاوية السفلية اليسرى. يوضح الشريط الملوّن نسبة الكلمات في كل مستوى. تُشرح الكلمات النادرة C2 مباشرةً في النص بترجمة مدمجة.", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "جدول المحتويات", body: "انقر على هذا الزر لفتح أو إغلاق لوحة الفصول الجانبية. انتقل إلى أي فصل فوراً.", placement: "bottom" },
+        { target: "#chapterNav", title: "التنقل بين الفصول", body: "استخدم الأسهم للتنقل بين الفصول، أو اختر مباشرةً من القائمة المنسدلة.", placement: "bottom" },
+        { target: "#fontSelect", title: "الخط", body: "اختر من بين 15 خطاً تغطي اللاتينية والـ CJK والعربية والديفاناغارية. يتم تحميل الخطوط من Google Fonts؛ يُستخدم الخط النظامي عند عدم الاتصال.", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "حجم الخط وثقله", body: "A− / A+ يضبط الحجم. أزرار W الثلاثة تحدد الثقل: رفيع، عادي، أو غامق. تُحفظ تفضيلاتك تلقائياً.", placement: "bottom" },
+        { target: "#widthGroup", title: "عرض العمود", body: "اسحب المنزلق للتحكم في الحد الأقصى لعرض عمود النص.", placement: "bottom" },
+        { target: "#themeToggle", title: "السمة", body: "☕ بيج دافئ (افتراضي)، ☀ أبيض ساطع، أو 🌙 الوضع الداكن — اختر وفق إضاءة بيئتك.", placement: "bottom" },
+        { target: "#shelfBtn", title: "العودة إلى المكتبة", body: "ارجع إلى المكتبة للتبديل بين الكتب أو فتح ملف epub أو mobi أو pdf جديد. يُحفظ موقع القراءة تلقائياً.", placement: "bottom" }
       ]
     },
     hi: {
@@ -330,6 +384,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "यह लेख कठिनाई पैनल है", body: "जब एक्सटेंशन पता लगाता है कि पेज आपकी अध्ययन भाषा में है और लेख पर्याप्त लंबा है, तो यह स्वचालित रूप से शब्दावली वितरण का विश्लेषण करता है और नीचे-बाईं ओर CEFR स्तर (A1 से C2) दिखाता है। रंगीन पट्टी प्रत्येक स्तर पर शब्दों का अनुपात दर्शाती है। दुर्लभ C2 शब्दों को सीधे पाठ में अनुवाद के साथ चिह्नित किया जाता है।", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "अनुक्रमणिका", body: "इस बटन पर क्लिक करें अध्याय साइडबार खोलने या बंद करने के लिए। किसी भी अध्याय में तुरंत जाएं।", placement: "bottom" },
+        { target: "#chapterNav", title: "अध्याय नेविगेशन", body: "अध्याय बदलने के लिए तीर का उपयोग करें, या ड्रॉपडाउन से सीधे अध्याय चुनें।", placement: "bottom" },
+        { target: "#fontSelect", title: "फ़ॉन्ट", body: "लैटिन, CJK, अरबी और देवनागरी को कवर करने वाले 15 प्रीसेट में से चुनें। फ़ॉन्ट Google Fonts से लोड होते हैं; ऑफ़लाइन होने पर सिस्टम फ़ॉन्ट उपयोग होते हैं।", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "फ़ॉन्ट आकार और वज़न", body: "A− / A+ आकार समायोजित करता है। तीन W बटन वज़न सेट करते हैं: पतला, सामान्य या मोटा। आपकी प्राथमिकताएं स्वचालित रूप से सहेजी जाती हैं।", placement: "bottom" },
+        { target: "#widthGroup", title: "पढ़ने की चौड़ाई", body: "टेक्स्ट कॉलम की अधिकतम चौड़ाई नियंत्रित करने के लिए स्लाइडर खींचें।", placement: "bottom" },
+        { target: "#themeToggle", title: "थीम", body: "☕ गर्म सेपिया (डिफ़ॉल्ट), ☀ चमकीला सफ़ेद, या 🌙 डार्क मोड — अपनी रोशनी के अनुसार चुनें।", placement: "bottom" },
+        { target: "#shelfBtn", title: "शेल्फ़ पर वापस", body: "किताबें बदलने या नई epub, mobi या pdf फ़ाइल खोलने के लिए शेल्फ़ पर वापस जाएं। आपकी पढ़ने की स्थिति स्वचालित रूप से सहेजी जाती है।", placement: "bottom" }
       ]
     },
     ja: {
@@ -377,6 +440,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "これは記事難易度パネルです", body: "拡張機能が現在のページを学習言語と検出し、かつ記事が十分な長さであれば、自動的に語彙分布を分析して左下に CEFR レベル（A1 〜 C2）を表示します。カラーバーは各レベルの単語の割合を示します。希少な C2 単語は翻訳付きでテキスト内に直接注釈表示されます。", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "目次", body: "このボタンをクリックして章のサイドバーを開閉できます。任意の章にすぐ移動できます。", placement: "bottom" },
+        { target: "#chapterNav", title: "章のナビゲーション", body: "矢印で章を切り替えるか、ドロップダウンから直接章を選んでください。", placement: "bottom" },
+        { target: "#fontSelect", title: "フォント", body: "ラテン文字・CJK・アラビア語・デーヴァナーガリーをカバーする 15 種類のプリセットから選択できます。Google Fonts から読み込まれ、オフライン時はシステムフォントで代替されます。", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "フォントサイズと太さ", body: "A− / A+ でサイズを調整し、3 つの W ボタンで太さ（細字・標準・太字）を設定します。設定は自動的に保存されます。", placement: "bottom" },
+        { target: "#widthGroup", title: "読書幅", body: "スライダーをドラッグしてテキスト列の最大幅を調整します。", placement: "bottom" },
+        { target: "#themeToggle", title: "テーマ", body: "☕ セピア（デフォルト）、☀ ライト、🌙 ダーク — 照明環境に合わせて選んでください。", placement: "bottom" },
+        { target: "#shelfBtn", title: "本棚に戻る", body: "本棚に戻って本を切り替えたり、新しい epub / mobi / pdf ファイルを開いたりできます。読書位置は自動保存されます。", placement: "bottom" }
       ]
     },
     ko: {
@@ -424,6 +496,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "이것은 글 난이도 패널입니다", body: "확장 기능이 현재 페이지가 학습 언어로 작성되었고 글이 충분히 길다고 감지하면, 자동으로 어휘 분포를 분석하여 왼쪽 하단에 CEFR 수준(A1~C2)을 표시합니다. 색상 막대는 각 수준별 단어 비율을 나타냅니다. 드문 C2 단어는 번역과 함께 본문에 직접 표시됩니다.", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "목차", body: "이 버튼을 클릭하여 챕터 사이드바를 열거나 닫을 수 있습니다. 원하는 챕터로 즉시 이동하세요.", placement: "bottom" },
+        { target: "#chapterNav", title: "챕터 탐색", body: "화살표로 챕터를 이동하거나 드롭다운에서 직접 선택하세요.", placement: "bottom" },
+        { target: "#fontSelect", title: "글꼴", body: "라틴, CJK, 아랍어, 데바나가리를 포함한 15가지 프리셋 중에서 선택하세요. Google Fonts에서 로드되며, 오프라인 시 시스템 글꼴이 사용됩니다.", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "글꼴 크기 및 굵기", body: "A− / A+로 크기를 조정하고, W 버튼 세 개로 굵기(얇게/보통/굵게)를 설정합니다. 설정은 자동 저장됩니다.", placement: "bottom" },
+        { target: "#widthGroup", title: "읽기 폭", body: "슬라이더를 드래그하여 텍스트 열의 최대 폭을 조정하세요.", placement: "bottom" },
+        { target: "#themeToggle", title: "테마", body: "☕ 따뜻한 세피아(기본), ☀ 밝은 흰색, 🌙 다크 모드 — 조명 환경에 맞게 선택하세요.", placement: "bottom" },
+        { target: "#shelfBtn", title: "책장으로 돌아가기", body: "책장으로 돌아가 책을 바꾸거나 새 epub, mobi, pdf 파일을 열 수 있습니다. 읽기 위치가 자동 저장됩니다.", placement: "bottom" }
       ]
     },
     id: {
@@ -471,6 +552,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "Ini adalah panel kesulitan artikel", body: "Saat ekstensi mendeteksi bahwa halaman menggunakan bahasa belajarmu dan artikelnya cukup panjang, ekstensi otomatis menganalisis distribusi kosakata dan menampilkan level CEFR (A1 hingga C2) di pojok kiri bawah. Bilah warna menunjukkan proporsi kata di setiap level. Kata-kata C2 yang jarang digunakan diberi anotasi langsung di teks beserta terjemahannya.", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "Daftar isi", body: "Klik tombol ini untuk membuka atau menutup panel bab samping. Lompat ke bab mana pun secara instan.", placement: "bottom" },
+        { target: "#chapterNav", title: "Navigasi bab", body: "Gunakan panah untuk berpindah antar bab, atau pilih langsung dari menu tarik-turun.", placement: "bottom" },
+        { target: "#fontSelect", title: "Font", body: "Pilih dari 15 preset yang mencakup Latin, CJK, Arab, dan Devanagari. Font dimuat dari Google Fonts; font sistem digunakan saat offline.", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "Ukuran dan ketebalan font", body: "A− / A+ menyesuaikan ukuran. Tiga tombol W mengatur ketebalan: tipis, normal, atau tebal. Preferensi Anda disimpan otomatis.", placement: "bottom" },
+        { target: "#widthGroup", title: "Lebar bacaan", body: "Seret slider untuk mengontrol lebar maksimum kolom teks.", placement: "bottom" },
+        { target: "#themeToggle", title: "Tema", body: "☕ sepia hangat (default), ☀ putih terang, atau 🌙 mode gelap — pilih sesuai kondisi pencahayaan Anda.", placement: "bottom" },
+        { target: "#shelfBtn", title: "Kembali ke rak", body: "Kembali ke rak buku untuk mengganti buku atau membuka file epub, mobi, atau pdf baru. Posisi membaca Anda disimpan otomatis.", placement: "bottom" }
       ]
     },
     ru: {
@@ -518,6 +608,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "Это панель сложности статьи", body: "Когда расширение определяет, что страница написана на изучаемом вами языке и статья достаточно длинная, оно автоматически анализирует распределение лексики и показывает уровень CEFR (от A1 до C2) в левом нижнем углу. Цветная полоса отображает долю слов каждого уровня. Редкие слова C2 аннотируются прямо в тексте с переводом.", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "Оглавление", body: "Нажмите эту кнопку, чтобы открыть или закрыть панель глав. Переходите к любой главе мгновенно.", placement: "bottom" },
+        { target: "#chapterNav", title: "Навигация по главам", body: "Используйте стрелки для перемещения между главами или выберите нужную главу из выпадающего списка.", placement: "bottom" },
+        { target: "#fontSelect", title: "Шрифт", body: "Выберите из 15 пресетов, охватывающих латиницу, CJK, арабский и деванагари. Шрифты загружаются из Google Fonts; при отсутствии сети используются системные шрифты.", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "Размер и начертание шрифта", body: "A− / A+ регулирует размер. Три кнопки W задают начертание: тонкое, обычное или жирное. Настройки сохраняются автоматически.", placement: "bottom" },
+        { target: "#widthGroup", title: "Ширина колонки", body: "Потяните ползунок, чтобы задать максимальную ширину текстовой колонки.", placement: "bottom" },
+        { target: "#themeToggle", title: "Тема", body: "☕ тёплая сепия (по умолчанию), ☀ светлая или 🌙 тёмная — выберите в зависимости от освещения.", placement: "bottom" },
+        { target: "#shelfBtn", title: "На полку", body: "Вернитесь на полку, чтобы сменить книгу или открыть новый epub, mobi или pdf. Позиция чтения сохраняется автоматически.", placement: "bottom" }
       ]
     },
     es: {
@@ -565,6 +664,15 @@
       ],
       contentDifficulty: [
         { target: "#laDifficultyPanel", title: "Este es el panel de dificultad del artículo", body: "Cuando la extensión detecta que la página está en tu idioma de estudio y el artículo es suficientemente largo, analiza automáticamente la distribución del vocabulario y muestra el nivel MCER (A1 a C2) en la esquina inferior izquierda. La barra de color muestra la proporción de palabras en cada nivel. Las palabras raras C2 aparecen anotadas directamente en el texto con su traducción.", placement: "right" }
+      ],
+      epub: [
+        { target: "#sidebarToggle", title: "Tabla de contenidos", body: "Haz clic en este botón para abrir o cerrar el panel lateral de capítulos. Navega a cualquier capítulo al instante.", placement: "bottom" },
+        { target: "#chapterNav", title: "Navegación de capítulos", body: "Usa las flechas para moverte entre capítulos, o elige directamente desde el menú desplegable.", placement: "bottom" },
+        { target: "#fontSelect", title: "Fuente", body: "Elige entre 15 fuentes que cubren latín, CJK, árabe y devanagari. Las fuentes se cargan desde Google Fonts; se usan fuentes del sistema sin conexión.", placement: "bottom" },
+        { target: "#fontSizeGroup", title: "Tamaño y grosor de fuente", body: "A− / A+ ajusta el tamaño. Los tres botones W definen el grosor: ligero, normal o negrita. Tus preferencias se guardan automáticamente.", placement: "bottom" },
+        { target: "#widthGroup", title: "Ancho de lectura", body: "Arrastra el control deslizante para ajustar el ancho máximo de la columna de texto.", placement: "bottom" },
+        { target: "#themeToggle", title: "Tema", body: "☕ sépia cálido (predeterminado), ☀ blanco luminoso o 🌙 modo oscuro — elige según la iluminación.", placement: "bottom" },
+        { target: "#shelfBtn", title: "Volver a la estantería", body: "Regresa a la estantería para cambiar de libro o abrir un nuevo archivo epub, mobi o pdf. Tu posición de lectura se guarda automáticamente.", placement: "bottom" }
       ]
     }
   };

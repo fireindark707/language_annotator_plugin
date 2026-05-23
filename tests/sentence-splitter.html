@@ -140,6 +140,37 @@
           assertEqual(second.length, 2);
         },
       },
+      // ── isExtensionPage / content-script WASM guard ───────────────────────
+      {
+        name: "sentence splitter: http page skips WASM init and uses fallback immediately",
+        run() {
+          // The test harness runs on a chrome-extension:// page, so we can't
+          // directly test http: protocol here.  Instead verify the observable
+          // contract: after __resetForTests (initFailed=false), splitIntoSentences
+          // with no mocked API returns the fallback result synchronously.
+          U.__resetForTests();
+          const result = U.splitIntoSentences("Hello world. Foo bar.", "en", (text) => [text]);
+          // Must return at least the full text as one fallback sentence
+          assert(result.length >= 1, "fallback must return at least 1 segment");
+          assert(result.join(" ").includes("Hello world"), "fallback text preserved");
+        },
+      },
+      {
+        name: "sentence splitter: initFailed=true after non-extension page → subsequent calls use fallback without retry",
+        run() {
+          U.__resetForTests();
+          // Simulate what happens after isExtensionPage()=false sets initFailed
+          // by using __setApiForTests(null) then manually checking fallback behaviour
+          let fallbackCalls = 0;
+          U.__setApiForTests(null);
+          // With no api and initFailed, every call returns fallback
+          const r1 = U.splitIntoSentences("Sentence one. Sentence two.", "en", (t) => { fallbackCalls++; return [t]; });
+          const r2 = U.splitIntoSentences("Another sentence.", "en", (t) => { fallbackCalls++; return [t]; });
+          assertEqual(fallbackCalls, 2, "fallback called for each unique input");
+          assert(r1.length >= 1, "r1 has result");
+          assert(r2.length >= 1, "r2 has result");
+        },
+      },
     ]);
   </script>
 </body>

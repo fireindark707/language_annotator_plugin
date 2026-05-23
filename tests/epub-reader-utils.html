@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>epub-reader-utils</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script>
+    // Minimal stubs so words.js loads without errors
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        getURL(p) { return "chrome-extension://test/" + p; },
+        sendMessage(msg, cb) { if (cb) cb({}); },
+        onMessage: { addListener() {} },
+      },
+      storage: {
+        local: { get(k, cb) { cb({}); }, set(o, cb) { if (cb) cb(); } },
+        sync:  { get(k, cb) { cb({}); }, set(o, cb) { if (cb) cb(); } },
+      },
+      tabs: { create() {} },
+    };
+    window.UiI18n  = { t(lang, key) { return key; } };
+    window.UiTour  = { maybeStartOnce() {}, start() {}, reset() { return Promise.resolve(); } };
+    window.UiToast = { show() {} };
+    window.WordStorage = {
+      getUiLanguage()          { return Promise.resolve("en"); },
+      getSourceLang()          { return Promise.resolve("en"); },
+      getTranslationEngine()   { return Promise.resolve("online"); },
+      getDictionaryLookupEnabled() { return Promise.resolve(false); },
+      getWords()               { return Promise.resolve({}); },
+      saveWords()              { return Promise.resolve(); },
+    };
+    window.TranslationUtilsRef = {};
+    window.DictionaryUtilsRef  = { normalizeDictionaryQuery(q) { return q; } };
+  </script>
+  <script src="../lib/dictionary-utils.js"></script>
+  <script src="../lib/lemma-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="../lib/sentence-splitter.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <!-- Minimal DOM stubs required by words.js -->
+  <button id="toggleViewBtn"></button>
+  <button id="practiceBtn"></button>
+  <select id="sortMode"></select>
+  <div id="wordsList"></div>
+  <div id="dictWordsList"></div>
+  <div id="localResultBlock"></div>
+  <div id="dictResultBlock"></div>
+  <div id="wordStats"></div>
+  <div id="languageStats"></div>
+  <div id="autoLangHint"></div>
+  <button id="closeBtn"></button>
+  <input id="searchInput" />
+  <button id="helpBtn"></button>
+  <script src="../words.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    // ── formatExampleHost ──────────────────────────────────────────────────────
+    // formatExampleHost is a module-private function in words.js, but it leaks
+    // to the global scope since words.js uses plain script (no module wrapper).
+
+    runTests([
+      {
+        name: "formatExampleHost: normal URL returns hostname",
+        run() {
+          assertEqual(formatExampleHost("https://example.com/path"), "example.com");
+          assertEqual(formatExampleHost("http://annas-archive.pk/book/123"), "annas-archive.pk");
+        },
+      },
+      {
+        name: "formatExampleHost: epub-reader URL returns ?source= param as book title",
+        run() {
+          const url = "chrome-extension://abcdef/epub-reader.html?source=Jalan%20Tak%20Ada%20Ujung#abc123/3/jalan-tak-ada-ujung";
+          assertEqual(formatExampleHost(url), "Jalan Tak Ada Ujung");
+        },
+      },
+      {
+        name: "formatExampleHost: epub-reader URL without source param returns 'ePub'",
+        run() {
+          const url = "chrome-extension://abcdef/epub-reader.html#abc123/0";
+          assertEqual(formatExampleHost(url), "ePub");
+        },
+      },
+      {
+        name: "formatExampleHost: epub-reader URL with special chars in title decoded correctly",
+        run() {
+          const title = "The Great Gatsby — F. Scott Fitzgerald";
+          const url = "chrome-extension://abcdef/epub-reader.html?source=" + encodeURIComponent(title) + "#hash/2";
+          assertEqual(formatExampleHost(url), title);
+        },
+      },
+      {
+        name: "formatExampleHost: non-URL string returns as-is",
+        run() {
+          assertEqual(formatExampleHost("just a plain string"), "just a plain string");
+        },
+      },
+      {
+        name: "formatExampleHost: empty/null returns empty string",
+        run() {
+          assertEqual(formatExampleHost(""), "");
+          assertEqual(formatExampleHost(null), "");
+          assertEqual(formatExampleHost(undefined), "");
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

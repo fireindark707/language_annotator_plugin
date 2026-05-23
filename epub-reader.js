@@ -555,6 +555,7 @@ document.addEventListener("DOMContentLoaded", function () {
 	setupFontSelect();
 	setupReadingWidth();
 	restorePreferences();
+	setupTourBtn();
 	renderShelf().then(function () { tryRestoreFromHash(); });
 	setupMessageListener();
 });
@@ -594,6 +595,22 @@ function applyUiText() {
 	});
 	prevChapterBtn.title = t("epub_prev_chapter");
 	nextChapterBtn.title = t("epub_next_chapter");
+	const epubHelpBtn = document.getElementById("epubHelpBtn");
+	if (epubHelpBtn && globalThis.UiTour) epubHelpBtn.title = UiTour.getLabel(uiLang, "replay") || "教學導覽";
+}
+
+// — Tour —
+function setupTourBtn() {
+	const btn = document.getElementById("epubHelpBtn");
+	if (!btn || !globalThis.UiTour) return;
+	btn.addEventListener("click", function () {
+		UiTour.start({ lang: uiLang, steps: UiTour.getSteps(uiLang, "epub"), document });
+	});
+}
+
+function maybeStartEpubTour() {
+	if (!globalThis.UiTour) return;
+	UiTour.maybeStartOnce({ storageKey: "epub_v1", lang: uiLang, steps: UiTour.getSteps(uiLang, "epub"), document });
 }
 
 // — File input —
@@ -964,7 +981,7 @@ async function openEpub(file) {
 
 	currentBook = book;
 	currentBookHash = bookHash;
-	const displayTitle = (format === "pdf" ? (file.name.replace(/\.pdf$/i, "") || book.title) : book.title) || file.name;
+	const displayTitle = format === "pdf" ? file.name.replace(/\.pdf$/i, "") || file.name : (book.title || file.name);
 	currentBookTitle = displayTitle;
 	bookTitleEl.textContent = displayTitle;
 	document.title = displayTitle + " — " + (t("epub_reader_title") || "電子書閱讀器");
@@ -983,12 +1000,13 @@ async function openEpub(file) {
 
 	shelfView.style.display = "none";
 	readerShell.classList.add("visible");
+	maybeStartEpubTour();
 
 	// Save to shelf (async — don't block render)
 	if (EpubShelf) {
 		book.getCoverDataUrl().then(function (coverDataUrl) {
 			return EpubShelf.saveBook(bookHash, {
-				title: (format === "pdf" ? (file.name.replace(/\.pdf$/i, "") || book.title) : book.title) || file.name,
+				title: format === "pdf" ? file.name.replace(/\.pdf$/i, "") || file.name : (book.title || file.name),
 				language: book.language || "en",
 				chapterCount: book.chapters.length,
 				coverDataUrl: coverDataUrl || null,
@@ -1548,6 +1566,18 @@ function pdfTextContentToHtml(items) {
 	return pdfHeuristicFromLines(built.lines, built.baseFontSize);
 }
 
+// PDF view mode: "split" | "text" | "canvas" — persisted in localStorage
+let pdfViewMode = (function () { try { return localStorage.getItem("epubReaderPdfView") || "split"; } catch (_) { return "split"; } })();
+
+function applyPdfViewMode(mode, splitDiv) {
+	pdfViewMode = mode;
+	try { localStorage.setItem("epubReaderPdfView", mode); } catch (_) {}
+	if (!splitDiv) return;
+	splitDiv.classList.remove("view-text", "view-canvas");
+	if (mode === "text")   splitDiv.classList.add("view-text");
+	if (mode === "canvas") splitDiv.classList.add("view-canvas");
+}
+
 async function renderPdfPage(index) {
 	// Cleanup
 	activeBlobUrls.forEach(function (url) { URL.revokeObjectURL(url); });
@@ -1559,7 +1589,6 @@ async function renderPdfPage(index) {
 
 	const pageNum = index + 1; // pdf.js is 1-indexed
 	const pdfDoc = currentBook._pdfDoc;
-	const pdfjsLib = currentBook._pdfjsLib;
 
 	readingPane.innerHTML = "";
 
@@ -1567,17 +1596,37 @@ async function renderPdfPage(index) {
 	try {
 		page = await pdfDoc.getPage(pageNum);
 	} catch (e) {
-		readingPane.innerHTML = "<p style='padding:32px;color:#7b655b;'>無法載入頁面 " + pageNum + "</p>";
+		readingPane.innerHTML = "<p style='padding:32px;color:var(--text-muted)'>" + (t("epub_load_error") || "無法載入頁面") + " " + pageNum + "</p>";
 		return;
 	}
 
+	// ── Page header with view-mode toggle buttons ─────────────────────────────
 	const header = document.createElement("div");
 	header.className = "pdf-page-header";
-	header.textContent = "— " + pageNum + " / " + currentBook.chapters.length + " —";
+	const pageLabel = document.createElement("span");
+	pageLabel.textContent = "— " + pageNum + " / " + currentBook.chapters.length + " —";
+
+	function makeViewBtn(mode, icon, titleKey, defaultTitle) {
+		const btn = document.createElement("button");
+		btn.className = "pdf-view-btn" + (pdfViewMode === mode ? " active" : "");
+		btn.textContent = icon;
+		btn.title = t(titleKey) || defaultTitle;
+		btn.addEventListener("click", function () {
+			applyPdfViewMode(mode, splitDiv);
+			header.querySelectorAll(".pdf-view-btn").forEach(function (b) {
+				b.classList.toggle("active", b === btn);
+			});
+		});
+		return btn;
+	}
+
+	header.appendChild(makeViewBtn("split",  "⊞", "pdf_view_split",  "分欄"));
+	header.appendChild(pageLabel);
+	header.appendChild(makeViewBtn("text",   "≡", "pdf_view_text",   "純文字"));
+	header.appendChild(makeViewBtn("canvas", "🖼", "pdf_view_canvas", "純圖像"));
 	readingPane.appendChild(header);
 
 	// ── Split layout: canvas (left) + text (right) ───────────────────────────
-	// Canvas column: max 48% of pane width so text has room
 	const paneWidth = Math.max(400, readingPane.clientWidth - 80);
 	const canvasMaxPx = Math.floor(paneWidth * 0.48);
 	const baseVp = page.getViewport({ scale: 1 });
@@ -1586,44 +1635,55 @@ async function renderPdfPage(index) {
 
 	const splitDiv = document.createElement("div");
 	splitDiv.className = "pdf-split";
+	applyPdfViewMode(pdfViewMode, splitDiv); // restore saved mode
 
-	// Left: canvas
+	// Left: canvas column — show skeleton while pdf.js renders
 	const canvasCol = document.createElement("div");
 	canvasCol.className = "pdf-canvas-col";
-	const canvas = document.createElement("canvas");
-	canvas.width = vp.width;
-	canvas.height = vp.height;
-	canvasCol.appendChild(canvas);
+	const skeleton = document.createElement("div");
+	skeleton.className = "pdf-canvas-skeleton";
+	skeleton.style.cssText = "width:" + Math.round(vp.width) + "px;height:" + Math.round(vp.height) + "px;";
+	canvasCol.appendChild(skeleton);
 	splitDiv.appendChild(canvasCol);
 
-	// Right: text wrapper (rendered first so user can read while canvas renders)
+	// Right: text wrapper — placeholder while extracting
 	const textCol = document.createElement("div");
 	textCol.className = "pdf-text-col";
 	const wrapper = document.createElement("div");
 	wrapper.className = "epub-chapter-wrapper";
 	wrapper.lang = (currentBook && currentBook.language) || "en";
-	// Placeholder while text extracts
-	wrapper.innerHTML = "<p style='color:var(--text-muted);font-size:13px'>載入中…</p>";
+	wrapper.innerHTML = "<p style='color:var(--text-muted);font-size:13px'>" + (t("epub_loading") || "載入中…") + "</p>";
 	textCol.appendChild(wrapper);
 	splitDiv.appendChild(textCol);
 
 	readingPane.appendChild(splitDiv);
 
-	// Canvas render (parallel with text extraction)
-	const canvasRenderPromise = page.render({ canvasContext: canvas.getContext("2d"), viewport: vp }).promise.catch(function () {});
+	// Text extraction (starts immediately; canvas renders in parallel)
+	const textPromise = page.getTextContent({ includeMarkedContent: true })
+		.then(function (tc) { return pdfTextContentToHtml(tc.items); })
+		.catch(function () { return "<p>（" + (t("epub_empty_page") || "此頁無文字內容") + "）</p>"; });
 
-	// Text extraction
-	let html = "";
-	try {
-		const tc = await page.getTextContent({ includeMarkedContent: true });
-		html = pdfTextContentToHtml(tc.items);
-	} catch (_) {
-		html = "<p>（無法提取文字）</p>";
-	}
+	// HiDPI-aware canvas — render at device pixel ratio for crisp output
+	const dpr = Math.min(window.devicePixelRatio || 1, 3);
+	const canvas = document.createElement("canvas");
+	canvas.width  = Math.round(vp.width  * dpr);
+	canvas.height = Math.round(vp.height * dpr);
+	canvas.style.width  = Math.round(vp.width)  + "px";
+	canvas.style.height = Math.round(vp.height) + "px";
+	const ctx = canvas.getContext("2d");
+	ctx.scale(dpr, dpr);
 
-	wrapper.innerHTML = html;
+	const canvasRenderPromise = page.render({ canvasContext: ctx, viewport: vp }).promise
+		.then(function () {
+			// Swap skeleton → rendered canvas
+			canvasCol.replaceChild(canvas, skeleton);
+			canvas.style.cssText = "display:block;max-width:100%;height:auto;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.15);";
+		})
+		.catch(function () { skeleton.remove(); });
 
-	// Ensure canvas render finishes before returning (needed for getCoverDataUrl safety)
+	// Fill text as soon as extracted (don't wait for canvas)
+	wrapper.innerHTML = await textPromise;
+
 	await canvasRenderPromise;
 
 	// Overlay clickable link annotations on the canvas
@@ -1667,7 +1727,38 @@ async function renderChapter(index) {
 
 	// PDF uses a different rendering path
 	if (currentBook && currentBook._isPdf) {
-		return renderPdfPage(index);
+		await renderPdfPage(index);
+		// Show difficulty panel after PDF text is rendered
+		const pdfLang = (currentBook.language || "en");
+		const pdfSrcLang = pdfLang.split("-")[0].toLowerCase();
+		const pdfWfu = globalThis.WordfreqUtils || null;
+		if (globalThis.ContentDifficulty && pdfWfu && pdfWfu.isSupported(pdfSrcLang)) {
+			globalThis.ContentDifficulty.analyzeAndShow({
+				sourceLang: pdfLang,
+				document,
+				translate: function (word) {
+					return WordStorage.getTranslationEngine().catch(function () { return "online"; }).then(function (engine) {
+						return TranslationUtilsRef.requestPreferredTranslation({
+							chromeRuntime: chrome.runtime, chromeI18n: chrome.i18n,
+							wordStorage: WordStorage, text: word, sourceLang: pdfLang,
+							translationEngine: engine,
+							targetLang: TranslationUtilsRef.getBrowserTargetLang(navigator),
+						});
+					}).catch(function () { return null; });
+				},
+				translateWordInContext: function (opts) {
+					return requestWordTranslationInContext({
+						word: opts.word, sourceLang: pdfLang,
+						targetLang: TranslationUtilsRef.getBrowserTargetLang(navigator),
+						contextSentence: opts.sentence, contextWordPos: opts.wordPos,
+					}).catch(function () { return null; });
+				},
+				getLemma: function (word) {
+					return resolveLemma ? resolveLemma(word, pdfLang).then(function (r) { return (r && r.lemma) || null; }).catch(function () { return null; }) : Promise.resolve(null);
+				},
+			});
+		}
+		return;
 	}
 
 	const chapter = currentBook.chapters[index];
@@ -1849,10 +1940,9 @@ function markLearned(word) {
 			return WordStorage.saveWords(words, { syncMode: "immediate" }).then(function () {
 				document.querySelectorAll(".plugin-highlight-word").forEach(function (span) {
 					if (span.textContent.toLowerCase() === lowerWord) {
-						span.style.backgroundColor = "";
-						span.style.cursor = "";
-						span.style.color = "";
-						span.title = "";
+						// Replace span with plain text to remove all inline styles and event listeners
+						const text = document.createTextNode(span.textContent);
+						if (span.parentNode) span.parentNode.replaceChild(text, span);
 					}
 				});
 			});
@@ -1883,7 +1973,14 @@ function buildAnnotationDeps(languageHint) {
 		sortExamples: ExampleUtilsRef.sortExamples,
 		maxExamplesPerWord: MAX_EXAMPLES_PER_WORD,
 		languageHint: languageHint || "en",
-		currentHref: function () { return location.href; },
+		currentHref: function () {
+			if (!currentBookHash) return location.href;
+			const short = currentBookHash.slice(0, 8);
+			const slug = titleToSlug(currentBookTitle);
+			const hash = "#" + short + "/" + currentChapterIndex + (slug ? "/" + slug : "");
+			const source = encodeURIComponent(currentBookTitle || "");
+			return chrome.runtime.getURL("epub-reader.html") + "?source=" + source + hash;
+		},
 		markLearned: markLearned,
 		openAddWordModal: showReaderAddWordModal,
 		startContentTour: function () {},

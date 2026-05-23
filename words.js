@@ -512,7 +512,11 @@ function formatExampleTime(ts) {
 function formatExampleHost(url) {
 	if (!url) return "";
 	try {
-		return new URL(url).host;
+		const u = new URL(url);
+		if (u.pathname.endsWith("epub-reader.html")) {
+			return u.searchParams.get("source") || "ePub";
+		}
+		return u.host;
 	} catch (error) {
 		return url;
 	}

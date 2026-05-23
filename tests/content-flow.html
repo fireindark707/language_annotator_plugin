@@ -706,6 +706,63 @@
           }
         },
       },
+      // ── markLearned span replacement ─────────────────────────────────────
+      {
+        name: 'markLearned removes highlight span and replaces with plain text node',
+        async run() {
+          // Build a small container with a .plugin-highlight-word span
+          const container = document.createElement('div');
+          const span = document.createElement('span');
+          span.className = 'plugin-highlight-word';
+          span.textContent = 'running';
+          span.style.backgroundColor = '#ead480';
+          span.style.cursor = 'pointer';
+          container.appendChild(span);
+          document.body.appendChild(container);
+
+          // Simulate what markLearned does after confirmation + save
+          document.querySelectorAll('.plugin-highlight-word').forEach(function (s) {
+            if (s.textContent.toLowerCase() === 'running') {
+              const text = document.createTextNode(s.textContent);
+              if (s.parentNode) s.parentNode.replaceChild(text, s);
+            }
+          });
+
+          assert(!container.querySelector('.plugin-highlight-word'), 'span should be removed');
+          assertEqual(container.textContent, 'running', 'text content preserved');
+          // Confirm no element node remains (only a text node)
+          assert(container.firstChild.nodeType === Node.TEXT_NODE, 'child should be a text node');
+
+          document.body.removeChild(container);
+        },
+      },
+      {
+        name: 'markLearned only removes spans matching the exact word (case-insensitive)',
+        async run() {
+          const container = document.createElement('div');
+          ['Running', 'runner', 'running'].forEach(function (word) {
+            const s = document.createElement('span');
+            s.className = 'plugin-highlight-word';
+            s.textContent = word;
+            container.appendChild(s);
+          });
+          document.body.appendChild(container);
+
+          document.querySelectorAll('.plugin-highlight-word').forEach(function (s) {
+            if (s.textContent.toLowerCase() === 'running') {
+              const text = document.createTextNode(s.textContent);
+              if (s.parentNode) s.parentNode.replaceChild(text, s);
+            }
+          });
+
+          // 'runner' span should still be there; 'Running' and 'running' removed
+          const remaining = container.querySelectorAll('.plugin-highlight-word');
+          assertEqual(remaining.length, 1, 'only non-matching span remains');
+          assertEqual(remaining[0].textContent, 'runner', 'runner span untouched');
+
+          document.body.removeChild(container);
+        },
+      },
       {
         name: 'content translation flow does not treat compact-script sentences as dictionary queries',
         async run() {

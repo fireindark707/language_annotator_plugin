@@ -331,6 +331,12 @@
         #readingPane::-webkit-scrollbar { width: 6px; }
         #readingPane::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
+        /* chapter fade-in — applied to every new wrapper so transitions are automatic */
+        @keyframes chapterFadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
         /* chapter content */
         .epub-chapter-wrapper {
             /* --reading-max-width controlled by JS */
@@ -340,6 +346,7 @@
             font-size: var(--reader-font-size, 17px);
             font-weight: var(--reader-font-weight, 400);
             color: var(--text);
+            animation: chapterFadeIn 220ms ease-out;
             text-align: justify;
             /* CSS hyphenation: browser splits long words at syllable boundaries  */
             -webkit-hyphens: auto; hyphens: auto;
@@ -409,23 +416,50 @@
 
         /* ── PDF layout ──────────────────────────────────────── */
         .pdf-page-header {
+            display: flex; align-items: center; justify-content: center;
+            gap: 10px;
             font-size: 11px; color: var(--text-muted); text-align: center;
             padding: 0 0 14px; letter-spacing: .04em; opacity: .7;
         }
+        .pdf-view-btn {
+            all: unset; cursor: pointer; font-size: 15px; line-height: 1;
+            opacity: .55; transition: opacity .15s;
+        }
+        .pdf-view-btn:hover, .pdf-view-btn.active { opacity: 1; }
+
         /* Split-pane layout: canvas left, text right */
         .pdf-split {
             display: flex; gap: 24px; align-items: flex-start;
         }
+        /* view mode overrides */
+        .pdf-split.view-text .pdf-canvas-col { display: none; }
+        .pdf-split.view-canvas .pdf-text-col { display: none; }
+        .pdf-split.view-canvas .pdf-canvas-col { max-width: 100%; }
+
         .pdf-canvas-col {
-            flex: 0 0 auto; /* fixed width = canvas natural size, capped */
+            flex: 0 0 auto;
             max-width: 48%;
-            position: sticky; top: 0;   /* canvas stays in view while text scrolls */
+            position: sticky; top: 0;
         }
         .pdf-canvas-col canvas {
             max-width: 100%; height: auto;
             border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,.15);
             display: block;
         }
+
+        /* Canvas skeleton shown while pdf.js renders */
+        @keyframes shimmer {
+            from { background-position: -200% 0; }
+            to   { background-position:  200% 0; }
+        }
+        .pdf-canvas-skeleton {
+            border-radius: 6px;
+            background: linear-gradient(90deg,
+                var(--bg-wash) 25%, var(--border) 50%, var(--bg-wash) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s ease-in-out infinite;
+        }
+
         .pdf-text-col {
             flex: 1; min-width: 0;
         }
@@ -469,6 +503,14 @@
         @media (max-width: 640px) {
             .pdf-split { flex-direction: column; }
             .pdf-canvas-col { max-width: 100%; position: static; }
+        }
+        /* Hide secondary toolbar controls on very narrow screens */
+        @media (max-width: 720px) {
+            #widthGroup, #fontWeightGroup { display: none; }
+        }
+        @media (max-width: 560px) {
+            #fontSelect, #fontSizeGroup { display: none; }
+            #bookTitle { display: none; }
         }
     </style>
 </head>
@@ -571,6 +613,9 @@
             <button class="theme-btn"        data-theme-val="light"  type="button" title="明亮">☀</button>
             <button class="theme-btn"        data-theme-val="dark"   type="button" title="夜間">🌙</button>
         </div>
+
+        <!-- Help / tour replay -->
+        <button class="icon-btn" id="epubHelpBtn" type="button" title="教學導覽" style="margin-left:4px;font-size:13px;min-width:26px;">?</button>
     </div>
 
     <!-- Body -->

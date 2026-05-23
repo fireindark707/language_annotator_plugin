@@ -60,6 +60,7 @@ TEST_FILES=(
   "$ROOT_DIR/tests/epub-reader-internal-links.html"
   "$ROOT_DIR/tests/epub-reader-toc.html"
   "$ROOT_DIR/tests/epub-reader-para.html"
+  "$ROOT_DIR/tests/epub-reader-utils.html"
 )
 
 FAILURES=0

@@ -188,10 +188,8 @@ function markLearned(word) {
 						.querySelectorAll(".plugin-highlight-word")
 						.forEach((span) => {
 							if (span.textContent.toLowerCase() === lowerCaseWord) {
-								span.style.backgroundColor = "";
-								span.style.cursor = "";
-								span.style.color = "";
-								span.title = "";
+								const text = document.createTextNode(span.textContent);
+								if (span.parentNode) span.parentNode.replaceChild(text, span);
 							}
 						});
 				}).catch((error) => {
