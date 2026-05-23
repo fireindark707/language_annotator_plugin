@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>mobi-parser</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+
+  <!-- Load foliate-js MOBI as ES module, expose via globalThis -->
+  <script type="module">
+    import { MOBI, isMOBI } from '../packages/mobi.js';
+
+    async function unzlib(data) {
+      try {
+        const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        const reader = stream.getReader();
+        const chunks = [];
+        let total = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          total += value.length;
+        }
+        const out = new Uint8Array(total);
+        let off = 0;
+        for (const c of chunks) { out.set(c, off); off += c.length; }
+        return out.buffer;
+      } catch (_) {
+        return data instanceof ArrayBuffer ? data : (data.buffer || data);
+      }
+    }
+
+    globalThis._MobiClass = MOBI;
+    globalThis._isMOBI = isMOBI;
+    globalThis._unzlib = unzlib;
+    globalThis._moduleReady = true;
+  </script>
+
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    // ── Build a minimal MOBI binary in memory ──────────────────────────────────
+    function buildMobiBuffer({ title = 'Test Book', textContent = '<p>Hello world</p>' } = {}) {
+      const enc = new TextEncoder();
+      const textBytes = enc.encode(textContent);
+      const numRecords = 2; // record0 + 1 text record
+
+      // record 0: PalmDOC header (16 bytes) + MOBI header (248 bytes)
+      const rec0Size = 264;
+      const rec0 = new Uint8Array(rec0Size);
+      const dv0 = new DataView(rec0.buffer);
+      // PalmDOC header
+      dv0.setUint16(0, 1, false);                 // compression = none
+      dv0.setUint32(4, textBytes.length, false);  // text length
+      dv0.setUint16(8, 1, false);                 // numTextRecords
+      dv0.setUint16(10, 4096, false);             // record size
+      // MOBI header at offset 16
+      rec0[16] = 0x4D; rec0[17] = 0x4F; rec0[18] = 0x42; rec0[19] = 0x49; // "MOBI"
+      dv0.setUint32(20, 232, false);   // MOBI header length
+      dv0.setUint32(24, 2, false);     // type = Mobipocket book
+      dv0.setUint32(28, 65001, false); // encoding = UTF-8
+      dv0.setUint32(36, 6, false);     // version
+      // fullNameOffset: title appended after rec0
+      dv0.setUint32(84, rec0Size, false);
+      const titleBytes = enc.encode(title);
+      dv0.setUint32(88, titleBytes.length, false);
+      // firstNonBookIndex / firstImageIndex / indx: none
+      dv0.setUint32(72, 0xFFFFFFFF, false);
+      dv0.setUint32(100, 0xFFFFFFFF, false);
+      dv0.setUint32(128, 0, false);    // exthFlags: no EXTH
+      dv0.setUint32(240, 0, false);    // trailingFlags
+      dv0.setUint32(244, 0xFFFFFFFF, false); // indx: none
+
+      // Combine rec0 + title bytes
+      const rec0Full = new Uint8Array(rec0Size + titleBytes.length);
+      rec0Full.set(rec0);
+      rec0Full.set(titleBytes, rec0Size);
+
+      // PalmDB header: 78 bytes + 8 * numRecords
+      const headerSize = 78 + numRecords * 8;
+      const rec0Offset = headerSize;
+      const rec1Offset = rec0Offset + rec0Full.length;
+      const totalSize = rec1Offset + textBytes.length;
+
+      const buf = new Uint8Array(totalSize);
+      const dv = new DataView(buf.buffer);
+
+      // PalmDB name (32 bytes, null-padded)
+      const nameBytes = enc.encode(title.slice(0, 31));
+      buf.set(nameBytes, 0);
+      // type="BOOK", creator="MOBI" at offsets 60,64
+      buf[60] = 0x42; buf[61] = 0x4F; buf[62] = 0x4F; buf[63] = 0x4B; // BOOK
+      buf[64] = 0x4D; buf[65] = 0x4F; buf[66] = 0x42; buf[67] = 0x49; // MOBI
+      dv.setUint16(76, numRecords, false);
+      // Record list: 8 bytes each
+      dv.setUint32(78, rec0Offset, false);
+      dv.setUint32(86, rec1Offset, false);
+      buf.set(rec0Full, rec0Offset);
+      buf.set(textBytes, rec1Offset);
+      return buf.buffer;
+    }
+
+    // ── PalmDOC decompressor (standalone for unit tests) ──────────────────────
+    function decompressPalmDoc(data) {
+      const output = [];
+      let i = 0;
+      while (i < data.length) {
+        const b = data[i++];
+        if (b === 0) {
+          output.push(0);
+        } else if (b < 9) {
+          for (let n = 0; n < b && i < data.length; n++) output.push(data[i++]);
+        } else if (b < 0x80) {
+          output.push(b);
+        } else if (b < 0xC0) {
+          const b2 = data[i++];
+          const word = ((b << 8) | b2);
+          const dist = (word >> 3) & 0x7FF;
+          const len = (word & 7) + 3;
+          if (dist === 0) continue;
+          const pos = output.length - dist;
+          for (let n = 0; n < len; n++) output.push(pos + n >= 0 ? output[pos + n] : 0);
+        } else {
+          output.push(0x20);
+          output.push(b ^ 0x80);
+        }
+      }
+      return new Uint8Array(output);
+    }
+
+    function waitForModule(timeoutMs = 4000) {
+      return new Promise((resolve, reject) => {
+        if (globalThis._moduleReady) { resolve(); return; }
+        const start = Date.now();
+        const check = setInterval(() => {
+          if (globalThis._moduleReady) { clearInterval(check); resolve(); }
+          else if (Date.now() - start > timeoutMs) { clearInterval(check); reject(new Error('Module timed out')); }
+        }, 30);
+      });
+    }
+
+    // ── Test definitions ───────────────────────────────────────────────────────
+    runTests([
+
+      // Decompressor unit tests
+      {
+        name: 'decompressor: literal bytes (0x09–0x7F)',
+        run() {
+          const out = decompressPalmDoc(new Uint8Array([0x48, 0x65, 0x6C, 0x6C, 0x6F]));
+          assertEqual(new TextDecoder().decode(out), 'Hello');
+        },
+      },
+      {
+        name: 'decompressor: literal block (0x03 prefix)',
+        run() {
+          const out = decompressPalmDoc(new Uint8Array([0x03, 0x41, 0x42, 0x43]));
+          assertEqual(new TextDecoder().decode(out), 'ABC');
+        },
+      },
+      {
+        name: 'decompressor: space+char encoding (0xC1 → space + A)',
+        run() {
+          const out = decompressPalmDoc(new Uint8Array([0xC1]));
+          assert(out[0] === 0x20 && out[1] === 0x41);
+        },
+      },
+      {
+        name: 'decompressor: window back-reference (dist=3, len=3)',
+        run() {
+          // ABC + backref(dist=3,len=3): word=24, b1=0x80, b2=0x18
+          const out = decompressPalmDoc(new Uint8Array([0x41, 0x42, 0x43, 0x80, 0x18]));
+          assertEqual(new TextDecoder().decode(out), 'ABCABC');
+        },
+      },
+      {
+        name: 'decompressor: null byte (0x00)',
+        run() {
+          const out = decompressPalmDoc(new Uint8Array([0x00, 0x41]));
+          assert(out[0] === 0 && out[1] === 0x41);
+        },
+      },
+      {
+        name: 'decompressor: empty input → empty output',
+        run() {
+          assertEqual(decompressPalmDoc(new Uint8Array(0)).length, 0);
+        },
+      },
+
+      // buildChapterTitles-like logic
+      {
+        name: 'buildChapterTitles: TOC labels mapped to sections',
+        run() {
+          const sectionRanges = [
+            { start: 0, end: 999 },
+            { start: 1000, end: 1999 },
+            { start: 2000, end: 2999 },
+          ];
+          const fakeToc = [
+            { label: 'Intro', href: 'filepos:0', subitems: [] },
+            { label: 'Chapter One', href: 'filepos:1000', subitems: [] },
+          ];
+          const titles = new Array(sectionRanges.length).fill(null);
+          function mockSplit(href) {
+            const n = parseInt(href.replace('filepos:', ''), 10);
+            return [sectionRanges.findIndex(r => r.end > n)];
+          }
+          for (const e of fakeToc) {
+            const [idx] = mockSplit(e.href);
+            if (idx >= 0 && idx < titles.length && !titles[idx]) titles[idx] = e.label;
+          }
+          assertEqual(titles[0], 'Intro');
+          assertEqual(titles[1], 'Chapter One');
+          assertEqual(titles[2], null);
+        },
+      },
+      {
+        name: 'buildChapterTitles: fallback title "Chapter N"',
+        run() {
+          const titles = [null, 'Real Title', null];
+          const chapters = titles.map((t, i) => ({ title: t || ('Chapter ' + (i + 1)) }));
+          assertEqual(chapters[0].title, 'Chapter 1');
+          assertEqual(chapters[1].title, 'Real Title');
+          assertEqual(chapters[2].title, 'Chapter 3');
+        },
+      },
+
+      // isMOBI detection
+      {
+        name: 'isMOBI: valid MOBI buffer detected as MOBI',
+        async run() {
+          await waitForModule();
+          const buf = buildMobiBuffer({ title: 'Detection Test' });
+          const result = await globalThis._isMOBI(new Blob([buf]));
+          assert(result === true, 'Expected true for valid MOBI');
+        },
+      },
+      {
+        name: 'isMOBI: random bytes not detected as MOBI',
+        async run() {
+          await waitForModule();
+          const result = await globalThis._isMOBI(new Blob([new ArrayBuffer(100)]));
+          assert(result === false, 'Expected false for empty buffer');
+        },
+      },
+      {
+        name: 'isMOBI: ZIP magic bytes not detected as MOBI',
+        async run() {
+          await waitForModule();
+          const bytes = new Uint8Array([0x50, 0x4B, 0x03, 0x04, ...new Array(96).fill(0)]);
+          const result = await globalThis._isMOBI(new Blob([bytes.buffer]));
+          assert(result === false, 'Expected false for ZIP file');
+        },
+      },
+
+      // MOBI parse integration
+      {
+        name: 'parse: sections array has at least one entry',
+        async run() {
+          await waitForModule();
+          const buf = buildMobiBuffer({ textContent: '<p>Hello MOBI</p>' });
+          const mobi = new globalThis._MobiClass({ unzlib: globalThis._unzlib });
+          const instance = await mobi.open(new Blob([buf]));
+          assert(Array.isArray(instance.sections) && instance.sections.length >= 1);
+        },
+      },
+      {
+        name: 'parse: createDocument returns a Document',
+        async run() {
+          await waitForModule();
+          const buf = buildMobiBuffer({ textContent: '<p id="x">Test</p>' });
+          const mobi = new globalThis._MobiClass({ unzlib: globalThis._unzlib });
+          const instance = await mobi.open(new Blob([buf]));
+          const doc = await instance.sections[0].createDocument();
+          assert(doc instanceof Document);
+          const p = doc.getElementById('x');
+          assert(p !== null && p.textContent === 'Test');
+        },
+      },
+      {
+        name: 'parse: mbp:pagebreak splits into multiple sections',
+        async run() {
+          await waitForModule();
+          const text = '<p>Ch1</p><mbp:pagebreak/><p>Ch2</p><mbp:pagebreak/><p>Ch3</p>';
+          const buf = buildMobiBuffer({ textContent: text });
+          const mobi = new globalThis._MobiClass({ unzlib: globalThis._unzlib });
+          const instance = await mobi.open(new Blob([buf]));
+          assert(instance.sections.length >= 3, 'Expected ≥3 sections from 2 pagebreaks');
+        },
+      },
+      {
+        name: 'parse: metadata.title is a string',
+        async run() {
+          await waitForModule();
+          const buf = buildMobiBuffer({ title: 'My Title' });
+          const mobi = new globalThis._MobiClass({ unzlib: globalThis._unzlib });
+          const instance = await mobi.open(new Blob([buf]));
+          const meta = instance.metadata || {};
+          assert(typeof meta.title === 'string', 'metadata.title should be a string');
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>epub-reader TOC detection</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    // ── Inline pure functions from epub-reader.js ────────────────────────────
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function isTocLineText(text) {
+      return /^.{2,}\s*[.·•‥…]{2,}\s*\d{1,5}\s*$/.test(text) ||
+             /^.{2,}\s{3,}\d{1,5}\s*$/.test(text);
+    }
+
+    function isTocLineCoord(ln, rightMargin) {
+      if (!ln.tokens || !ln.tokens.length) return false;
+      const realToks = ln.tokens.filter(function (t) { return !t.isSpace && t.str.trim(); });
+      if (realToks.length < 2) return false;
+      const lastTok = realToks[realToks.length - 1];
+      const prevTok = realToks[realToks.length - 2];
+      if (!/^(\d{1,4}|[ivxlcdmIVXLCDM]{1,6})$/.test(lastTok.str.trim())) return false;
+      const gap = lastTok.x - (prevTok.x + prevTok.w);
+      const nearRight = lastTok.x + lastTok.w >= rightMargin - 30;
+      return nearRight && gap > rightMargin * 0.10;
+    }
+
+    const TOC_HEADINGS = /\b(contents?|table of contents?|daftar isi|daftar|目次|目錄|sommaire|inhalt|índice|оглавление)\b/i;
+
+    function detectTocPage(lines) {
+      const nonEmpty = lines.filter(function (ln) { return ln.text.trim().length > 0; });
+      if (nonEmpty.length < 3) return false;
+      let rightMargin = 0;
+      for (const ln of nonEmpty) {
+        if (!ln.tokens) continue;
+        for (const t of ln.tokens) {
+          if (!t.isSpace) rightMargin = Math.max(rightMargin, t.x + t.w);
+        }
+      }
+      const textMatches = nonEmpty.filter(function (ln) { return isTocLineText(ln.text); }).length;
+      const coordMatches = rightMargin > 0
+        ? nonEmpty.filter(function (ln) { return isTocLineCoord(ln, rightMargin); }).length
+        : 0;
+      const tocCount = Math.max(textMatches, coordMatches);
+      const ratio = tocCount / nonEmpty.length;
+      if (ratio >= 0.35) return true;
+      if (tocCount >= 3 && nonEmpty.some(function (ln) { return TOC_HEADINGS.test(ln.text); })) return true;
+      return false;
+    }
+
+    function buildTocLineInfo(ln) {
+      const text = (typeof ln === "string" ? ln : ln.text || "").trim();
+      const m1 = text.match(/^(.*?)\s*[.·•‥…]{2,}\s*(\d{1,5})\s*$/);
+      if (m1) return { title: m1[1].trim(), page: m1[2] };
+      const m2 = text.match(/^(.*?)\s{3,}(\d{1,4})\s*$/);
+      if (m2) return { title: m2[1].trim(), page: m2[2] };
+      if (ln && ln.tokens) {
+        const realToks = ln.tokens.filter(function (t) { return !t.isSpace && t.str.trim(); });
+        if (realToks.length >= 2) {
+          const last = realToks[realToks.length - 1];
+          if (/^(\d{1,4}|[ivxlcdmIVXLCDM]{1,6})$/.test(last.str.trim())) {
+            const titlePart = text.slice(0, text.lastIndexOf(last.str.trim())).trim();
+            if (titlePart.length >= 2) return { title: titlePart, page: last.str.trim() };
+          }
+        }
+      }
+      return null;
+    }
+
+    function tocLinesToHtml(lines) {
+      const nonEmpty = lines.filter(function (ln) { return ln.text.trim().length > 0; });
+      let html = '<ul class="pdf-toc">';
+      for (const ln of nonEmpty) {
+        const text = ln.text.trim();
+        const entry = buildTocLineInfo(ln);
+        if (entry) {
+          html += '<li class="pdf-toc-entry"><span class="pdf-toc-title">'
+            + escapeHtml(entry.title)
+            + '</span><span class="pdf-toc-page">'
+            + escapeHtml(entry.page)
+            + '</span></li>';
+        } else {
+          html += '<li class="pdf-toc-heading">' + escapeHtml(text) + '</li>';
+        }
+      }
+      html += '</ul>';
+      return html;
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    // Build a line object with text only (no coordinate info)
+    function line(text) { return { text }; }
+
+    // Build a line with coordinate tokens for coordinate-based tests.
+    // toks: [{str, x, w}]
+    function lineWithToks(text, toks) {
+      return { text, tokens: toks.map(function (t) { return Object.assign({ isSpace: false }, t); }) };
+    }
+
+    // A TOC line where the page number is right-aligned (no dot leader in text,
+    // but last token is far right — simulates PDF right-aligned page numbers)
+    function coordTocLine(titleStr, pageStr, pageX, rightMargin) {
+      // title token at left; page token ends AT the right margin
+      const titleW = Math.min(titleStr.length * 6, pageX - 60);
+      const pageW = rightMargin - pageX;  // token ends exactly at right margin
+      return lineWithToks(titleStr + " " + pageStr, [
+        { str: titleStr, x: 50, w: titleW },
+        { str: pageStr, x: pageX, w: pageW },
+      ]);
+    }
+
+    const RIGHT = 500; // simulated right margin
+
+    const TYPICAL_TOC_LINES = [
+      line("Contents"),
+      line("Prologue: Bad Dreams in Bali ......... 1"),
+      line("Something Close to Shame ............. 12"),
+      line("What Young Men Do .................... 18"),
+      line("The Best People ...................... 45"),
+      line("The Radiant Light .................... 72"),
+    ];
+
+    const INDONESIAN_TOC = [
+      line("Daftar Isi"),
+      line("Bab 1 Pendahuluan ................... 1"),
+      line("Bab 2 Latar Belakang ................ 15"),
+      line("Bab 3 Metodologi .................... 30"),
+      line("Bab 4 Hasil Penelitian .............. 50"),
+      line("Bab 5 Kesimpulan .................... 80"),
+    ];
+
+    // TOC with NO dot leaders — right-aligned page numbers only (coordinate-based)
+    const COORD_TOC_LINES = [
+      line("DAFTAR ISI"),
+      coordTocLine("BAB I PENDAHULUAN", "1",  460, RIGHT),
+      coordTocLine("BAB II LATAR BELAKANG", "15", 447, RIGHT),
+      coordTocLine("BAB III METODOLOGI", "30", 453, RIGHT),
+      coordTocLine("BAB IV HASIL", "50",       460, RIGHT),
+      coordTocLine("BAB V KESIMPULAN", "80",   447, RIGHT),
+    ];
+
+    const BODY_TEXT_LINES = [
+      line("Pada awal 1970an, dalam rangka pembuatan film"),
+      line("berjudul Marabunta yang berlokasi di kota Surabaya,"),
+      line("diperlukan sebuah adegan perkelahian di kuburan"),
+      line("yang sepi dan terkesan angker. Kru film memutuskan"),
+      line("mengambil gambar di makam Kembang Kuning."),
+    ];
+
+    runTests([
+
+      // ── isTocLineText ─────────────────────────────────────────────────────
+      { name: "isTocLineText: dot leader + page number → true", run() {
+        assert(isTocLineText("Prologue ........... 1"));
+      }},
+      { name: "isTocLineText: middot leader → true", run() {
+        assert(isTocLineText("Chapter 1 ···· 12"));
+      }},
+      { name: "isTocLineText: 3-space leader → true", run() {
+        assert(isTocLineText("Chapter 1   45"));
+      }},
+      { name: "isTocLineText: body text sentence → false", run() {
+        assert(!isTocLineText("Pada awal 1970an, dalam rangka pembuatan film."));
+      }},
+      { name: "isTocLineText: heading with no page → false", run() {
+        assert(!isTocLineText("Table of Contents"));
+      }},
+
+      // ── isTocLineCoord ────────────────────────────────────────────────────
+      { name: "isTocLineCoord: number far right with large gap → true", run() {
+        const ln = coordTocLine("BAB I PENDAHULUAN", "1", 460, RIGHT);
+        assert(isTocLineCoord(ln, RIGHT));
+      }},
+      { name: "isTocLineCoord: number near left (not right-aligned) → false", run() {
+        const ln = lineWithToks("Chapter 1 text here 12", [
+          { str: "Chapter 1 text here", x: 50, w: 114 },
+          { str: "12", x: 170, w: 12 },  // near left, small gap
+        ]);
+        assert(!isTocLineCoord(ln, RIGHT));
+      }},
+      { name: "isTocLineCoord: small gap despite right position → false", run() {
+        // Gap = 470 - (50+110) = 310 but RIGHT=500, 310/500=0.62 > 0.10 → actually true
+        // Let's test small gap: prev token ends at 455, page num starts at 460, gap=5
+        const ln = lineWithToks("Title 7", [
+          { str: "Title", x: 50, w: 405 },  // ends at 455
+          { str: "7", x: 460, w: 6 },       // gap=5, RIGHT=500 → 5/500=0.01 < 0.10 → false
+        ]);
+        assert(!isTocLineCoord(ln, RIGHT));
+      }},
+      { name: "isTocLineCoord: Roman numeral page → true", run() {
+        const ln = lineWithToks("Preface iv", [
+          { str: "Preface", x: 50, w: 80 },
+          { str: "iv", x: 460, w: 12 },
+        ]);
+        assert(isTocLineCoord(ln, RIGHT));
+      }},
+      { name: "isTocLineCoord: non-numeric last token → false", run() {
+        const ln = lineWithToks("Section text end", [
+          { str: "Section text", x: 50, w: 200 },
+          { str: "end", x: 460, w: 30 },
+        ]);
+        assert(!isTocLineCoord(ln, RIGHT));
+      }},
+
+      // ── detectTocPage ─────────────────────────────────────────────────────
+      { name: "detectTocPage: typical English TOC (text) → true", run() {
+        assert(detectTocPage(TYPICAL_TOC_LINES));
+      }},
+      { name: "detectTocPage: Indonesian TOC (text) → true", run() {
+        assert(detectTocPage(INDONESIAN_TOC));
+      }},
+      { name: "detectTocPage: coordinate-only TOC (no dot leaders) → true", run() {
+        assert(detectTocPage(COORD_TOC_LINES));
+      }},
+      { name: "detectTocPage: body text → false", run() {
+        assert(!detectTocPage(BODY_TEXT_LINES));
+      }},
+      { name: "detectTocPage: fewer than 3 lines → false", run() {
+        assert(!detectTocPage([line("Chapter 1 ...... 1"), line("Chapter 2 ...... 5")]));
+      }},
+      { name: "detectTocPage: keyword + 3 coord entries (below 35%) → true", run() {
+        // 3 coord TOC lines / 10 total = 30% — below 35%, but keyword fires
+        const mixed = [
+          line("DAFTAR ISI"),
+          coordTocLine("BAB I", "1", 460, RIGHT),
+          coordTocLine("BAB II", "5", 453, RIGHT),
+          coordTocLine("BAB III", "10", 453, RIGHT),
+          line("Lorem ipsum dolor sit amet consectetur adipiscing"),
+          line("Sed do eiusmod tempor incididunt ut labore et dolore"),
+          line("Magna aliqua ut enim ad minim veniam quis nostrud"),
+          line("Exercitation ullamco laboris nisi ut aliquip ex ea"),
+          line("Commodo consequat duis aute irure dolor in reprehenderit"),
+          line("In voluptate velit esse cillum dolore eu fugiat nulla"),
+        ];
+        assert(detectTocPage(mixed));
+      }},
+
+      // ── buildTocLineInfo ─────────────────────────────────────────────────
+      { name: "buildTocLineInfo: dot leader (string)", run() {
+        const r = buildTocLineInfo("Prologue ........... 1");
+        assertEqual(r.title, "Prologue");
+        assertEqual(r.page, "1");
+      }},
+      { name: "buildTocLineInfo: whitespace leader (line object)", run() {
+        const r = buildTocLineInfo(line("Chapter 2   45"));
+        assertEqual(r.title, "Chapter 2");
+        assertEqual(r.page, "45");
+      }},
+      { name: "buildTocLineInfo: coord fallback (no leader, has tokens)", run() {
+        const ln = coordTocLine("BAB I PENDAHULUAN", "1", 460, RIGHT);
+        const r = buildTocLineInfo(ln);
+        assert(r !== null, "should extract entry");
+        assertEqual(r.page, "1");
+        assert(r.title.includes("BAB"), "title contains BAB: " + r.title);
+      }},
+      { name: "buildTocLineInfo: plain heading → null", run() {
+        assertEqual(buildTocLineInfo("Table of Contents"), null);
+        assertEqual(buildTocLineInfo(line("Table of Contents")), null);
+      }},
+
+      // ── tocLinesToHtml ────────────────────────────────────────────────────
+      { name: "tocLinesToHtml: coord TOC → entries with title + page", run() {
+        const html = tocLinesToHtml(COORD_TOC_LINES);
+        assert(html.includes('pdf-toc-entry'), "has entries");
+        assert(html.includes(">1<") || html.includes(">1 <"), "page 1 present");
+        assert(html.includes("DAFTAR"), "heading present");
+      }},
+      { name: "tocLinesToHtml: HTML special chars escaped", run() {
+        const lines = [line('Chapter <1> & "Two" .......... 5')];
+        const html = tocLinesToHtml(lines);
+        assert(!html.includes("<1>"), "< should be escaped");
+        assert(html.includes("&lt;1&gt;"), "escaped correctly");
+      }},
+
+    ]);
+  </script>
+</body>
+</html>

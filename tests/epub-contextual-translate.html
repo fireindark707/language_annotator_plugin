@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>epub contextual translate</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../lib/dictionary-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/content-page-processing.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const TranslationUtils = window.TranslationUtils;
+    const CPP = window.ContentPageProcessing;
+
+    // ── chrome stub ─────────────────────────────────────────────────────────
+    let sendMessageCalls = [];
+    let sendMessageResponse = { translation: "contextual-result", usedContext: true, fallback: false };
+
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(msg, cb) {
+          sendMessageCalls.push(msg);
+          // Simulate async background response
+          setTimeout(function () {
+            if (msg.action === "translateContextualWord") {
+              cb(Object.assign({}, sendMessageResponse));
+            } else if (msg.action === "translate") {
+              cb({ translation: "plain:" + (msg.text || "") });
+            } else {
+              cb({});
+            }
+          }, 0);
+        },
+      },
+      i18n: {
+        detectLanguage(text, cb) {
+          const isEnglish = /^[a-zA-Z\s.,!?'";\-]+$/.test((text || "").trim());
+          cb({ isReliable: isEnglish, languages: isEnglish ? [{ language: "en", percentage: 99 }] : [] });
+        },
+        getUILanguage() { return "en"; },
+      },
+      storage: {
+        local: {
+          get(keys, cb) { cb({}); },
+          set(data, cb) { if (cb) cb(); },
+        },
+      },
+    };
+
+    // ── Mock WordfreqUtils ───────────────────────────────────────────────────
+    const FREQ_TABLE = {
+      "the": 7.0, "and": 6.8, "is": 6.5, "a": 7.2,
+      "run": 5.0, "book": 4.5, "house": 4.1,
+      "sorrow": 3.5, "parchment": 2.1,
+    };
+    const mockWordfreqUtils = {
+      isSupported(lang) { return ["en", "fr", "de", "es", "id", "ja", "zh", "ko"].includes((lang || "").split("-")[0].toLowerCase()); },
+      isReady(_lang) { return true; },
+      initForLang(_lang) { return Promise.resolve(true); },
+      getZipf(word, _lang) { return FREQ_TABLE[(word || "").toLowerCase()] || 0; },
+      getDifficultyTier(zipf, _lang) {
+        if (!zipf || zipf <= 0) return null;
+        if (zipf >= 5.3) return "A1";
+        if (zipf >= 4.7) return "A2";
+        if (zipf >= 4.2) return "B1";
+        if (zipf >= 3.7) return "B2";
+        if (zipf >= 3.2) return "C1";
+        return "C2";
+      },
+    };
+
+    // ── Isolate the functions under test ────────────────────────────────────
+    // We instantiate the cache state and functions inline so tests don't
+    // depend on epub-reader.js loading (which requires a full DOM shell).
+
+    function makeModule(wordfreqUtils) {
+      const TranslationUtilsRef = window.TranslationUtils;
+      const ExampleUtilsRef = window.ExampleUtils;
+      const ContentPageProcessingRef = window.ContentPageProcessing;
+
+      const MAX_CONTEXTUAL_WORD_CACHE_ENTRIES = 120;
+      const MAX_RECENT_CONTEXTUAL_WORD_ENTRIES = 40;
+      const contextualWordTranslationCache = new Map();
+      const contextualWordTranslationInflight = new Map();
+      let lastResolvedContextualWordQuery = null;
+      const recentResolvedContextualWordQueries = new Map();
+
+      // Simulate currentBook
+      let currentBook = { language: "en" };
+
+      function detectLangText(text) {
+        return new Promise(function (resolve) {
+          try {
+            if (!chrome || !chrome.i18n || typeof chrome.i18n.detectLanguage !== "function") {
+              resolve(""); return;
+            }
+            chrome.i18n.detectLanguage(text || "", function (result) {
+              if (chrome.runtime.lastError || !result || !Array.isArray(result.languages)) {
+                resolve(""); return;
+              }
+              if (result.languages.length === 0) { resolve(""); return; }
+              const top = result.languages[0];
+              const lang = (top && top.language ? top.language : "").toLowerCase();
+              resolve((lang.split("-")[0] || ""));
+            });
+          } catch (_) {
+            resolve("");
+          }
+        });
+      }
+
+      function buildContextualWordCacheKey(context, sourceLang, targetLang) {
+        if (!context || !context.found || !context.sentence || !context.word) return "";
+        const normalizedSentence = String(context.sentence).trim().replace(/\s+/g, " ");
+        const normalizedWord = String(context.word).trim().toLowerCase();
+        const normalizedSourceLang = TranslationUtilsRef.normalizeTranslationLang(sourceLang) || "auto";
+        const normalizedTargetLang =
+          TranslationUtilsRef.normalizeTranslationLang(targetLang) ||
+          TranslationUtilsRef.getBrowserTargetLang(window.navigator) ||
+          "en";
+        const normalizedWordPos =
+          typeof context.wordPos === "number" && Number.isFinite(context.wordPos) && context.wordPos >= 0
+            ? String(context.wordPos)
+            : "";
+        return `${normalizedSourceLang}__${normalizedTargetLang}__${normalizedWordPos}__${normalizedWord}__${normalizedSentence}`;
+      }
+
+      function rememberContextualWordTranslation(cacheKey, translation) {
+        if (!cacheKey) return translation;
+        if (contextualWordTranslationCache.has(cacheKey)) {
+          contextualWordTranslationCache.delete(cacheKey);
+        }
+        contextualWordTranslationCache.set(cacheKey, translation);
+        while (contextualWordTranslationCache.size > MAX_CONTEXTUAL_WORD_CACHE_ENTRIES) {
+          const oldestKey = contextualWordTranslationCache.keys().next().value;
+          if (oldestKey === undefined) break;
+          contextualWordTranslationCache.delete(oldestKey);
+        }
+        return translation;
+      }
+
+      function rememberLastResolvedContext(context, sourceLang, targetLang, cacheKey, translation) {
+        if (!context || !context.found || !context.sentence || !context.word) return;
+        const normalizedSentence = String(context.sentence).trim().replace(/\s+/g, " ");
+        const entry = {
+          word: String(context.word).trim().toLowerCase(),
+          sentence: normalizedSentence,
+          wordPos: typeof context.wordPos === "number" ? context.wordPos : null,
+          sourceLang: TranslationUtilsRef.normalizeTranslationLang(sourceLang) || "auto",
+          targetLang:
+            TranslationUtilsRef.normalizeTranslationLang(targetLang) ||
+            TranslationUtilsRef.getBrowserTargetLang(window.navigator) ||
+            "en",
+          cacheKey: cacheKey || "",
+          translation: typeof translation === "string" ? translation : "",
+          updatedAt: Date.now(),
+        };
+        lastResolvedContextualWordQuery = entry;
+        const recentKey = `${entry.targetLang}__${entry.word}__${normalizedSentence}`;
+        if (recentResolvedContextualWordQueries.has(recentKey)) {
+          recentResolvedContextualWordQueries.delete(recentKey);
+        }
+        recentResolvedContextualWordQueries.set(recentKey, entry);
+        while (recentResolvedContextualWordQueries.size > MAX_RECENT_CONTEXTUAL_WORD_ENTRIES) {
+          const oldestKey = recentResolvedContextualWordQueries.keys().next().value;
+          if (oldestKey === undefined) break;
+          recentResolvedContextualWordQueries.delete(oldestKey);
+        }
+      }
+
+      function getRecentResolvedContextualEntry(word, sourceLang, targetLang, sentence) {
+        const normalizedWord = String(word || "").trim().toLowerCase();
+        const normalizedTargetLang =
+          TranslationUtilsRef.normalizeTranslationLang(targetLang) ||
+          TranslationUtilsRef.getBrowserTargetLang(window.navigator) ||
+          "en";
+        const normalizedSentence = typeof sentence === "string"
+          ? String(sentence).trim().replace(/\s+/g, " ")
+          : "";
+        if (!normalizedSentence) return null;
+        const recentKey = `${normalizedTargetLang}__${normalizedWord}__${normalizedSentence}`;
+        const mappedEntry = recentResolvedContextualWordQueries.get(recentKey) || null;
+        const entry = mappedEntry || (
+          lastResolvedContextualWordQuery &&
+          lastResolvedContextualWordQuery.word === normalizedWord &&
+          lastResolvedContextualWordQuery.targetLang === normalizedTargetLang &&
+          lastResolvedContextualWordQuery.sentence === normalizedSentence
+            ? lastResolvedContextualWordQuery
+            : null
+        );
+        if (!entry) return null;
+        if (Date.now() - entry.updatedAt > 30000) {
+          recentResolvedContextualWordQueries.delete(recentKey);
+          return null;
+        }
+        if (entry.word !== normalizedWord) return null;
+        if (entry.targetLang !== normalizedTargetLang) return null;
+        if (entry.sentence !== normalizedSentence) return null;
+        return entry;
+      }
+
+      function resolveContextualSourceLang(context, fallbackSourceLang, detectedLangHint) {
+        if (detectedLangHint) return Promise.resolve(detectedLangHint);
+        if (!context || !context.found || !context.sentence) {
+          return Promise.resolve(fallbackSourceLang || "auto");
+        }
+        return detectLangText(context.sentence)
+          .then(function (detectedLang) { return detectedLang || fallbackSourceLang || "auto"; })
+          .catch(function () { return fallbackSourceLang || "auto"; });
+      }
+
+      function shouldSkipContextualTranslationForWord(word, sourceLang) {
+        const wf = wordfreqUtils;
+        if (!wf || !word) return Promise.resolve(false);
+        const normalizedSourceLang = String(sourceLang || "").split("-")[0].toLowerCase();
+        if (!normalizedSourceLang || normalizedSourceLang === "auto") return Promise.resolve(false);
+        if (!wf.isSupported(normalizedSourceLang)) return Promise.resolve(false);
+        return Promise.resolve(wf.initForLang(normalizedSourceLang))
+          .then(function (ready) {
+            if (!ready) return false;
+            const zipf = wf.getZipf(String(word).trim().toLowerCase(), normalizedSourceLang);
+            const tier = wf.getDifficultyTier(zipf, normalizedSourceLang);
+            return tier === "A1";
+          })
+          .catch(function () { return false; });
+      }
+
+      function buildEmptyContextPayload(word, languageHint) {
+        return {
+          found: false,
+          sentence: "",
+          word: typeof word === "string" ? word.trim() : "",
+          wordPos: null,
+          containerText: "",
+          containerOffset: null,
+          languageHint: languageHint || "",
+        };
+      }
+
+      function buildVerifiedDirectContext(sentence, word, wordPos, languageHint) {
+        const trimmedSentence = typeof sentence === "string" ? sentence.trim() : "";
+        const trimmedWord = typeof word === "string" ? word.trim() : "";
+        if (!trimmedSentence || !trimmedWord) return buildEmptyContextPayload(trimmedWord, languageHint);
+        if (typeof wordPos !== "number" || !Number.isFinite(wordPos) || wordPos < 0) return buildEmptyContextPayload(trimmedWord, languageHint);
+        const verifiedContext = ContentPageProcessingRef.buildContextPayloadFromContainer(
+          trimmedSentence,
+          trimmedWord,
+          wordPos,
+          languageHint,
+          function (text, lang) { return ExampleUtilsRef.splitIntoSentences(text, lang || languageHint || "en"); }
+        );
+        if (!verifiedContext.found || verifiedContext.sentence !== trimmedSentence || verifiedContext.wordPos !== wordPos) {
+          return buildEmptyContextPayload(trimmedWord, languageHint);
+        }
+        return verifiedContext;
+      }
+
+      function getContextForWord(word, options) {
+        const params = options || {};
+        const trimmedWord = typeof word === "string" ? word.trim() : "";
+        const languageHint =
+          params.languageHint ||
+          (currentBook && currentBook.language) ||
+          "en";
+        const directContextSentence = typeof params.contextSentence === "string" && params.contextSentence.trim()
+          ? params.contextSentence
+          : (typeof params.sentence === "string" && params.sentence.trim() ? params.sentence : "");
+        const directContextWordPos = typeof params.contextWordPos === "number"
+          ? params.contextWordPos
+          : (typeof params.wordPos === "number" ? params.wordPos : null);
+        if (directContextSentence) {
+          return buildVerifiedDirectContext(directContextSentence, trimmedWord, directContextWordPos, languageHint);
+        }
+        return buildEmptyContextPayload(trimmedWord, languageHint);
+      }
+
+      function requestWordTranslationInContext(options) {
+        const params = options || {};
+        const trimmedWord = typeof params.word === "string" ? params.word.trim() : "";
+        if (!trimmedWord) return Promise.resolve("");
+        const requestedSourceLang = params.sourceLang || "auto";
+        const requestedTargetLang =
+          params.targetLang || TranslationUtilsRef.getBrowserTargetLang(window.navigator) || "en";
+        let context = getContextForWord(trimmedWord, params);
+        const recentResolvedEntry = params.allowRecentContextCache && context && context.found && context.sentence
+          ? getRecentResolvedContextualEntry(trimmedWord, requestedSourceLang, requestedTargetLang, context.sentence)
+          : null;
+        if ((!context || !context.found) && params.allowRecentContextCache) {
+          const recentContext = (function () {
+            const entry = getRecentResolvedContextualEntry(
+              trimmedWord, requestedSourceLang, requestedTargetLang,
+              typeof params.contextSentence === "string" ? params.contextSentence : ""
+            );
+            if (!entry) return null;
+            const langHint = (currentBook && currentBook.language) || "en";
+            const vc = buildVerifiedDirectContext(entry.sentence, trimmedWord, entry.wordPos, langHint);
+            return vc.found ? vc : null;
+          })();
+          if (recentContext) context = recentContext;
+        }
+        if (!context || !context.found || !context.sentence) {
+          if (params.cacheOnly && recentResolvedEntry && recentResolvedEntry.translation) {
+            return Promise.resolve(recentResolvedEntry.translation);
+          }
+          return Promise.resolve("");
+        }
+        return resolveContextualSourceLang(context, requestedSourceLang, params.detectedLang || "").then(function (effectiveSourceLang) {
+          const cacheKey = buildContextualWordCacheKey(context, effectiveSourceLang, requestedTargetLang);
+          if (cacheKey && contextualWordTranslationCache.has(cacheKey)) {
+            return contextualWordTranslationCache.get(cacheKey) || "";
+          }
+          if (params.cacheOnly) {
+            if (recentResolvedEntry && recentResolvedEntry.translation) return recentResolvedEntry.translation;
+            return "";
+          }
+          return shouldSkipContextualTranslationForWord(trimmedWord, effectiveSourceLang).then(function (shouldSkip) {
+            if (shouldSkip) return "";
+            if (cacheKey && contextualWordTranslationCache.has(cacheKey)) {
+              return contextualWordTranslationCache.get(cacheKey) || "";
+            }
+            if (cacheKey && contextualWordTranslationInflight.has(cacheKey)) {
+              return contextualWordTranslationInflight.get(cacheKey);
+            }
+            const translationPromise = TranslationUtilsRef.requestContextualWordTranslation({
+              chromeRuntime: chrome.runtime,
+              sentence: context.sentence,
+              word: trimmedWord,
+              wordPos: typeof context.wordPos === "number" ? context.wordPos : null,
+              sourceLang: effectiveSourceLang,
+              targetLang: requestedTargetLang,
+            }).then(function (result) {
+              const translation = result && typeof result.translation === "string" ? result.translation : "";
+              const isTrueContextualHit = !!(result && result.usedContext && !result.fallback && translation);
+              if (!isTrueContextualHit) return "";
+              const rememberedTranslation = rememberContextualWordTranslation(cacheKey, translation);
+              if (rememberedTranslation) {
+                rememberLastResolvedContext(context, effectiveSourceLang, requestedTargetLang, cacheKey, rememberedTranslation);
+              }
+              return rememberedTranslation;
+            }).catch(function () { return ""; }).finally(function () {
+              if (cacheKey) contextualWordTranslationInflight.delete(cacheKey);
+            });
+            if (cacheKey) contextualWordTranslationInflight.set(cacheKey, translationPromise);
+            return translationPromise;
+          });
+        });
+      }
+
+      function shouldSkipTranslateAndDictionaryForLang(detected) {
+        if (!detected) return false;
+        const browserBase = (navigator.language || "en").split("-")[0].toLowerCase();
+        const norm = function (l) { return l === "fil" ? "tl" : l; };
+        if (norm(detected) === "zh" && norm(browserBase) === "zh") return true;
+        return norm(detected) === norm(browserBase);
+      }
+
+      return {
+        buildContextualWordCacheKey,
+        rememberContextualWordTranslation,
+        rememberLastResolvedContext,
+        getRecentResolvedContextualEntry,
+        resolveContextualSourceLang,
+        shouldSkipContextualTranslationForWord,
+        shouldSkipTranslateAndDictionaryForLang,
+        requestWordTranslationInContext,
+        getContextForWord,
+        buildVerifiedDirectContext,
+        contextualWordTranslationCache,
+        contextualWordTranslationInflight,
+        recentResolvedContextualWordQueries,
+        setLastResolvedContextualWordQuery(v) { lastResolvedContextualWordQuery = v; },
+      };
+    }
+
+    // Build a valid context object for tests.
+    // We use buildContextPayloadFromContainer to get a real wordPos.
+    function makeContext(sentence, word) {
+      const result = CPP.buildContextPayloadFromContainer(
+        sentence, word, sentence.indexOf(word),
+        "en",
+        function (text, lang) { return window.ExampleUtils.splitIntoSentences(text, lang || "en"); }
+      );
+      return result;
+    }
+
+    runTests([
+      // 1. Cache hit: second call must not send a new message
+      {
+        name: "cache hit: second call does not send a new sendMessage",
+        async run() {
+          sendMessageCalls = [];
+          sendMessageResponse = { translation: "悲傷", usedContext: true, fallback: false };
+          const mod = makeModule(null);
+          const sentence = "She felt great sorrow when they parted.";
+          const word = "sorrow";
+
+          const result1 = await mod.requestWordTranslationInContext({
+            word, sourceLang: "en", targetLang: "zh-TW",
+            contextSentence: sentence, contextWordPos: sentence.indexOf(word),
+          });
+          const callsAfterFirst = sendMessageCalls.length;
+          const result2 = await mod.requestWordTranslationInContext({
+            word, sourceLang: "en", targetLang: "zh-TW",
+            contextSentence: sentence, contextWordPos: sentence.indexOf(word),
+          });
+          assert(result1 === result2, "results should match: " + result1 + " vs " + result2);
+          assertEqual(sendMessageCalls.length, callsAfterFirst, "second call should not send a new message");
+        },
+      },
+
+      // 2. In-flight dedup: two simultaneous calls → only one sendMessage
+      {
+        name: "in-flight dedup: simultaneous calls send only one message",
+        async run() {
+          sendMessageCalls = [];
+          sendMessageResponse = { translation: "悲傷", usedContext: true, fallback: false };
+          const mod = makeModule(null);
+          const sentence = "She felt great sorrow when they parted.";
+          const word = "sorrow";
+          const opts = {
+            word, sourceLang: "en", targetLang: "zh-TW",
+            contextSentence: sentence, contextWordPos: sentence.indexOf(word),
+            detectedLang: "en",
+          };
+          const [r1, r2] = await Promise.all([
+            mod.requestWordTranslationInContext(opts),
+            mod.requestWordTranslationInContext(opts),
+          ]);
+          assert(r1 === r2, "both results should be equal");
+          // Only one translateContextualWord message should have been sent
+          const ctxCalls = sendMessageCalls.filter(function (m) { return m.action === "translateContextualWord"; });
+          assertEqual(ctxCalls.length, 1, "expected exactly 1 sendMessage for in-flight dedup, got " + ctxCalls.length);
+        },
+      },
+
+      // 3. A1-skip: high-frequency word returns "" without sending a message
+      {
+        name: "A1-skip: Zipf>=5.3 word returns empty string without sendMessage",
+        async run() {
+          sendMessageCalls = [];
+          sendMessageResponse = { translation: "那", usedContext: true, fallback: false };
+          const mod = makeModule(mockWordfreqUtils);
+          const sentence = "The quick brown fox jumps over the lazy dog.";
+          const word = "the";
+          const result = await mod.requestWordTranslationInContext({
+            word, sourceLang: "en", targetLang: "zh-TW",
+            contextSentence: sentence, contextWordPos: sentence.indexOf(word),
+            detectedLang: "en",
+          });
+          assertEqual(result, "", "A1 word should be skipped, expected empty string");
+          const ctxCalls = sendMessageCalls.filter(function (m) { return m.action === "translateContextualWord"; });
+          assertEqual(ctxCalls.length, 0, "A1 word: no sendMessage expected");
+        },
+      },
+
+      // 4. shouldSkipTranslateAndDictionaryForLang: detected==browser→true, different→false
+      {
+        name: "shouldSkipTranslateAndDictionaryForLang: same lang → true, different → false",
+        run() {
+          const mod = makeModule(null);
+          const browserBase = (navigator.language || "en").split("-")[0].toLowerCase();
+          assertEqual(mod.shouldSkipTranslateAndDictionaryForLang(browserBase), true, "same lang should skip");
+          // Find a different language
+          const other = browserBase === "zh" ? "en" : "zh";
+          assertEqual(mod.shouldSkipTranslateAndDictionaryForLang(other), false, "different lang should not skip");
+        },
+      },
+
+      // 5. shouldSkipContextualTranslationForWord: A1 word→true, C2 word→false
+      {
+        name: "shouldSkipContextualTranslationForWord: A1=true, C2=false",
+        async run() {
+          const mod = makeModule(mockWordfreqUtils);
+          // "the" has Zipf 7.0 → A1
+          const skipThe = await mod.shouldSkipContextualTranslationForWord("the", "en");
+          assertEqual(skipThe, true, "expected A1 word 'the' to be skipped");
+          // "parchment" has Zipf 2.1 → C2
+          const skipParchment = await mod.shouldSkipContextualTranslationForWord("parchment", "en");
+          assertEqual(skipParchment, false, "expected C2 word 'parchment' not to be skipped");
+        },
+      },
+
+      // 6. Cache eviction: fill to 121 entries → oldest evicted
+      {
+        name: "cache eviction: filling 121 entries evicts oldest",
+        run() {
+          const mod = makeModule(null);
+          // Fill 120 entries
+          for (let i = 0; i < 120; i++) {
+            mod.rememberContextualWordTranslation("key_" + i, "val_" + i);
+          }
+          assertEqual(mod.contextualWordTranslationCache.size, 120, "should have 120 entries");
+          // Add the 121st — oldest (key_0) should be evicted
+          mod.rememberContextualWordTranslation("key_120", "val_120");
+          assertEqual(mod.contextualWordTranslationCache.size, 120, "cache should stay at 120 after eviction");
+          assert(!mod.contextualWordTranslationCache.has("key_0"), "oldest key_0 should be evicted");
+          assert(mod.contextualWordTranslationCache.has("key_120"), "newest key_120 should be present");
+        },
+      },
+
+      // 7. Recent context TTL: entry older than 30s should not be returned
+      {
+        name: "getRecentResolvedContextualEntry: expired entry (>30s) returns null",
+        run() {
+          const mod = makeModule(null);
+          const sentence = "She felt great sorrow.";
+          const word = "sorrow";
+          const targetLang = "zh-TW";
+          const recentKey = `${targetLang}__${word}__${sentence}`;
+          // Manually insert a stale entry
+          const staleEntry = {
+            word,
+            sentence,
+            wordPos: 14,
+            sourceLang: "en",
+            targetLang,
+            cacheKey: "k",
+            translation: "悲傷",
+            updatedAt: Date.now() - 31000, // 31 seconds ago
+          };
+          mod.recentResolvedContextualWordQueries.set(recentKey, staleEntry);
+          const result = mod.getRecentResolvedContextualEntry(word, "en", targetLang, sentence);
+          assertEqual(result, null, "stale entry (>30s) should return null");
+        },
+      },
+
+      // 8. No context → empty string
+      {
+        name: "requestWordTranslationInContext: no context sentence → returns empty string",
+        async run() {
+          sendMessageCalls = [];
+          const mod = makeModule(null);
+          const result = await mod.requestWordTranslationInContext({
+            word: "sorrow", sourceLang: "en", targetLang: "zh-TW",
+            // No contextSentence provided
+          });
+          assertEqual(result, "", "no context should return empty string");
+          const ctxCalls = sendMessageCalls.filter(function (m) { return m.action === "translateContextualWord"; });
+          assertEqual(ctxCalls.length, 0, "no sendMessage expected when no context");
+        },
+      },
+
+      // 9. cacheOnly with cold cache → empty string
+      {
+        name: "cacheOnly with cold cache → empty string",
+        async run() {
+          sendMessageCalls = [];
+          const mod = makeModule(null);
+          const sentence = "She felt great sorrow when they parted.";
+          const result = await mod.requestWordTranslationInContext({
+            word: "sorrow", sourceLang: "en", targetLang: "zh-TW",
+            contextSentence: sentence, contextWordPos: sentence.indexOf("sorrow"),
+            cacheOnly: true,
+          });
+          assertEqual(result, "", "cacheOnly on cold cache should return empty string");
+          const ctxCalls = sendMessageCalls.filter(function (m) { return m.action === "translateContextualWord"; });
+          assertEqual(ctxCalls.length, 0, "cacheOnly should never send a message");
+        },
+      },
+
+      // 10. buildContextualWordCacheKey: same inputs → same key; different wordPos → different key
+      {
+        name: "buildContextualWordCacheKey: deterministic and sensitive to wordPos",
+        run() {
+          const mod = makeModule(null);
+          const sentence = "She felt great sorrow.";
+          const ctx1 = { found: true, sentence, word: "sorrow", wordPos: 14 };
+          const ctx2 = { found: true, sentence, word: "sorrow", wordPos: 14 };
+          const ctx3 = { found: true, sentence, word: "sorrow", wordPos: 7 };
+
+          const key1 = mod.buildContextualWordCacheKey(ctx1, "en", "zh-TW");
+          const key2 = mod.buildContextualWordCacheKey(ctx2, "en", "zh-TW");
+          const key3 = mod.buildContextualWordCacheKey(ctx3, "en", "zh-TW");
+
+          assert(key1.length > 0, "key should not be empty");
+          assertEqual(key1, key2, "same inputs should produce same key");
+          assert(key1 !== key3, "different wordPos should produce different key");
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

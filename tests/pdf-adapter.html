@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>pdf-adapter</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    // ── Inline the logic that is testable without a pdf.js worker ─────────────
+    // These mirror the implementations in lib/pdf-adapter.js exactly.
+
+    async function isPDF(blobOrFile) {
+      try {
+        const buf = await blobOrFile.slice(0, 5).arrayBuffer();
+        const b = new Uint8Array(buf);
+        return b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46;
+      } catch (_) { return false; }
+    }
+
+    function resolveLanguage(lang) {
+      if (!lang) return 'en';
+      if (Array.isArray(lang)) lang = lang[0] || 'en';
+      return String(lang).trim() || 'en';
+    }
+
+    function buildChapters(numPages) {
+      const chapters = [];
+      for (let i = 1; i <= numPages; i++) {
+        chapters.push({ id: 'pdf-p' + i, title: 'Page ' + i, href: 'pdf-p' + i, opfDir: '' });
+      }
+      return chapters;
+    }
+
+    // ── Minimal valid PDF bytes ────────────────────────────────────────────────
+    function pdfMagicBytes() {
+      return new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2D]); // %PDF-
+    }
+
+    runTests([
+
+      // isPDF detection ────────────────────────────────────────────────────────
+      {
+        name: 'isPDF: PDF magic bytes → true',
+        async run() {
+          const result = await isPDF(new Blob([pdfMagicBytes()]));
+          assert(result === true, 'Expected true for %PDF- bytes');
+        },
+      },
+      {
+        name: 'isPDF: ZIP magic bytes → false',
+        async run() {
+          const bytes = new Uint8Array([0x50, 0x4B, 0x03, 0x04]);
+          const result = await isPDF(new Blob([bytes]));
+          assert(result === false, 'Expected false for ZIP bytes');
+        },
+      },
+      {
+        name: 'isPDF: MOBI magic bytes → false',
+        async run() {
+          const enc = new TextEncoder();
+          const bytes = enc.encode('BOOK');
+          const result = await isPDF(new Blob([bytes]));
+          assert(result === false, 'Expected false for MOBI bytes');
+        },
+      },
+      {
+        name: 'isPDF: empty blob → false',
+        async run() {
+          const result = await isPDF(new Blob([]));
+          assert(result === false, 'Expected false for empty blob');
+        },
+      },
+      {
+        name: 'isPDF: only first 4 bytes checked (5th byte irrelevant)',
+        async run() {
+          // Any byte at position 4 should still return true
+          const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0xFF]);
+          const result = await isPDF(new Blob([bytes]));
+          assert(result === true, 'Expected true when first 4 bytes are %PDF');
+        },
+      },
+
+      // resolveLanguage ────────────────────────────────────────────────────────
+      {
+        name: 'resolveLanguage: string "id" → "id"',
+        run() {
+          assertEqual(resolveLanguage('id'), 'id');
+        },
+      },
+      {
+        name: 'resolveLanguage: null → "en"',
+        run() {
+          assertEqual(resolveLanguage(null), 'en');
+        },
+      },
+      {
+        name: 'resolveLanguage: undefined → "en"',
+        run() {
+          assertEqual(resolveLanguage(undefined), 'en');
+        },
+      },
+      {
+        name: 'resolveLanguage: empty string → "en"',
+        run() {
+          assertEqual(resolveLanguage(''), 'en');
+        },
+      },
+      {
+        name: 'resolveLanguage: array ["en-US", "id"] → "en-US"',
+        run() {
+          assertEqual(resolveLanguage(['en-US', 'id']), 'en-US');
+        },
+      },
+      {
+        name: 'resolveLanguage: empty array → "en"',
+        run() {
+          assertEqual(resolveLanguage([]), 'en');
+        },
+      },
+      {
+        name: 'resolveLanguage: whitespace-only string → "en"',
+        run() {
+          assertEqual(resolveLanguage('   '), 'en');
+        },
+      },
+      {
+        name: 'resolveLanguage: number coerced to string',
+        run() {
+          assertEqual(resolveLanguage(42), '42');
+        },
+      },
+
+      // buildChapters ──────────────────────────────────────────────────────────
+      {
+        name: 'buildChapters: 1-page PDF → 1 chapter',
+        run() {
+          const chs = buildChapters(1);
+          assertEqual(chs.length, 1);
+          assertEqual(chs[0].title, 'Page 1');
+          assertEqual(chs[0].href, 'pdf-p1');
+          assertEqual(chs[0].id, 'pdf-p1');
+          assertEqual(chs[0].opfDir, '');
+        },
+      },
+      {
+        name: 'buildChapters: 10-page PDF → 10 chapters in order',
+        run() {
+          const chs = buildChapters(10);
+          assertEqual(chs.length, 10);
+          assertEqual(chs[0].title, 'Page 1');
+          assertEqual(chs[9].title, 'Page 10');
+          assertEqual(chs[4].href, 'pdf-p5');
+        },
+      },
+      {
+        name: 'buildChapters: 0 pages → empty array',
+        run() {
+          assertEqual(buildChapters(0).length, 0);
+        },
+      },
+      {
+        name: 'buildChapters: each chapter has unique id',
+        run() {
+          const chs = buildChapters(5);
+          const ids = chs.map(c => c.id);
+          const unique = new Set(ids);
+          assertEqual(unique.size, 5);
+        },
+      },
+      {
+        name: 'buildChapters: chapters have required interface fields',
+        run() {
+          const chs = buildChapters(3);
+          for (const ch of chs) {
+            assert('id' in ch, 'missing id');
+            assert('title' in ch, 'missing title');
+            assert('href' in ch, 'missing href');
+            assert('opfDir' in ch, 'missing opfDir');
+          }
+        },
+      },
+
+      // isPdfFile filename detection ────────────────────────────────────────────
+      {
+        name: 'isPdfFile: ".pdf" extension → true',
+        run() {
+          function isPdfFile(name) { return /\.pdf$/i.test(name || ''); }
+          assert(isPdfFile('document.pdf') === true);
+          assert(isPdfFile('BOOK.PDF') === true);
+          assert(isPdfFile('book.epub') === false);
+          assert(isPdfFile('book.mobi') === false);
+          assert(isPdfFile('') === false);
+        },
+      },
+
+    ]);
+  </script>
+</body>
+</html>

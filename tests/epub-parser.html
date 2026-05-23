@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>epub-parser</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../packages/jszip.min.js"></script>
+  <script src="../lib/epub-parser.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    // resolveHref tests (synchronous, no epub needed)
+    const resolveTests = [
+      {
+        name: "resolveHref: filename at root",
+        run() {
+          assertEqual(EpubParser.resolveHref("", "bab_1.html"), "bab_1.html");
+        }
+      },
+      {
+        name: "resolveHref: subdir + relative filename",
+        run() {
+          assertEqual(EpubParser.resolveHref("OEBPS/", "bab_1.html"), "OEBPS/bab_1.html");
+        }
+      },
+      {
+        name: "resolveHref: parent traversal",
+        run() {
+          assertEqual(EpubParser.resolveHref("OEBPS/text/", "../images/cover.jpg"), "OEBPS/images/cover.jpg");
+        }
+      },
+      {
+        name: "resolveHref: leading slash stripped",
+        run() {
+          assertEqual(EpubParser.resolveHref("", "/bab_1.html"), "bab_1.html");
+        }
+      },
+      {
+        name: "resolveHref: http url passthrough",
+        run() {
+          assertEqual(EpubParser.resolveHref("OEBPS/", "https://example.com/img.png"), "https://example.com/img.png");
+        }
+      },
+    ];
+
+    // Async epub parse tests
+    const epubTests = [
+      {
+        name: "JSZip loads epub without error",
+        async run() {
+          const resp = await fetch("../docs/Jalan Tak Ada Ujung.epub");
+          const buffer = await resp.arrayBuffer();
+          const zip = await JSZip.loadAsync(buffer);
+          assert(zip && typeof zip.files === "object", "zip.files should be object");
+          window._testZip = zip;
+        }
+      },
+      {
+        name: "findFile: case-insensitive lookup",
+        async run() {
+          const zip = window._testZip;
+          assert(!!EpubParser.findFile(zip, "META-INF/container.xml"), "exact case should find file");
+          assert(!!EpubParser.findFile(zip, "meta-inf/CONTAINER.XML"), "mixed case should find file");
+        }
+      },
+      {
+        name: "EpubParser.parse returns book with correct title and language",
+        async run() {
+          const zip = window._testZip;
+          const book = await EpubParser.parse(zip);
+          assertEqual(book.title, "Jalan Tak Ada Ujung");
+          assertEqual(book.language, "id");
+          window._testBook = book;
+        }
+      },
+      {
+        name: "book.chapters has 15 items (full spine preserved)",
+        async run() {
+          const book = window._testBook;
+          assertEqual(book.chapters.length, 15);
+        }
+      },
+      {
+        name: "first chapter (coverpage) gets NCX title 'Sampul'",
+        async run() {
+          const book = window._testBook;
+          assertEqual(book.chapters[0].href, "coverpage.xhtml");
+          assertEqual(book.chapters[0].title, "Sampul");
+        }
+      },
+      {
+        name: "bab_1.html gets NCX title '1'",
+        async run() {
+          const book = window._testBook;
+          const ch = book.chapters.find(c => c.href === "bab_1.html");
+          assert(!!ch, "bab_1.html should be in chapters");
+          assertEqual(ch.title, "1");
+        }
+      },
+      {
+        name: "tentang_penulis.html gets NCX title 'Biodata Penulis'",
+        async run() {
+          const book = window._testBook;
+          const ch = book.chapters.find(c => c.href === "tentang_penulis.html");
+          assert(!!ch, "tentang_penulis.html should be in chapters");
+          assertEqual(ch.title, "Biodata Penulis");
+        }
+      },
+      {
+        name: "catatan.html (no NCX entry) gets filename as title",
+        async run() {
+          const book = window._testBook;
+          const ch = book.chapters.find(c => c.href === "catatan.html");
+          assert(!!ch, "catatan.html should still be in chapters");
+          // HTML <title> is same as book title so falls back to filename "catatan"
+          assertEqual(ch.title, "catatan");
+        }
+      },
+      {
+        name: "copyright_page.html (no NCX entry) gets filename as title",
+        async run() {
+          const book = window._testBook;
+          const ch = book.chapters.find(c => c.href === "copyright_page.html");
+          assert(!!ch, "copyright_page.html should be in chapters");
+          assertEqual(ch.title, "copyright page");
+        }
+      },
+      {
+        name: "getChapterContent returns bab_1.html text",
+        async run() {
+          const book = window._testBook;
+          const content = await book.getChapterContent("bab_1.html", "");
+          assert(content.includes("Hujan gerimis"), "chapter should contain expected text");
+          window._testBab1 = content;
+        }
+      },
+      {
+        name: "bab_1.html parses as valid XHTML (no parseerror)",
+        async run() {
+          const content = window._testBab1;
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(content, "application/xhtml+xml");
+          assert(!doc.querySelector("parsererror"), "should parse without errors");
+          const firstP = doc.querySelector("p");
+          assert(firstP && firstP.textContent.includes("Hujan gerimis"), "first p should contain expected text");
+        }
+      },
+      {
+        name: "getFileAsBlob returns cover.jpeg as Blob",
+        async run() {
+          const book = window._testBook;
+          const blob = await book.getFileAsBlob("cover.jpeg", "");
+          assert(blob instanceof Blob, "should be a Blob");
+          assert(blob.size > 0, "blob should not be empty");
+        }
+      },
+      {
+        name: "chapters all have opfDir = '' (root-level epub)",
+        async run() {
+          const book = window._testBook;
+          const allRoot = book.chapters.every(c => c.opfDir === "");
+          assert(allRoot, "all chapters should have opfDir='' for this epub");
+        }
+      },
+      {
+        name: "coverpage.xhtml contains SVG <image xlink:href>",
+        async run() {
+          const book = window._testBook;
+          const content = await book.getChapterContent("coverpage.xhtml", "");
+          const parser = new DOMParser();
+          // Fall back to text/html since SVG+XHTML may have issues
+          let doc = parser.parseFromString(content, "application/xhtml+xml");
+          if (doc.querySelector("parseerror")) doc = parser.parseFromString(content, "text/html");
+          const svgImage = doc.querySelector("image");
+          assert(!!svgImage, "coverpage should contain SVG <image> element");
+          const xlinkHref = svgImage.getAttributeNS("http://www.w3.org/1999/xlink", "href") || svgImage.getAttribute("xlink:href") || svgImage.getAttribute("href");
+          assert(xlinkHref === "cover.jpeg", "SVG image should reference cover.jpeg, got: " + xlinkHref);
+        }
+      },
+    ];
+
+    runTests([...resolveTests, ...epubTests]);
+  </script>
+</body>
+</html>

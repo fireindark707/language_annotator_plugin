@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>epub-reader paragraph segmentation</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    // ── Inline pure functions from epub-reader.js ────────────────────────────
+
+    function dehyphenate(text) {
+      return text
+        .replace(/([a-zA-Zà-žÀ-ŽÀ-ɏ])-\s+([a-zA-Zà-žÀ-ŽÀ-ɏ])/g, "$1$2")
+        .replace(/([a-zA-Zà-žÀ-ŽÀ-ɏ])\s+-\s+([a-zA-Zà-žÀ-ŽÀ-ɏ])/g, "$1$2");
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // pdfTaggedToHtml — Path A (tagged PDF, marked-content items)
+    function pdfTaggedToHtml(items) {
+      const paragraphs = [];
+      let currentPara = [];
+      let depth = 0;
+      let inArtifact = 0;
+
+      function flushPara() {
+        const text = dehyphenate(currentPara.join("")).trim();
+        if (text) paragraphs.push(text);
+        currentPara = [];
+      }
+
+      for (const item of items) {
+        if (item.type === "beginMarkedContent" || item.type === "beginMarkedContentProps") {
+          depth++;
+          if (item.tag === "Artifact") inArtifact++;
+          else if (item.tag === "P" && depth > 0) {
+            if (currentPara.length) flushPara();
+          }
+        } else if (item.type === "endMarkedContent") {
+          if (inArtifact > 0) inArtifact--;
+          depth = Math.max(0, depth - 1);
+        } else if (item.str !== undefined) {
+          if (inArtifact > 0) continue;
+          currentPara.push(item.str);
+        }
+      }
+      flushPara();
+      if (!paragraphs.length) return null;
+      return paragraphs.map(function (p) { return "<p>" + escapeHtml(dehyphenate(p)) + "</p>"; }).join("\n");
+    }
+
+    // pdfHeuristicFromLines — Path B (untagged PDF, pre-built lines)
+    function pdfHeuristicFromLines(lines, baseFontSize) {
+      if (!lines.length) return "<p>（此頁無文字內容）</p>";
+
+      const x0Freq = {};
+      for (const ln of lines) {
+        const b = Math.round(ln.x0 / 2) * 2;
+        x0Freq[b] = (x0Freq[b] || 0) + 1;
+      }
+      const leftMargin = parseFloat(Object.keys(x0Freq).sort(function (a, b) {
+        return x0Freq[b] - x0Freq[a];
+      })[0] || 0);
+
+      const gaps = [];
+      for (let i = 1; i < lines.length; i++) gaps.push(lines[i - 1].y - lines[i].y);
+      gaps.sort(function (a, b) { return a - b; });
+      const normalLineGap = gaps[Math.floor(gaps.length * 0.4)] || baseFontSize * 1.2;
+
+      let pageTextWidth = 0;
+      for (const ln of lines) {
+        const last = ln.tokens && ln.tokens.filter(function (t) { return !t.isSpace; }).pop();
+        if (last) pageTextWidth = Math.max(pageTextWidth, last.x + last.w - leftMargin);
+      }
+      if (pageTextWidth < 1) pageTextWidth = 400;
+
+      const segments = [];
+      let current = [];
+
+      function flushSegment() {
+        const joined = dehyphenate(current.join(" ")).trim();
+        if (joined) segments.push(joined);
+        current = [];
+      }
+
+      for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i];
+        const text = ln.text;
+        if (i > 0 && current.length) {
+          const gap = lines[i - 1].y - ln.y;
+          const indented = ln.x0 - leftMargin > baseFontSize * 1.5;
+          const prevLn = lines[i - 1];
+          const prevLast = prevLn.tokens && prevLn.tokens.filter(function (t) { return !t.isSpace; }).pop();
+          const prevRight = prevLast ? prevLast.x + prevLast.w - leftMargin : 0;
+          const prevLineShort = prevRight < pageTextWidth * 0.60;
+          const isParaBreak =
+            gap > normalLineGap * 1.6 ||
+            (gap > normalLineGap * 1.15 && indented) ||
+            (gap > normalLineGap * 1.1  && prevLineShort);
+          if (isParaBreak) flushSegment();
+        }
+        if (current.length && /[\p{L}]-$/u.test(current[current.length - 1])) {
+          current[current.length - 1] = current[current.length - 1].slice(0, -1) + text;
+        } else {
+          current.push(text);
+        }
+      }
+      flushSegment();
+
+      if (!segments.length) return "<p>（此頁無文字內容）</p>";
+
+      const TERMINAL = /[.!?。！？…]["»›'"'"]?$/;
+      const paragraphs = [];
+      let acc = segments[0];
+      for (let i = 1; i < segments.length; i++) {
+        const next = segments[i];
+        const accTrimmed = acc.trimEnd();
+        const nextTrimmed = next.trimStart();
+        if (!TERMINAL.test(accTrimmed) && /^\p{Ll}/u.test(nextTrimmed)) {
+          acc = dehyphenate(acc + " " + next);
+        } else {
+          paragraphs.push(acc);
+          acc = next;
+        }
+      }
+      paragraphs.push(acc);
+
+      return paragraphs.map(function (p) { return "<p>" + escapeHtml(p.trim()) + "</p>"; }).join("\n");
+    }
+
+    // Helper: build a minimal line object for heuristic tests
+    // tokens: [{x, w, isSpace}] — simplified, y determined by line.y
+    function mkLine(text, y, x0, prevRight, totalWidth) {
+      // prevRight: rightmost x+w of the last token (simulates line width)
+      const fakeLastTok = { x: x0 + (prevRight || 300), w: 0, isSpace: false };
+      return { text, y, x0: x0 || 50, tokens: [fakeLastTok] };
+    }
+
+    runTests([
+
+      // ── dehyphenate ────────────────────────────────────────────────────────
+      { name: "dehyphenate: trailing hyphen + space", run() {
+        assertEqual(dehyphenate("mem- belit"), "membelit");
+      }},
+      { name: "dehyphenate: surrounded by spaces", run() {
+        assertEqual(dehyphenate("da - lam"), "dalam");
+      }},
+      { name: "dehyphenate: mid-word no spaces (real hyphen) unchanged", run() {
+        assertEqual(dehyphenate("well-known"), "well-known");
+      }},
+      { name: "dehyphenate: multiple occurrences", run() {
+        assertEqual(dehyphenate("mem- belit ma - syarakat"), "membelit masyarakat");
+      }},
+      { name: "dehyphenate: non-alphabetic hyphen unchanged", run() {
+        assertEqual(dehyphenate("2023- 2024"), "2023- 2024");
+      }},
+      { name: "dehyphenate: accented chars", run() {
+        assertEqual(dehyphenate("cré- ature"), "créature");
+      }},
+
+      // ── pdfTaggedToHtml (Path A) ───────────────────────────────────────────
+      { name: "tagged: P markers → separate paragraphs", run() {
+        const items = [
+          { type: "beginMarkedContentProps", tag: "P" },
+          { str: "First paragraph." },
+          { type: "endMarkedContent" },
+          { type: "beginMarkedContentProps", tag: "P" },
+          { str: "Second paragraph." },
+          { type: "endMarkedContent" },
+        ];
+        const html = pdfTaggedToHtml(items);
+        assert(html.includes("<p>First paragraph.</p>"), "first para: " + html);
+        assert(html.includes("<p>Second paragraph.</p>"), "second para: " + html);
+      }},
+      { name: "tagged: Artifact items skipped", run() {
+        const items = [
+          { type: "beginMarkedContent", tag: "Artifact" },
+          { str: "Page 42" },       // running header
+          { type: "endMarkedContent" },
+          { type: "beginMarkedContentProps", tag: "P" },
+          { str: "Real content." },
+          { type: "endMarkedContent" },
+        ];
+        const html = pdfTaggedToHtml(items);
+        assert(!html.includes("Page 42"), "artifact should be filtered: " + html);
+        assert(html.includes("Real content."), "real content present: " + html);
+      }},
+      { name: "tagged: explicit space tokens preserved within paragraph", run() {
+        const items = [
+          { type: "beginMarkedContentProps", tag: "P" },
+          { str: "Hello" }, { str: " " }, { str: "world." },
+          { type: "endMarkedContent" },
+        ];
+        const html = pdfTaggedToHtml(items);
+        assert(html.includes("Hello world."), "space preserved: " + html);
+      }},
+      { name: "tagged: dehyphenation applied", run() {
+        const items = [
+          { type: "beginMarkedContentProps", tag: "P" },
+          { str: "mem- " }, { str: "belit" },
+          { type: "endMarkedContent" },
+        ];
+        const html = pdfTaggedToHtml(items);
+        assert(html.includes("membelit"), "dehyphenated: " + html);
+        assert(!html.includes("mem- "), "raw hyphen gone: " + html);
+      }},
+      { name: "tagged: no P tags but has text → non-null (loose text collected)", run() {
+        // Figure is not Artifact, so its text is still collected as a loose paragraph.
+        // Only pure-Artifact pages with no body text return null.
+        const items = [
+          { type: "beginMarkedContent", tag: "Figure" },
+          { str: "Caption." },
+          { type: "endMarkedContent" },
+        ];
+        const result = pdfTaggedToHtml(items);
+        assert(result !== null, "should return html, not null");
+        assert(result.includes("Caption."), "text preserved: " + result);
+      }},
+      { name: "tagged: only Artifact text → returns null (falls through to heuristic)", run() {
+        const items = [
+          { type: "beginMarkedContent", tag: "Artifact" },
+          { str: "Page 1" },
+          { type: "endMarkedContent" },
+        ];
+        assertEqual(pdfTaggedToHtml(items), null);
+      }},
+      { name: "tagged: HTML special chars escaped", run() {
+        const scriptTag = "<scr" + "ipt>alert(1)<\/scr" + "ipt>";
+        const items = [
+          { type: "beginMarkedContentProps", tag: "P" },
+          { str: scriptTag },
+          { type: "endMarkedContent" },
+        ];
+        const html = pdfTaggedToHtml(items);
+        assert(!html.includes("<scr" + "ipt>"), "script tag escaped: " + html);
+        assert(html.includes("&lt;script&gt;"), "escaped correctly: " + html);
+      }},
+
+      // ── pdfHeuristicFromLines (Path B) ────────────────────────────────────
+      { name: "heuristic: single paragraph → single <p>", run() {
+        const lines = [
+          mkLine("This is the first line of a paragraph.", 100, 50, 340),
+          mkLine("continuing on the second line here.", 86, 50, 300),
+          mkLine("and the third line ends it.", 72, 50, 260),
+        ];
+        const html = pdfHeuristicFromLines(lines, 12);
+        const pCount = (html.match(/<p>/g) || []).length;
+        assertEqual(pCount, 1);
+      }},
+      { name: "heuristic: large gap → paragraph break", run() {
+        // normalLineGap ≈ 14 (from the 86→72 and 72→58 gaps)
+        // Gap of 40 between line 2 and 3 >> 1.6 × 14 = 22.4
+        const lines = [
+          mkLine("First paragraph line one.", 100, 50, 340),
+          mkLine("First paragraph line two.", 86, 50, 300),
+          mkLine("Second paragraph starts here.", 46, 50, 300),  // gap of 40
+          mkLine("Second paragraph continues.", 32, 50, 270),
+        ];
+        const html = pdfHeuristicFromLines(lines, 12);
+        const pCount = (html.match(/<p>/g) || []).length;
+        assertEqual(pCount, 2);
+      }},
+      { name: "heuristic: line-end hyphen joined without space", run() {
+        const lines = [
+          mkLine("This is mem-", 100, 50, 200),
+          mkLine("belit text.", 86, 50, 150),
+        ];
+        const html = pdfHeuristicFromLines(lines, 12);
+        assert(html.includes("membelit"), "hyphen joined: " + html);
+      }},
+      { name: "heuristic: post-process merges mid-sentence break", run() {
+        // Segment A ends without terminal punctuation, segment B starts lowercase
+        // → should merge into one paragraph
+        const lines = [
+          mkLine("Diperlukan sebuah", 100, 50, 170),  // short line, no terminal punct
+          mkLine("adegan perkelahian.", 62, 50, 300),  // gap of 38, prevLineShort → breaks
+        ];
+        // gap=38, normalLineGap≈38 (only one gap), so it's normalLineGap * 1.0 — no break
+        // Let's force a break with a bigger gap:
+        const lines2 = [
+          mkLine("Diperlukan sebuah", 100, 50, 170),
+          mkLine("adegan perkelahian.", 50, 50, 300),  // gap=50, prevLineShort → para break
+        ];
+        const html = pdfHeuristicFromLines(lines2, 12);
+        // "sebuah" has no terminal punct, "adegan" starts lowercase → should merge
+        assert(html.includes("sebuah adegan"), "merged: " + html);
+      }},
+      { name: "heuristic: terminal punctuation prevents merge", run() {
+        // Need enough lines so normalLineGap is stable and the gap is clearly > 1.6×
+        // normalLineGap comes from 40th-percentile of inter-line gaps.
+        // With lines at y=100,86,72,58 the normalLineGap = 14.
+        // Gap between last body line (y=58) and new para (y=18) = 40 > 14*1.6=22.4 → break.
+        // "This is the end." has terminal punct → post-process does NOT merge.
+        const lines = [
+          mkLine("This is the first body line.", 100, 50, 340),
+          mkLine("Second line of body text here.", 86, 50, 320),
+          mkLine("Third line of body text goes.", 72, 50, 300),
+          mkLine("This is the end.", 58, 50, 300),         // terminal punctuation
+          mkLine("New paragraph starts.", 18, 50, 300),    // gap=40 >> 22.4 → break
+        ];
+        const html = pdfHeuristicFromLines(lines, 12);
+        const pCount = (html.match(/<p>/g) || []).length;
+        assertEqual(pCount, 2);
+      }},
+      { name: "heuristic: HTML chars escaped", run() {
+        const lines = [mkLine("<b>Bold</b> & more.", 100, 50, 300)];
+        const html = pdfHeuristicFromLines(lines, 12);
+        assert(!html.includes("<b>"), "tag not injected: " + html);
+        assert(html.includes("&lt;b&gt;"), "escaped: " + html);
+      }},
+      { name: "heuristic: empty lines array → empty-content message", run() {
+        const html = pdfHeuristicFromLines([], 12);
+        assert(html.includes("無文字"), "empty message: " + html);
+      }},
+
+    ]);
+  </script>
+</body>
+</html>

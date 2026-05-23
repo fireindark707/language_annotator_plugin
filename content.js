@@ -885,274 +885,49 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 function showAddWordModal(word) {
-	ContentUiRef.ensureAddWordModalStyle(document);
-	if (addWordModal) addWordModal.remove();
-
-	const modalOptions = (word && typeof word === "object" && !Array.isArray(word))
-		? word
-		: { word };
-	const normalizedWord = String(modalOptions.word || "").trim().toLowerCase();
-	const capturedSelectionContext = (!modalOptions.contextSentence && normalizedWord)
-		? getContextForWord(normalizedWord, { expectedWord: normalizedWord })
-		: null;
-	const modalContextSentence = modalOptions.contextSentence ||
-		(capturedSelectionContext && capturedSelectionContext.found ? capturedSelectionContext.sentence : "");
-	const modalContextWordPos =
-		typeof modalOptions.contextWordPos === "number"
-			? modalOptions.contextWordPos
-			: (capturedSelectionContext && typeof capturedSelectionContext.wordPos === "number"
-				? capturedSelectionContext.wordPos
-				: null);
-	const modalUi = ContentAddWordRef.createAddWordModal({
-		document,
-		normalizedWord,
-		t: contentT,
-		applyButtonStyle: ContentUiRef.applyModalButtonStyle,
-		applyTextareaStyle: ContentUiRef.applyModalTextareaStyle,
+	ContentAddWordRef.openAddWordModal(word, getAddWordModalDeps(), {
+		get current() { return addWordModal; },
+		set current(v) { addWordModal = v; },
 	});
-	const overlay = modalUi.overlay;
-	const wordLine = modalUi.wordLine;
-	const hint = modalUi.hint;
-	const lemmaNotice = modalUi.lemmaNotice;
-	const lemmaText = modalUi.lemmaText;
-	const lemmaBtn = modalUi.lemmaBtn;
-	const input = modalUi.input;
-	let userEdited = false;
-	const dictPreview = modalUi.dictPreview;
-	const dictTitle = modalUi.dictTitle;
-	const dictList = modalUi.dictList;
-	const cancelBtn = modalUi.cancelBtn;
-	const saveBtn = modalUi.saveBtn;
-	document.body.appendChild(overlay);
-	addWordModal = overlay;
-	input.focus();
-	input.addEventListener("input", () => {
-		userEdited = true;
-	});
-
-	function getTargetWord() {
-		return getAddWordTargetWord(overlay, normalizedWord);
-	}
-
-	function updateWordLine() {
-		return updateAddWordLineState({
-			overlay,
-			normalizedWord,
-			wordLine,
-			hint,
-			t: contentT,
-		});
-	}
-
-	function setLemmaMode(useLemma, lemmaValue) {
-		return setAddWordLemmaMode({
-			overlay,
-			normalizedWord,
-			lemmaValue,
-			useLemma,
-			wordLine,
-			hint,
-			lemmaBtn,
-			t: contentT,
-		});
-	}
-
-	function closeModal() {
-		overlay.remove();
-		if (addWordModal === overlay) addWordModal = null;
-		document.removeEventListener("keydown", onKeyDown, true);
-	}
-
-	function onKeyDown(event) {
-		if (event.key === "Escape") closeModal();
-		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "enter") saveWord();
-	}
-
-async function saveWord() {
-		const meaning = input.value.trim();
-		if (!meaning) return;
-		try {
-			const words = await WordStorage.getWords();
-			const targetWord = getTargetWord();
-			const existing = words[targetWord] || words[normalizedWord];
-			let dictEntries = [];
-			try {
-				dictEntries = JSON.parse(overlay.dataset.dictEntries || "[]");
-				if (!Array.isArray(dictEntries)) dictEntries = [];
-			} catch (error) {
-				dictEntries = [];
-			}
-			const selectedIndexRaw = Number(overlay.dataset.dictSelectedIndex || "0");
-			const selectedIndex =
-				Number.isInteger(selectedIndexRaw) && selectedIndexRaw >= 0
-					? selectedIndexRaw
-					: 0;
-			const dictPosValue = (overlay.dataset.dictPos || "").trim();
-			const dictDefinitionOriginal = (overlay.dataset.dictDefinitionOriginal || "").trim();
-			const dictDefinitionTranslated = (overlay.dataset.dictDefinitionTranslated || "").trim();
-			const dictSource = (overlay.dataset.dictSource || "").trim();
-			const dictionary =
-				dictPosValue || dictDefinitionOriginal || dictDefinitionTranslated || dictEntries.length > 0
-					? {
-						pos: dictPosValue,
-						definitionOriginal: dictDefinitionOriginal,
-						definitionTranslated: dictDefinitionTranslated,
-						source: dictSource || "dictionary",
-						usedLemma: overlay.dataset.dictUsedLemma === "1",
-						lookupLemma: (overlay.dataset.dictLookupLemma || "").trim(),
-						queryText: (overlay.dataset.dictQueryText || "").trim(),
-						entries: dictEntries,
-						selectedIndex: Math.min(selectedIndex, Math.max(dictEntries.length - 1, 0)),
-						updatedAt: Date.now(),
-					}
-					: (existing && existing.dictionary ? existing.dictionary : null);
-			const sourceLang = await WordStorage.getSourceLang();
-			const lemmaValue = (overlay.dataset.lemma || "").trim() || (existing && typeof existing.lemma === "string" ? existing.lemma : "");
-			const familyResult = supportsLemmaBySourceLang(sourceLang)
-				? await resolveLemmaVariations(targetWord, lemmaValue, sourceLang)
-				: { familyForms: LemmaUtilsRef.normalizeFamilyForms([], lemmaValue, targetWord) };
-			words[targetWord] = {
-				meaning: meaning,
-				learned: false,
-				createdAt: existing && existing.createdAt ? existing.createdAt : Date.now(),
-				lemma: lemmaValue,
-				familyForms: Array.isArray(familyResult.familyForms) ? familyResult.familyForms : [],
-				dictionary: dictionary,
-			};
-			await WordStorage.saveWords(words, { syncMode: "immediate" });
-			closeModal();
-		} catch (error) {
-			console.error("Failed to save word:", error);
-		}
-	}
-
-	cancelBtn.addEventListener("click", closeModal);
-	saveBtn.addEventListener("click", saveWord);
-	overlay.addEventListener("click", (event) => {
-		if (event.target === overlay) closeModal();
-	});
-	document.addEventListener("keydown", onKeyDown, true);
-	prefillMeaningFromTranslation(
-		normalizedWord,
-		wordLine,
-		input,
-		() => userEdited,
-			overlay,
-			{
-				getTargetWord,
-				contextSentence: modalContextSentence,
-				contextWordPos: modalContextWordPos,
-			},
-			(dictPayload) => {
-			const sections = dictPayload && Array.isArray(dictPayload.sections)
-				? dictPayload.sections
-				: [];
-			const hasAnyEntries = sections.some((section) => Array.isArray(section.entries) && section.entries.length > 0);
-			if (!hasAnyEntries) {
-				dictPreview.style.display = "none";
-				return;
-			}
-			dictPreview.style.display = "block";
-			dictTitle.textContent = contentT("dictionary");
-			const availableLemma = String((dictPayload && dictPayload.lemma) || overlay.dataset.lemma || "").trim().toLowerCase();
-			if (availableLemma && availableLemma !== normalizedWord) {
-				lemmaNotice.style.display = "";
-				lemmaText.textContent = `${contentT("lemma_available")}: ${availableLemma}`;
-				lemmaBtn.textContent = contentT("use_lemma");
-				lemmaBtn.onclick = () => {
-					const usingLemma = getTargetWord() === availableLemma;
-					setLemmaMode(!usingLemma, availableLemma);
-				};
-			} else {
-				lemmaNotice.style.display = "none";
-				lemmaBtn.onclick = null;
-				setLemmaMode(false, "");
-			}
-			DictionaryUtilsRef.renderInteractiveDictionarySections(dictList, sections, {
-				document,
-				emptyText: contentT("no_dict_entries"),
-				getSectionTitle: (section) => `${DictionaryUtilsRef.getDictionarySectionLabel(contentT, section.mode, section.query)} · ${DictionaryUtilsRef.getDictionarySourceLabel(section.source)}`,
-				decorateSection(sectionWrap, section, sectionIndex) {
-					sectionWrap.className = "la-addword-dict-section";
-					if (sectionIndex > 0) sectionWrap.classList.add("is-secondary");
-				},
-				decorateSectionTitle(sectionTitle) {
-					sectionTitle.className = "la-addword-dict-section-title";
-				},
-				createApplyButton() {
-					const applyBtn = document.createElement("button");
-					applyBtn.type = "button";
-					applyBtn.className = "la-addword-dict-apply";
-					applyBtn.textContent = contentT("apply");
-					ContentUiRef.applyModalButtonStyle(applyBtn, "apply");
-					return applyBtn;
-				},
-				onApply({ item, section, index, row }) {
-					applyAddWordDictionarySelection({
-						overlay,
-						item,
-						section,
-						index,
-						input,
-						dictList,
-						row,
-						onUserEdit() {
-							userEdited = true;
-						},
-					});
-				},
-			});
-			const firstRow = dictList.querySelector(".la-addword-dict-item");
-			if (firstRow) firstRow.classList.add("is-selected");
-		}
-	);
-	updateWordLine();
 }
 
-function prefillMeaningFromTranslation(word, wordLineEl, inputEl, isUserEdited, modalOverlay, contextOptions, onDictionaryReady) {
-	const options = contextOptions && typeof contextOptions === "object" ? contextOptions : {};
-	const getTargetWord = typeof options.getTargetWord === "function" ? options.getTargetWord : (() => word);
-	const contextSentence = typeof options.contextSentence === "string" ? options.contextSentence : "";
-	const contextWordPos = typeof options.contextWordPos === "number" ? options.contextWordPos : null;
-	return ContentAddWordRef.prefillMeaningFromTranslation({
-		word,
-		wordLineEl,
-		inputEl,
-		isUserEdited,
-		modalOverlay,
-		onDictionaryReady,
-		deps: {
-			WordStorage,
-			resolveLemma,
-			normalizeDictionaryQuery,
-			contentT,
-			supportsDictionaryBySourceLang,
-					shouldLookupDictionaryQuery,
-					mapDictionarySections,
-					TranslationUtilsRef,
+function getAddWordModalDeps() {
+	return {
+		document,
+		t: contentT,
+		WordStorage,
+		LemmaUtils: LemmaUtilsRef,
+		DictionaryUtils: DictionaryUtilsRef,
+		ContentUi: ContentUiRef,
+		TranslationUtils: TranslationUtilsRef,
+		chromeRuntime: chrome.runtime,
+		chromeI18n: chrome.i18n,
+		resolveLemma,
+		resolveLemmaVariations,
+		normalizeDictionaryQuery,
+		supportsDictionaryBySourceLang,
+		shouldLookupDictionaryQuery,
+		translateWordInContext: function (opts) {
+			return requestWordTranslationInContext({
+				word: opts.word,
+				sourceLang: opts.sourceLang || "auto",
+				contextSentence: opts.contextSentence,
+				contextWordPos: opts.contextWordPos,
+				cacheOnly: true,
+				allowRecentContextCache: true,
+			}).then(function (translated) {
+				if (translated) return translated;
+				return TranslationUtilsRef.requestPreferredTranslation({
 					chromeRuntime: chrome.runtime,
-					translateWordInContext({ word: translateWord, sourceLang }) {
-						return requestWordTranslationInContext({
-							word: translateWord,
-							sourceLang: sourceLang || "auto",
-							expectedWord: getTargetWord(),
-							contextSentence,
-							contextWordPos,
-							cacheOnly: true,
-							allowRecentContextCache: true,
-						}).then((translated) => {
-							if (translated) return translated;
-							return TranslationUtilsRef.requestPreferredTranslation({
-								chromeRuntime: chrome.runtime,
-								chromeI18n: chrome.i18n,
-								wordStorage: WordStorage,
-								text: translateWord,
-								sourceLang: sourceLang || "auto",
-							});
-						});
-					},
-				},
+					chromeI18n: chrome.i18n,
+					wordStorage: WordStorage,
+					text: opts.word,
+					sourceLang: opts.sourceLang || "auto",
+				});
 			});
+		},
+		getContextForWord,
+	};
 }
 
 // 勾选后自动翻译
@@ -1170,108 +945,25 @@ document.addEventListener("mouseup", function () {
 });
 
 function translateText(text) {
-	// Detect language and load settings in parallel — previously detect was called
-	// twice sequentially (shouldSkip + detectLang). Now one shared call feeds both.
-	Promise.all([
-		detectTextLanguageWithBrowserApi(text),
-		WordStorage.getSourceLang(),
-		typeof WordStorage.getTranslationEngine === "function"
-			? WordStorage.getTranslationEngine().catch(() => "online")
-			: Promise.resolve("online"),
-		WordStorage.getDictionaryLookupEnabled().catch(() => true),
-	]).then(([detectedLang, sourceLang, translationEngine, dictionaryEnabled]) => {
-		if (shouldSkipTranslateAndDictionaryForLang(detectedLang)) return;
-		if (detectedLang && TranslationUtilsRef.isSameLanguageFamily(detectedLang, TranslationUtilsRef.getBrowserTargetLang(window.navigator))) {
-			return;
-		}
-			const isSingleWord = TranslationUtilsRef.isSingleWordLikeText(
-				text,
-				detectedLang || sourceLang || document.documentElement.lang || navigator.language
-			);
-		// If the selected text's language doesn't match the configured source language,
-		// use "auto" so the translation API detects the actual language instead of
-		// forcing an incorrect source language (e.g. translating Chinese text when
-		// sourceLang is set to Indonesian).
-		const detectedMatchesSource = detectedLang
-			? TranslationUtilsRef.isSameLanguageFamily(detectedLang, sourceLang)
-			: true;
-		const effectiveSourceLang = (sourceLang && !detectedMatchesSource) ? "auto" : (sourceLang || "auto");
-		const targetLang = TranslationUtilsRef.getBrowserTargetLang(window.navigator) || "en";
-		const translationRequestId = activeSelectionTranslationRequestId + 1;
-		activeSelectionTranslationRequestId = translationRequestId;
-		const contextualPromise = isSingleWord
-			? requestWordTranslationInContext({
-				word: text,
-				sourceLang: effectiveSourceLang,
-				targetLang,
-				// Do not pass detectedLang: single-word detection is unreliable
-				// (e.g. "lelaki" may be detected as "ms" not "id").
-				// resolveContextualSourceLang detects from the full sentence instead.
-				languageHint: detectedLang || sourceLang || document.documentElement.lang || navigator.language,
-			})
-			: Promise.resolve("");
-		const preferredPromise = TranslationUtilsRef.requestPreferredTranslation({
-			chromeRuntime: chrome.runtime,
-			chromeI18n: chrome.i18n,
-			wordStorage: WordStorage,
-			text,
-			sourceLang: effectiveSourceLang,
-			translationEngine,
-			detectedLanguage: detectedLang,
-			targetLang,
-			onBrowserFallback(result) {
-				showContentBrowserTranslationFallback(result && result.reason);
-			},
-		});
-		const firstTranslationPromise = isSingleWord
-			? new Promise((resolve) => {
-				let settledCount = 0;
-				let resolved = false;
-				function handleResult(source, translation) {
-					if (resolved) return;
-					if (translation) {
-						resolved = true;
-						resolve({ source, translation });
-						return;
-					}
-					settledCount += 1;
-					if (settledCount >= 2) {
-						resolve({ source, translation: "" });
-					}
-				}
-				contextualPromise.then((translation) => handleResult("contextual", translation)).catch(() => handleResult("contextual", ""));
-				preferredPromise.then((translation) => handleResult("preferred", translation)).catch(() => handleResult("preferred", ""));
-			})
-			: preferredPromise.then((translation) => ({ source: "preferred", translation }));
-		return firstTranslationPromise.then((result) => {
-			const translation = result && typeof result.translation === "string" ? result.translation : "";
-			if (!translation) return;
-			showTranslation(translation, isSingleWord ? {
-				sourceWord: text.trim(),
-				sourceLang,
-				isContextual: !!(result && result.source === "contextual"),
-			} : null);
-			if (isSingleWord && result && result.source === "preferred") {
-				contextualPromise.then((contextualTranslation) => {
-					if (!contextualTranslation) return;
-					if (activeSelectionTranslationRequestId !== translationRequestId) return;
-					updateTranslationBox(contextualTranslation, { isContextual: true });
-				}).catch(() => {});
-			}
-			const dictQuery = normalizeDictionaryQuery(text);
-			if (!(dictionaryEnabled && isSingleWord && supportsDictionaryBySourceLang(sourceLang) && shouldLookupDictionaryQuery(dictQuery) && detectedMatchesSource)) return;
-			chrome.runtime.sendMessage(
-				{ action: "lookupDictionary", text: dictQuery, sourceLang: sourceLang || "auto" },
-				(dictResponse) => {
-					if (chrome.runtime.lastError || !dictResponse || !dictResponse.found) return;
-					appendDictionaryToTranslationBox(dictResponse, sourceLang || "auto");
-				}
-			);
-		});
-	}).catch((error) => {
-		if (!isContextInvalidatedError(error)) {
-			console.error("Failed to get source language:", error);
-		}
+	const ContentSelectionRef = globalThis.ContentSelection;
+	if (!ContentSelectionRef) return;
+	ContentSelectionRef.translateSelection(text, {
+		WordStorage,
+		TranslationUtils: TranslationUtilsRef,
+		DictionaryUtils: DictionaryUtilsRef,
+		chromeRuntime: chrome.runtime,
+		chromeI18n: chrome.i18n,
+		navigator: window.navigator,
+		shouldSkipTranslateAndDictionaryForLang,
+		requestWordTranslationInContext: function (opts) {
+			return requestWordTranslationInContext(Object.assign({ languageHint: contentLanguageHint || document.documentElement.lang || navigator.language }, opts));
+		},
+		activeRequestIdRef: { get value() { return activeSelectionTranslationRequestId; }, set value(v) { activeSelectionTranslationRequestId = v; } },
+		showTranslation,
+		updateTranslationBox,
+		appendDictionaryToTranslationBox: function (dictResponse, sourceLang) { appendDictionaryToTranslationBox(dictResponse, sourceLang); },
+		onBrowserFallback: function (result) { showContentBrowserTranslationFallback(result && result.reason); },
+		onError: function (error) { if (!isContextInvalidatedError(error)) console.error("Failed to get source language:", error); },
 	});
 }
 

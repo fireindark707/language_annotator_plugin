@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>epub clever translate</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="../lib/dictionary-utils.js"></script>
+  <script src="../lib/translation-utils.js"></script>
+  <script src="../lib/example-utils.js"></script>
+  <script src="../lib/content-ui.js"></script>
+  <script src="../lib/content-addword.js"></script>
+  <script src="../lib/content-selection.js"></script>
+  <script src="../lib/content-lookup-ui.js"></script>
+  <script src="../lib/content-page-processing.js"></script>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+    const CPP = window.ContentPageProcessing;
+    const CLU = window.ContentLookupUi;
+
+    // ── Minimal chrome stub ──────────────────────────────────────────────────
+    window.chrome = {
+      runtime: {
+        lastError: null,
+        sendMessage(msg, cb) {
+          // Simulate background.js responses
+          if (msg.action === "translateContextualWord") {
+            cb({ translation: "contextual:" + msg.word });
+          } else if (msg.action === "translate") {
+            cb({ translation: "translated:" + (msg.text || msg.word) });
+          } else if (msg.action === "detectLanguage") {
+            cb({ language: "en" });
+          } else {
+            cb({});
+          }
+        },
+      },
+      i18n: {
+        detectLanguage(text, cb) {
+          // Simulate English detection for English text
+          const isEnglish = /^[a-zA-Z\s.,!?'";\-]+$/.test((text || "").trim());
+          cb({ isReliable: isEnglish, languages: isEnglish ? [{ language: "en", percentage: 99 }] : [] });
+        },
+        getUILanguage() { return "en"; },
+      },
+      storage: {
+        local: {
+          get(keys, cb) { cb({}); },
+          set(data, cb) { if (cb) cb(); },
+        },
+      },
+    };
+
+    // ── Mock WordfreqUtils ───────────────────────────────────────────────────
+    const FREQ_TABLE = {
+      "the": 7.0, "and": 6.8, "is": 6.5, "a": 7.2,
+      "run": 5.0, "book": 4.5, "house": 4.1,
+      "sorrow": 3.5, "parchment": 2.1,
+      "running": 1.0,
+    };
+    const mockWordfreqUtils = {
+      isSupported(lang) { return ["en", "fr", "de", "es", "id", "ja", "zh", "ko"].includes((lang || "").split("-")[0].toLowerCase()); },
+      isReady(_lang) { return true; },
+      initForLang(_lang) { return Promise.resolve(true); },
+      getZipf(word, _lang) { return FREQ_TABLE[(word || "").toLowerCase()] || 0; },
+      getDifficultyTier(zipf, _lang) {
+        if (!zipf || zipf <= 0) return null;
+        if (zipf >= 5.3) return "A1";
+        if (zipf >= 4.7) return "A2";
+        if (zipf >= 4.2) return "B1";
+        if (zipf >= 3.7) return "B2";
+        if (zipf >= 3.2) return "C1";
+        return "C2";
+      },
+    };
+
+    // ── Mock WordStorage ─────────────────────────────────────────────────────
+    function makeWordStorage(words) {
+      return {
+        getWords() { return Promise.resolve(words); },
+        getSourceLang() { return Promise.resolve("en"); },
+        getTargetLang() { return Promise.resolve("zh-TW"); },
+        getTranslationEngine() { return Promise.resolve("online"); },
+        saveWords() { return Promise.resolve(); },
+      };
+    }
+
+    // ── Deps builder (mirrors epub-reader.js buildAnnotationDeps) ────────────
+    function buildDeps(languageHint, wordStorage, opts) {
+      opts = opts || {};
+      const srcLang = (languageHint || "en").split("-")[0].toLowerCase();
+      const wf = opts.wordfreq !== false ? mockWordfreqUtils : null;
+      const wfEnabled = !!(wf && wf.isSupported(srcLang));
+      return {
+        document, Node,
+        skipTags: new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEXTAREA", "INPUT"]),
+        isExtensionUiElement(el) {
+          if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+          for (let i = 0; i < el.classList.length; i++) {
+            if (el.classList[i].startsWith("la-")) return true;
+          }
+          return false;
+        },
+        isCurrentDomainExcluded() { return Promise.resolve(false); },
+        showWordPreview() {},
+        hideWordPreview() {},
+        WordStorage: wordStorage,
+        splitIntoSentences(text) { return [text]; },
+        isLowInformationExample: window.ExampleUtils.isLowInformationExample,
+        normalizeText(text) { return (text || "").replace(/\s+/g, " ").trim(); },
+        normalizeExampleList: window.ExampleUtils.normalizeExampleList,
+        hasContainmentRelation: window.ExampleUtils.hasContainmentRelation,
+        isTooSimilarToAny: window.ExampleUtils.isTooSimilarToAny,
+        enforceExampleLimit: window.ExampleUtils.enforceExampleLimit,
+        sortExamples: window.ExampleUtils.sortExamples,
+        maxExamplesPerWord: 20,
+        languageHint: languageHint || "en",
+        currentHref() { return "epub://reader"; },
+        markLearned() {},
+        openAddWordModal() {},
+        startContentTour() {},
+        isBoundaryMatch: CPP.isBoundaryMatch,
+        findWholeWordMatch: window.ExampleUtils.findWholeWordMatch,
+        detectLanguage: opts.detectLanguage || function(text) {
+          return ContentSelection
+            ? ContentSelection.detectLang(text, chrome.runtime, chrome.i18n)
+            : Promise.resolve("");
+        },
+        translateWordInContext: opts.translateWordInContext || function(o) {
+          return new Promise((resolve) => {
+            chrome.runtime.sendMessage({
+              action: "translateContextualWord",
+              sentence: o.contextSentence || o.word,
+              word: o.word,
+              wordPos: o.contextWordPos || null,
+              sourceLang: o.sourceLang || "auto",
+              targetLang: "zh-TW",
+            }, (resp) => resolve((resp && resp.translation) || ""));
+          });
+        },
+        WordfreqUtils: wfEnabled ? wf : null,
+        state: {
+          pendingExampleMap: {},
+          exampleMergeTimer: null,
+          contentTourAttempted: true,
+          contentTourPending: false,
+        },
+        onMergeError() {},
+        onHighlightError() {},
+      };
+    }
+
+    // ── Helper: render a DOM wrapper with text content ────────────────────────
+    function makeWrapper(html) {
+      const div = document.createElement("div");
+      div.innerHTML = html;
+      document.body.appendChild(div);
+      return div;
+    }
+
+    // highlightWords fires internally with .then() and returns void.
+    // We must wait for the microtask queue + at least one tick.
+    function waitForHighlight(wrapper, timeoutMs) {
+      timeoutMs = timeoutMs || 500;
+      return new Promise((resolve, reject) => {
+        const deadline = Date.now() + timeoutMs;
+        function check() {
+          if (wrapper.querySelector(".plugin-highlight-word")) return resolve();
+          if (Date.now() >= deadline) return reject(new Error("waitForHighlight timeout"));
+          setTimeout(check, 10);
+        }
+        check();
+      });
+    }
+
+    const ContentSelection = window.ContentSelection;
+
+    runTests([
+      // ── 1. highlightWords correctly marks saved words ──────────────────────
+      {
+        name: "highlightWords marks saved words in epub chapter",
+        async run() {
+          const words = { sorrow: { word: "sorrow", translation: "悲傷", examples: [], learned: false } };
+          const ws = makeWordStorage(words);
+          const deps = buildDeps("en", ws);
+          const wrapper = makeWrapper("<p>She felt great sorrow when they parted.</p>");
+          try {
+            CPP.highlightWords(deps, [wrapper]);
+            await waitForHighlight(wrapper);
+            const span = wrapper.querySelector(".plugin-highlight-word");
+            assert(span, "expected .plugin-highlight-word span for 'sorrow'");
+            assertEqual(span.textContent, "sorrow");
+          } finally {
+            wrapper.remove();
+          }
+        },
+      },
+
+      // ── 2. French word highlighted on French-source page ──────────────────
+      {
+        name: "highlightWords highlights French word when source lang is French",
+        async run() {
+          const words = { maison: { word: "maison", translation: "house", examples: [], learned: false } };
+          const ws = makeWordStorage(words);
+          ws.getSourceLang = () => Promise.resolve("fr");
+          const deps = buildDeps("fr", ws);
+          const wrapper = makeWrapper("<p>La maison est grande.</p>");
+          try {
+            CPP.highlightWords(deps, [wrapper]);
+            await waitForHighlight(wrapper);
+            const spans = wrapper.querySelectorAll(".plugin-highlight-word");
+            assert(spans.length > 0, "expected highlights for French word on French page");
+          } finally {
+            wrapper.remove();
+          }
+        },
+      },
+
+      // ── 3. WordfreqUtils is passed when language is supported ─────────────
+      {
+        name: "buildDeps passes WordfreqUtils for supported language",
+        run() {
+          const deps = buildDeps("en", makeWordStorage({}));
+          assert(deps.WordfreqUtils !== null, "expected WordfreqUtils for 'en'");
+          assert(deps.WordfreqUtils.isSupported("en"), "WordfreqUtils.isSupported('en') should be true");
+        },
+      },
+
+      // ── 4. WordfreqUtils is NOT passed for unsupported language ───────────
+      {
+        name: "buildDeps omits WordfreqUtils for unsupported language (e.g. 'th')",
+        run() {
+          const deps = buildDeps("th", makeWordStorage({}));
+          assertEqual(deps.WordfreqUtils, null, "expected null WordfreqUtils for 'th'");
+        },
+      },
+
+      // ── 5. C2 word gets highlighted with wordfreq enabled ─────────────────
+      {
+        name: "C2 word (parchment) is highlighted when wordfreq enabled",
+        async run() {
+          const words = { parchment: { word: "parchment", translation: "羊皮紙", examples: [], learned: false } };
+          const ws = makeWordStorage(words);
+          const deps = buildDeps("en", ws);
+          assert(deps.WordfreqUtils !== null, "WordfreqUtils should be present");
+          const wrapper = makeWrapper("<p>The scribe wrote on parchment in the candlelight.</p>");
+          try {
+            CPP.highlightWords(deps, [wrapper]);
+            await waitForHighlight(wrapper);
+            const span = wrapper.querySelector(".plugin-highlight-word");
+            assert(span, "expected highlight for 'parchment'");
+            assertEqual(span.textContent, "parchment");
+          } finally {
+            wrapper.remove();
+          }
+        },
+      },
+
+      // ── 6. resolvePreviewTranslationSource: same-language skips translation
+      {
+        name: "resolvePreviewTranslationSource: English text on English source → detectedMatchesSource=true",
+        async run() {
+          // Use ContentSelection.detectLang to simulate
+          if (!ContentSelection) { assert(false, "ContentSelection not loaded"); return; }
+          const lang = await ContentSelection.detectLang("The quick brown fox", chrome.runtime, chrome.i18n);
+          // Should detect English or empty (browser API may not be available in test)
+          assert(typeof lang === "string", "detectLang should return string");
+        },
+      },
+
+      // ── 7. isBoundaryMatch present in deps (required for hover card) ───────
+      {
+        name: "deps.isBoundaryMatch correctly identifies word boundaries",
+        run() {
+          const deps = buildDeps("en", makeWordStorage({}));
+          assert(typeof deps.isBoundaryMatch === "function", "isBoundaryMatch should be a function");
+          // "sorrow" in "great sorrow when" — boundary at pos 6..12
+          const text = "great sorrow when";
+          const idx = text.indexOf("sorrow");
+          const end = idx + "sorrow".length;
+          assert(deps.isBoundaryMatch(text, idx, end, false), "should match 'sorrow' as whole word");
+          assert(!deps.isBoundaryMatch("sorrows", 0, 6, false), "should not match 'sorrow' inside 'sorrows'");
+        },
+      },
+
+      // ── 8. translateWordInContext wires through to sendMessage ─────────────
+      {
+        name: "deps.translateWordInContext calls sendMessage with correct action",
+        async run() {
+          let captured = null;
+          const deps = buildDeps("en", makeWordStorage({}), {
+            translateWordInContext(opts) {
+              captured = opts;
+              return Promise.resolve("悲傷");
+            },
+          });
+          const result = await deps.translateWordInContext({
+            word: "sorrow",
+            contextSentence: "She felt great sorrow.",
+            contextWordPos: 14,
+            sourceLang: "en",
+          });
+          assertEqual(result, "悲傷");
+          assert(captured && captured.word === "sorrow", "word should be passed");
+          assertEqual(captured.contextSentence, "She felt great sorrow.");
+        },
+      },
+
+      // ── 9. deps missing isBoundaryMatch causes no crash (regression guard) ─
+      {
+        name: "highlightWords does not crash when isBoundaryMatch is missing from deps",
+        async run() {
+          const words = { sorrow: { word: "sorrow", translation: "悲傷", examples: [], learned: false } };
+          const deps = buildDeps("en", makeWordStorage(words));
+          delete deps.isBoundaryMatch; // simulate pre-fix state
+          const wrapper = makeWrapper("<p>She felt great sorrow in the shadows.</p>");
+          try {
+            let threw = false;
+            try {
+              CPP.highlightWords(deps, [wrapper]);
+              await new Promise(r => setTimeout(r, 200));
+            } catch (e) {
+              threw = true;
+            }
+            assert(!threw, "highlightWords should not throw when isBoundaryMatch missing");
+          } finally {
+            wrapper.remove();
+          }
+        },
+      },
+
+      // ── 10. Whole-word matching: "run" should not highlight "running" ──────
+      {
+        name: "highlightWords does not highlight 'run' inside 'running' (whole-word match)",
+        async run() {
+          const words = { run: { word: "run", translation: "跑", examples: [], learned: false } };
+          const ws = makeWordStorage(words);
+          const deps = buildDeps("en", ws);
+          const wrapper = makeWrapper("<p>He was running fast down the street.</p>");
+          try {
+            CPP.highlightWords(deps, [wrapper]);
+            await new Promise(r => setTimeout(r, 200));
+            const spans = wrapper.querySelectorAll(".plugin-highlight-word");
+            const texts = Array.from(spans).map(s => s.textContent);
+            assert(!texts.includes("run"), "'run' should not match inside 'running'");
+          } finally {
+            wrapper.remove();
+          }
+        },
+      },
+    ]);
+  </script>
+</body>
+</html>

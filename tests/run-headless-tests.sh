@@ -52,13 +52,21 @@ TEST_FILES=(
   "$ROOT_DIR/tests/wordfreq-features.html"
   "$ROOT_DIR/tests/real-article-id.html"
   "$ROOT_DIR/tests/real-article-id2.html"
+  "$ROOT_DIR/tests/epub-parser.html"
+  "$ROOT_DIR/tests/epub-clever-translate.html"
+  "$ROOT_DIR/tests/epub-contextual-translate.html"
+  "$ROOT_DIR/tests/mobi-parser.html"
+  "$ROOT_DIR/tests/pdf-adapter.html"
+  "$ROOT_DIR/tests/epub-reader-internal-links.html"
+  "$ROOT_DIR/tests/epub-reader-toc.html"
+  "$ROOT_DIR/tests/epub-reader-para.html"
 )
 
 FAILURES=0
 for test_file in "${TEST_FILES[@]}"; do
   echo "Running $(basename "$test_file")"
   test_name="$(basename "$test_file")"
-  if [[ "$test_name" == "sentence-splitter.html" || "$test_name" == "real-article-id.html" || "$test_name" == "real-article-id2.html" ]]; then
+  if [[ "$test_name" == "sentence-splitter.html" || "$test_name" == "real-article-id.html" || "$test_name" == "real-article-id2.html" || "$test_name" == "epub-parser.html" || "$test_name" == "mobi-parser.html" ]]; then
     if [[ -z "$SERVER_PID" ]]; then
       cd "$ROOT_DIR"
       python3 -m http.server "$SERVER_PORT" --bind "$SERVER_HOST" >/tmp/la-test-http.log 2>&1 &
@@ -66,7 +74,9 @@ for test_file in "${TEST_FILES[@]}"; do
       sleep 1
     fi
     target_url="http://$SERVER_HOST:$SERVER_PORT/tests/$test_name"
-    chrome_args=(--headless=new --disable-gpu --virtual-time-budget=15000 --dump-dom "$target_url")
+    vt_budget=15000
+    [[ "$test_name" == "mobi-parser.html" ]] && vt_budget=45000
+    chrome_args=(--headless=new --disable-gpu --virtual-time-budget=$vt_budget --dump-dom "$target_url")
   else
     target_url="file://$test_file"
     chrome_args=(--headless=new --disable-gpu --allow-file-access-from-files --virtual-time-budget=15000 --dump-dom "$target_url")

@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="zh-Hant" data-theme="sepia">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電子書閱讀器</title>
+    <!-- Google Fonts preconnect hints — actual font stylesheets are injected lazily by JS -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <style>
+        /* ── Theme tokens ─────────────────────────────────── */
+        :root, [data-theme="sepia"] {
+            --bg:            #f6efe6;
+            --bg-wash:       #ece3d5;
+            --surface:       #fffaf3;
+            --surface-alt:   #f8f1e8;
+            --text:          #34251f;
+            --text-muted:    #7b655b;
+            --primary:       #a55143;
+            --primary-dark:  #8e4337;
+            --border:        #dccabd;
+            --border-strong: #cbb4a5;
+            --sidebar-bg:    #f0e8dc;
+            --reading-bg:    #fffaf3;
+            --progress-bg:   rgba(165,81,67,0.18);
+            --progress-fill: #a55143;
+            --toolbar-blur:  saturate(1.4) blur(12px);
+        }
+        [data-theme="light"] {
+            --bg:            #f4f4f5;
+            --bg-wash:       #e8e8ea;
+            --surface:       #ffffff;
+            --surface-alt:   #f7f7f8;
+            --text:          #1c1c1e;
+            --text-muted:    #6b7280;
+            --primary:       #a55143;
+            --primary-dark:  #8e4337;
+            --border:        #d1d1d6;
+            --border-strong: #bbbbc0;
+            --sidebar-bg:    #ececee;
+            --reading-bg:    #ffffff;
+            --progress-bg:   rgba(165,81,67,0.15);
+            --progress-fill: #a55143;
+        }
+        [data-theme="dark"] {
+            --bg:            #1a1612;
+            --bg-wash:       #141210;
+            --surface:       #231e1a;
+            --surface-alt:   #2a2420;
+            --text:          #e8ddd4;
+            --text-muted:    #9b8b80;
+            --primary:       #c97b6a;
+            --primary-dark:  #b86a59;
+            --border:        #3a3028;
+            --border-strong: #4a3e34;
+            --sidebar-bg:    #1e1916;
+            --reading-bg:    #231e1a;
+            --progress-bg:   rgba(201,123,106,0.18);
+            --progress-fill: #c97b6a;
+        }
+
+        /* ── Reset ──────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; }
+        html, body {
+            margin: 0; padding: 0; height: 100%;
+            background: var(--bg); color: var(--text);
+            font-family: "Noto Sans TC","Hiragino Sans","Yu Gothic UI",sans-serif;
+            transition: background .15s, color .15s;
+            overflow: hidden;
+        }
+
+        /* ── App shell: three named views ──────────────────── */
+        /* #shelfView   — bookshelf (default) */
+        /* #readerShell — reading */
+        /* All views fill viewport, shown one at a time */
+        #shelfView, #readerShell {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column;
+        }
+        #shelfView   { z-index: 1; }
+        #readerShell { z-index: 2; display: none; }
+        #readerShell.visible { display: flex; }
+
+        /* ── Shared toolbar styles ──────────────────────────── */
+        .toolbar {
+            flex-shrink: 0;
+            display: flex; align-items: center; gap: 8px;
+            padding: 0 16px; height: 52px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+        }
+        .toolbar-title {
+            font-family: "Noto Serif TC","Hiragino Mincho ProN","Yu Mincho",serif;
+            font-size: 15px; font-weight: 800;
+            color: var(--text); margin: 0; flex: 1;
+        }
+        .icon-btn {
+            width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+            border: none; border-radius: 10px;
+            background: transparent; color: var(--text-muted);
+            cursor: pointer; font-size: 16px;
+            transition: background .12s, color .12s;
+        }
+        .icon-btn:hover { background: var(--surface-alt); color: var(--primary); }
+
+        /* ── Bookshelf view ─────────────────────────────────── */
+        #shelfAddBtn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 0 16px; height: 34px;
+            border: none; border-radius: 20px;
+            background: var(--primary); color: #fff;
+            font-size: 13px; font-weight: 700;
+            font-family: inherit; cursor: pointer;
+            box-shadow: 0 3px 10px rgba(165,81,67,.3);
+            transition: background .12s, transform .1s;
+            flex-shrink: 0;
+        }
+        #shelfAddBtn:hover { background: var(--primary-dark); transform: translateY(-1px); }
+        #shelfAddBtn:active { transform: translateY(0); }
+
+        /* theme picker lives in shelf toolbar too */
+        #shelfTheme {
+            display: flex; align-items: center; gap: 2px;
+            border: 1px solid var(--border); border-radius: 10px;
+            padding: 2px; background: var(--surface-alt);
+        }
+
+        #shelfBody {
+            flex: 1; overflow-y: auto;
+            padding: 28px clamp(16px, 5vw, 60px);
+        }
+        #shelfBody::-webkit-scrollbar { width: 5px; }
+        #shelfBody::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+        #shelfGrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 24px;
+            align-content: start;
+        }
+
+        #shelfEmpty {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 16px; min-height: 60vh;
+            color: var(--text-muted); font-size: 14px;
+        }
+        #shelfEmpty .empty-icon { font-size: 64px; opacity: .35; line-height: 1; }
+        #shelfEmpty p { margin: 0; text-align: center; line-height: 1.6; }
+
+        /* add-book card (first item in grid) */
+        .shelf-add-card {
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 10px;
+            aspect-ratio: 2/3;
+            border: 2px dashed var(--border-strong);
+            border-radius: 10px;
+            cursor: pointer;
+            color: var(--text-muted); font-size: 13px;
+            font-family: inherit; background: transparent;
+            transition: border-color .15s, background .15s, color .15s;
+        }
+        .shelf-add-card:hover {
+            border-color: var(--primary);
+            background: rgba(165,81,67,.04);
+            color: var(--primary);
+        }
+        .shelf-add-card .add-icon { font-size: 28px; opacity: .6; }
+
+        /* book cards */
+        .shelf-book {
+            display: flex; flex-direction: column; gap: 9px;
+            cursor: pointer; border-radius: 10px; padding: 8px;
+            transition: background .12s; position: relative;
+        }
+        .shelf-book:hover { background: var(--surface-alt); }
+
+        .shelf-book-cover {
+            width: 100%; aspect-ratio: 2/3;
+            border-radius: 7px; overflow: hidden;
+            background: var(--bg-wash);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,.14);
+            position: relative;
+        }
+        .shelf-book-cover img { width: 100%; height: 100%; object-fit: cover; }
+        .cover-placeholder { font-size: 38px; opacity: .3; }
+
+        .shelf-book-progress {
+            position: absolute; bottom: 0; left: 0; right: 0;
+            height: 4px; background: var(--progress-bg);
+        }
+        .shelf-book-progress-fill {
+            height: 100%; background: var(--progress-fill); transition: width .3s;
+        }
+
+        .shelf-book-title {
+            font-size: 12px; font-weight: 600; color: var(--text);
+            text-align: center; line-height: 1.4;
+            display: -webkit-box; -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical; overflow: hidden;
+        }
+
+        .shelf-book-delete {
+            position: absolute; top: 6px; right: 6px;
+            width: 22px; height: 22px; border-radius: 50%;
+            border: none; background: rgba(0,0,0,.5);
+            color: #fff; font-size: 10px; cursor: pointer;
+            display: none; align-items: center; justify-content: center;
+            transition: background .12s;
+        }
+        .shelf-book:hover .shelf-book-delete { display: flex; }
+        .shelf-book-delete:hover { background: rgba(180,30,20,.8); }
+
+        /* ── Reader shell ───────────────────────────────────── */
+        #progressBar { height: 3px; background: var(--progress-bg); flex-shrink: 0; }
+        #progressFill { height: 100%; background: var(--progress-fill); width: 0%; transition: width .3s ease; }
+
+        /* Reader toolbar */
+        #toolbar { backdrop-filter: var(--toolbar-blur); -webkit-backdrop-filter: var(--toolbar-blur); }
+        [data-theme="dark"] #toolbar { background: rgba(35,30,26,.9); }
+
+        #bookTitle {
+            flex: 1;
+            font-family: "Noto Serif TC","Hiragino Mincho ProN","Yu Mincho",serif;
+            font-size: 13px; font-weight: 800;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            color: var(--text); opacity: .85;
+        }
+
+        /* chapter nav */
+        #chapterNav { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        #chapterNav button {
+            width: 32px; height: 32px; padding: 0;
+            border: 1px solid var(--border); border-radius: 10px;
+            background: transparent; color: var(--text-muted); font-size: 14px;
+            cursor: pointer; font-family: inherit;
+            display: flex; align-items: center; justify-content: center;
+            transition: background .12s, color .12s, border-color .12s;
+        }
+        #chapterNav button:hover:not(:disabled) {
+            background: var(--surface-alt); border-color: var(--border-strong); color: var(--primary);
+        }
+        #chapterNav button:disabled { opacity: .3; cursor: default; }
+        #chapterSelect {
+            max-width: 180px; padding: 5px 8px;
+            border: 1px solid var(--border); border-radius: 10px;
+            background: var(--surface); color: var(--text);
+            font-size: 12px; font-family: inherit; cursor: pointer; outline: none;
+            transition: border-color .12s;
+        }
+        #chapterSelect:focus { border-color: var(--primary); }
+
+        /* font-size */
+        #fontSizeGroup, #fontWeightGroup, #themeToggle {
+            display: flex; align-items: center; gap: 2px;
+            border: 1px solid var(--border); border-radius: 10px;
+            padding: 2px; background: var(--surface-alt); flex-shrink: 0;
+        }
+        .theme-btn, .fs-btn, .fw-btn {
+            width: 28px; height: 28px; border: none; border-radius: 8px;
+            background: transparent; cursor: pointer; font-size: 13px;
+            font-family: inherit; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--text-muted); transition: background .12s, color .12s;
+        }
+        .theme-btn.active, .fw-btn.active { background: var(--surface); color: var(--primary); box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+        .fs-btn:hover, .theme-btn:hover, .fw-btn:hover { background: var(--surface); color: var(--primary); }
+
+        /* font family picker */
+        #fontSelect {
+            height: 28px; padding: 0 6px; border-radius: 8px;
+            border: 1px solid var(--border); background: transparent;
+            color: var(--text-muted); font-size: 12px; cursor: pointer;
+            max-width: 110px; flex-shrink: 0;
+        }
+        #fontSelect:hover { border-color: var(--primary); color: var(--primary); }
+
+        /* reading width control */
+        #widthGroup {
+            display: flex; align-items: center; gap: 4px; flex-shrink: 0;
+        }
+        #widthLabel { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+        #widthSlider {
+            -webkit-appearance: none; appearance: none;
+            width: 72px; height: 4px;
+            background: var(--border); border-radius: 2px; outline: none; cursor: pointer;
+        }
+        #widthSlider::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: var(--primary); cursor: pointer;
+            box-shadow: 0 1px 4px rgba(0,0,0,.2);
+        }
+
+        /* ── Body split ─────────────────────────────────────── */
+        #readerBody { flex: 1; display: flex; overflow: hidden; position: relative; }
+
+        /* sidebar */
+        #sidebar {
+            width: 240px; flex-shrink: 0;
+            background: var(--sidebar-bg); border-right: 1px solid var(--border);
+            display: flex; flex-direction: column;
+            transition: width .2s ease, opacity .2s ease; overflow: hidden;
+        }
+        #sidebar.collapsed { width: 0; opacity: 0; pointer-events: none; }
+        #sidebarTitle {
+            padding: 14px 16px 10px; font-size: 11px; font-weight: 700;
+            letter-spacing: .08em; text-transform: uppercase;
+            color: var(--text-muted); border-bottom: 1px solid var(--border); flex-shrink: 0;
+        }
+        #tocList { flex: 1; overflow-y: auto; padding: 6px 0; }
+        #tocList::-webkit-scrollbar { width: 4px; }
+        #tocList::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+        .toc-item {
+            display: block; width: 100%; padding: 9px 16px;
+            border: none; background: transparent; color: var(--text);
+            font-size: 13px; font-family: inherit; text-align: left; cursor: pointer;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.4;
+            transition: background .1s, color .1s;
+        }
+        .toc-item:hover { background: rgba(165,81,67,.08); color: var(--primary); }
+        .toc-item.active { background: rgba(165,81,67,.13); color: var(--primary); font-weight: 700; }
+
+        /* reading area */
+        #readingArea { flex: 1; overflow: hidden; display: flex; flex-direction: column; background: var(--reading-bg); }
+        #readingPane { flex: 1; overflow-y: auto; padding: 48px clamp(20px, 6vw, 80px); outline: none; }
+        #readingPane::-webkit-scrollbar { width: 6px; }
+        #readingPane::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+        /* chapter content */
+        .epub-chapter-wrapper {
+            /* --reading-max-width controlled by JS */
+            max-width: var(--reading-max-width, 860px);
+            margin: 0 auto; line-height: 1.9;
+            font-family: var(--reader-font-family, "Lora", "Georgia", serif);
+            font-size: var(--reader-font-size, 17px);
+            font-weight: var(--reader-font-weight, 400);
+            color: var(--text);
+            text-align: justify;
+            /* CSS hyphenation: browser splits long words at syllable boundaries  */
+            -webkit-hyphens: auto; hyphens: auto;
+            /* Hang punctuation into margin for CJK texts */
+            hanging-punctuation: first last;
+        }
+        .epub-chapter-wrapper h1,
+        .epub-chapter-wrapper h2,
+        .epub-chapter-wrapper h3,
+        .epub-chapter-wrapper h4 {
+            font-family: "Noto Serif TC","Hiragino Mincho ProN","Yu Mincho",serif;
+            font-weight: 800; margin: 1.8em 0 .7em; line-height: 1.35; color: var(--text);
+            /* headings and captions should not be justified */
+            text-align: start; -webkit-hyphens: none; hyphens: none;
+        }
+        .epub-chapter-wrapper h1 { font-size: 1.5em; }
+        .epub-chapter-wrapper h2 { font-size: 1.25em; }
+        .epub-chapter-wrapper h3 { font-size: 1.08em; }
+        .epub-chapter-wrapper p { margin: 0 0 1.1em; }
+        /* Last line of each paragraph should not be stretched across the column */
+        .epub-chapter-wrapper p:last-child,
+        .epub-chapter-wrapper li,
+        .epub-chapter-wrapper figcaption,
+        .epub-chapter-wrapper caption { text-align: start; }
+        /* Override: short/centered content */
+        .epub-chapter-wrapper [style*="text-align"] { text-align: revert; }
+        .epub-chapter-wrapper center,
+        .epub-chapter-wrapper .center,
+        .epub-chapter-wrapper .centered { text-align: center; -webkit-hyphens: none; hyphens: none; }
+        /* TOC list items should stay left-aligned */
+        ul.pdf-toc, ul.pdf-toc li { text-align: start; -webkit-hyphens: none; hyphens: none; }
+        .epub-chapter-wrapper img { max-width: 100%; height: auto; display: block; margin: 1.2em auto; border-radius: 8px; }
+        .epub-chapter-wrapper a { color: var(--primary); text-decoration: none; border-bottom: 1px solid rgba(165,81,67,.3); }
+        .epub-chapter-wrapper blockquote {
+            border-left: 3px solid rgba(165,81,67,.4); margin: 1em 0; padding: 8px 18px;
+            color: var(--text-muted); font-style: italic;
+        }
+        .epub-chapter-wrapper .plugin-highlight-word {
+            border-bottom: 1.5px solid rgba(165,81,67,.55);
+            cursor: pointer; border-radius: 2px; transition: background .12s;
+        }
+        .epub-chapter-wrapper .plugin-highlight-word:hover { background: rgba(165,81,67,.09); }
+
+        /* footer */
+        #readerFooter {
+            flex-shrink: 0; display: flex; align-items: center; justify-content: space-between;
+            padding: 5px 18px; background: var(--bg-wash);
+            border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted);
+        }
+        #chapterProgress { flex: 1; text-align: center; }
+
+        /* loading overlay */
+        #loadingOverlay {
+            display: none; position: absolute; inset: 0;
+            background: rgba(255,250,243,.7); backdrop-filter: blur(4px);
+            align-items: center; justify-content: center;
+            z-index: 20; font-size: 14px; color: var(--text-muted);
+        }
+        [data-theme="dark"] #loadingOverlay { background: rgba(26,22,18,.75); }
+        #loadingOverlay.visible { display: flex; }
+        .spinner {
+            width: 22px; height: 22px;
+            border: 2.5px solid var(--border); border-top-color: var(--primary);
+            border-radius: 50%; animation: spin .7s linear infinite; margin-right: 10px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── PDF layout ──────────────────────────────────────── */
+        .pdf-page-header {
+            font-size: 11px; color: var(--text-muted); text-align: center;
+            padding: 0 0 14px; letter-spacing: .04em; opacity: .7;
+        }
+        /* Split-pane layout: canvas left, text right */
+        .pdf-split {
+            display: flex; gap: 24px; align-items: flex-start;
+        }
+        .pdf-canvas-col {
+            flex: 0 0 auto; /* fixed width = canvas natural size, capped */
+            max-width: 48%;
+            position: sticky; top: 0;   /* canvas stays in view while text scrolls */
+        }
+        .pdf-canvas-col canvas {
+            max-width: 100%; height: auto;
+            border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,.15);
+            display: block;
+        }
+        .pdf-text-col {
+            flex: 1; min-width: 0;
+        }
+        /* TOC page */
+        ul.pdf-toc {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            font-family: var(--font-serif, Georgia, serif);
+        }
+        ul.pdf-toc li { padding: 3px 0; }
+        li.pdf-toc-entry {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            border-bottom: 1px dotted var(--border, #d4c5a9);
+        }
+        li.pdf-toc-entry .pdf-toc-title { flex: 1; }
+        li.pdf-toc-entry .pdf-toc-page {
+            min-width: 2.5em;
+            text-align: right;
+            color: var(--accent, #c0673a);
+            font-variant-numeric: tabular-nums;
+        }
+        li.pdf-toc-heading {
+            font-weight: bold;
+            margin-top: 0.6em;
+            color: var(--text-secondary, #5c4a32);
+        }
+        p.pdf-footnotes {
+            font-size: 0.82em;
+            color: var(--text-secondary, #5c4a32);
+            border-top: 1px solid var(--border, #d4c4a8);
+            margin-top: 1.5em;
+            padding-top: 0.6em;
+            text-align: start;
+            hyphens: none;
+            line-height: 1.5;
+        }
+        /* Collapse to stacked on narrow panes */
+        @media (max-width: 640px) {
+            .pdf-split { flex-direction: column; }
+            .pdf-canvas-col { max-width: 100%; position: static; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══ Bookshelf view (default) ═══════════════════════════════ -->
+<div id="shelfView">
+    <div class="toolbar">
+        <h2 class="toolbar-title" id="shelfHeading">📚 書架</h2>
+
+        <!-- add book button -->
+        <button id="shelfAddBtn" type="button">
+            <span>＋</span> <span id="shelfAddLabel">加入書籍</span>
+        </button>
+
+        <!-- theme toggle (same as reader) -->
+        <div id="shelfTheme" role="group" aria-label="主題">
+            <button class="theme-btn active" data-theme-val="sepia"  type="button" title="溫暖">☕</button>
+            <button class="theme-btn"        data-theme-val="light"  type="button" title="明亮">☀</button>
+            <button class="theme-btn"        data-theme-val="dark"   type="button" title="夜間">🌙</button>
+        </div>
+    </div>
+
+    <div id="shelfBody">
+        <!-- grid populated by JS; empty state shown when no books -->
+        <div id="shelfEmpty">
+            <span class="empty-icon">📚</span>
+            <p id="shelfEmptyHint">書架是空的<br>點擊上方「加入書籍」開始閱讀</p>
+        </div>
+        <div id="shelfGrid" style="display:none"></div>
+    </div>
+</div>
+
+<!-- hidden file input -->
+<input type="file" id="fileInput" accept=".epub,.mobi,.azw,.azw3,.pdf" style="display:none">
+
+<!-- ══ Reader shell ════════════════════════════════════════════ -->
+<div id="readerShell">
+
+    <!-- Chapter progress bar -->
+    <div id="progressBar"><div id="progressFill"></div></div>
+
+    <!-- Toolbar -->
+    <div id="toolbar" class="toolbar">
+        <!-- back to shelf -->
+        <button class="icon-btn" id="shelfBtn" type="button" title="書架">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10 13 L4 8 L10 3"/>
+            </svg>
+        </button>
+
+        <!-- TOC toggle -->
+        <button class="icon-btn" id="sidebarToggle" type="button" title="目錄">
+            <svg width="18" height="14" viewBox="0 0 18 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <line x1="0" y1="1" x2="18" y2="1"/>
+                <line x1="0" y1="7" x2="12" y2="7"/>
+                <line x1="0" y1="13" x2="15" y2="13"/>
+            </svg>
+        </button>
+
+        <div id="bookTitle"></div>
+
+        <nav id="chapterNav">
+            <button id="prevChapter" type="button" title="上一章">&#8592;</button>
+            <select id="chapterSelect"></select>
+            <button id="nextChapter" type="button" title="下一章">&#8594;</button>
+        </nav>
+
+        <!-- Font family -->
+        <select id="fontSelect" title="字體"></select>
+
+        <!-- Reading width -->
+        <div id="widthGroup" title="閱讀寬度">
+            <span id="widthLabel">寬</span>
+            <input id="widthSlider" type="range" min="500" max="1400" step="20" value="860">
+        </div>
+
+        <!-- Font size -->
+        <div id="fontSizeGroup">
+            <button class="fs-btn" id="fontSizeDown" type="button" title="縮小字體">A−</button>
+            <button class="fs-btn" id="fontSizeUp"   type="button" title="放大字體">A+</button>
+        </div>
+
+        <!-- Font weight -->
+        <div id="fontWeightGroup" role="group">
+            <button class="fw-btn" data-fw="300" type="button" title="細體">
+                <span style="font-weight:300">W</span>
+            </button>
+            <button class="fw-btn active" data-fw="400" type="button" title="常規">
+                <span style="font-weight:400">W</span>
+            </button>
+            <button class="fw-btn" data-fw="600" type="button" title="粗體">
+                <span style="font-weight:600">W</span>
+            </button>
+        </div>
+
+        <!-- Theme -->
+        <div id="themeToggle" role="group" aria-label="主題">
+            <button class="theme-btn active" data-theme-val="sepia"  type="button" title="溫暖">☕</button>
+            <button class="theme-btn"        data-theme-val="light"  type="button" title="明亮">☀</button>
+            <button class="theme-btn"        data-theme-val="dark"   type="button" title="夜間">🌙</button>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div id="readerBody">
+        <aside id="sidebar" class="collapsed">
+            <div id="sidebarTitle">目錄</div>
+            <div id="tocList"></div>
+        </aside>
+
+        <div id="readingArea">
+            <main id="readingPane" tabindex="0"></main>
+        </div>
+
+        <div id="loadingOverlay">
+            <div class="spinner"></div>
+            <span id="loadingText">載入中…</span>
+        </div>
+    </div>
+
+    <footer id="readerFooter">
+        <span></span>
+        <span id="chapterProgress"></span>
+        <span></span>
+    </footer>
+</div>
+
+<script type="module" src="lib/sentencex-preload.js"></script>
+<script type="module" src="lib/mobi-adapter.js"></script>
+<script type="module" src="lib/pdf-adapter.js"></script>
+<script src="packages/jszip.min.js"></script>
+<script src="packages/wordfreq.iife.js"></script>
+<script src="lib/wordfreq-utils.js"></script>
+<script src="lib/dictionary-utils.js"></script>
+<script src="lib/lemma-utils.js"></script>
+<script src="lib/translation-utils.js"></script>
+<script src="lib/sentence-splitter.js"></script>
+<script src="lib/example-utils.js"></script>
+<script src="lib/storage-merge-utils.js"></script>
+<script src="lib/content-ui.js"></script>
+<script src="lib/content-addword.js"></script>
+<script src="lib/content-selection.js"></script>
+<script src="lib/content-lookup-ui.js"></script>
+<script src="lib/content-page-processing.js"></script>
+<script src="lib/content-difficulty.js"></script>
+<script src="lib/epub-parser.js"></script>
+<script src="lib/epub-shelf.js"></script>
+<script src="storage.js"></script>
+<script src="ui-i18n.js"></script>
+<script src="ui-tour.js"></script>
+<script src="ui-toast.js"></script>
+<script src="epub-reader.js"></script>
+</body>
+</html>

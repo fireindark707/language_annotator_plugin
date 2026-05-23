@@ -28,6 +28,7 @@ function getPageCount(wordData) {
 
 const fullscreenBtn = document.getElementById("fullscreenBtn");
 const practiceBtn = document.getElementById("practiceBtn");
+const openReaderBtn = document.getElementById("openReaderBtn");
 const sortModeSelect = document.getElementById("sortMode");
 const wordsList = document.getElementById("wordsList");
 const wordStats = document.getElementById("wordStats");
@@ -55,6 +56,11 @@ document.addEventListener("DOMContentLoaded", function () {
 	practiceBtn.addEventListener("click", function () {
 		chrome.tabs.create({ url: chrome.runtime.getURL("practice.html") });
 	});
+	if (openReaderBtn) {
+		openReaderBtn.addEventListener("click", function () {
+			chrome.tabs.create({ url: chrome.runtime.getURL("epub-reader.html") });
+		});
+	}
 
 	sortModeSelect.addEventListener("change", function () {
 		sortMode = sortModeSelect.value;
@@ -470,6 +476,7 @@ function applyUiText() {
 	document.getElementById("settingsLink").textContent = t("settings");
 	fullscreenBtn.textContent = t("fullscreen");
 	practiceBtn.textContent = t("practice_mode");
+	if (openReaderBtn) openReaderBtn.textContent = "📖 " + (t("open_epub_reader") || "電子書閱讀器");
 	autoLangHint.textContent = t("auto_hint");
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");

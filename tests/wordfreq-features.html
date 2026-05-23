@@ -140,9 +140,17 @@
       "kalimat artikel dibuat sebagai konten pengujian cukup panjang bahwa termasuk",
     ].join(" ");
 
+    function makeAnalyzePadding() {
+      const words = [];
+      for (let i = 0; i < 140; i += 1) {
+        words.push(`paddingtoken${String.fromCharCode(97 + Math.floor(i / 26))}${String.fromCharCode(97 + (i % 26))}`);
+      }
+      return words.join(" ");
+    }
+
     function makeIsolatedDoc(articleText) {
       const doc = document.implementation.createHTMLDocument("test");
-      doc.body.innerHTML = `<p>${articleText}</p>`;
+      doc.body.innerHTML = `<p>${articleText}</p><p>${makeAnalyzePadding()}</p>`;
       return doc;
     }
 

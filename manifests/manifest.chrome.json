@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
   "name": "__MSG_appName__",
-  "version": "1.4.10",
+  "version": "1.5.0",
   "description": "__MSG_appDescription__",
   "default_locale": "en",
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'; font-src 'self' https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;"
   },
   "permissions": ["activeTab", "storage", "unlimitedStorage", "contextMenus"],
   "host_permissions": [
@@ -22,12 +22,16 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["packages/wordfreq.iife.js", "lib/wordfreq-utils.js", "lib/dictionary-utils.js", "lib/lemma-utils.js", "lib/translation-utils.js", "lib/sentence-splitter.js", "lib/example-utils.js", "lib/storage-merge-utils.js", "lib/content-ui.js", "lib/content-addword.js", "lib/content-lookup-ui.js", "lib/content-page-processing.js", "lib/content-difficulty.js", "storage.js", "ui-i18n.js", "ui-tour.js", "ui-toast.js", "content.js"]
+      "js": ["packages/wordfreq.iife.js", "lib/wordfreq-utils.js", "lib/dictionary-utils.js", "lib/lemma-utils.js", "lib/translation-utils.js", "lib/sentence-splitter.js", "lib/example-utils.js", "lib/storage-merge-utils.js", "lib/content-ui.js", "lib/content-addword.js", "lib/content-selection.js", "lib/content-lookup-ui.js", "lib/content-page-processing.js", "lib/content-difficulty.js", "storage.js", "ui-i18n.js", "ui-tour.js", "ui-toast.js", "content.js"]
     }
   ],
   "web_accessible_resources": [
     {
       "resources": ["packages/sentencex_wasm.js", "packages/sentencex_wasm_bg.wasm"],
+      "matches": ["<all_urls>"]
+    },
+    {
+      "resources": ["epub-reader.html", "epub-reader.js", "lib/epub-parser.js", "lib/epub-shelf.js", "lib/mobi-adapter.js", "lib/pdf-adapter.js", "lib/content-selection.js", "lib/content-difficulty.js", "lib/sentencex-preload.js", "packages/jszip.min.js", "packages/mobi.js", "packages/pdfjs/pdf.min.mjs", "packages/pdfjs/pdf.worker.min.mjs"],
       "matches": ["<all_urls>"]
     }
   ],

@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>epub-reader internal links &amp; URL hash</title>
+</head>
+<body>
+  <pre id="test-output"></pre>
+  <script src="./lib/test-harness.js"></script>
+  <script>
+    const { assert, assertEqual, runTests } = window.TestHarness;
+
+    // ── Inline pure functions from epub-reader.js ────────────────────────────
+
+    function titleToSlug(title) {
+      return (title || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9一-鿿぀-ヿ]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60);
+    }
+
+    function parseUrlHash(hash) {
+      const raw = (hash || "").replace(/^#/, "");
+      if (!raw) return null;
+      const parts = raw.split("/");
+      if (parts.length < 2) return null;
+      const hashPrefix = parts[0];
+      const chapterIndex = parseInt(parts[1], 10);
+      if (!hashPrefix || isNaN(chapterIndex)) return null;
+      return { hashPrefix, chapterIndex };
+    }
+
+    // resolveInternalHref — extracted, with currentBook and currentChapterIndex
+    // injected as parameters instead of globals for testability.
+    function resolveInternalHref(rawHref, currentChapter, currentBook, currentChapterIndex) {
+      if (!rawHref) return null;
+      const hashIdx = rawHref.indexOf("#");
+      const fragment = hashIdx >= 0 ? rawHref.slice(hashIdx + 1) : "";
+      const path     = hashIdx >= 0 ? rawHref.slice(0, hashIdx) : rawHref;
+
+      if (!path) return { chapterIndex: currentChapterIndex, anchor: fragment };
+
+      // MOBI filepos:
+      if (/^filepos:/i.test(rawHref)) {
+        const target = parseInt(rawHref.replace(/^filepos:/i, ""), 10);
+        if (isNaN(target)) return null;
+        const chapters = currentBook && currentBook.chapters;
+        if (!chapters) return null;
+        let best = -1, bestPos = -1;
+        for (let i = 0; i < chapters.length; i++) {
+          const fp = chapters[i]._filepos;
+          if (typeof fp === "number" && fp <= target && fp > bestPos) {
+            bestPos = fp; best = i;
+          }
+        }
+        return best >= 0 ? { chapterIndex: best, anchor: "" } : null;
+      }
+
+      const chapterHref = currentChapter ? currentChapter.href : "";
+      const chapterDir  = chapterHref.includes("/") ? chapterHref.slice(0, chapterHref.lastIndexOf("/") + 1) : "";
+      const opfDir      = (currentChapter && currentChapter.opfDir) || "";
+
+      function normalisePath(base, rel) {
+        if (/^https?:\/\//.test(rel) || /^data:/.test(rel)) return null;
+        const parts = (base + rel).split("/");
+        const out = [];
+        for (const p of parts) {
+          if (p === "..") out.pop();
+          else if (p && p !== ".") out.push(p);
+        }
+        return out.join("/");
+      }
+
+      const normalised = normalisePath(opfDir + chapterDir, path);
+      if (!normalised) return null;
+
+      const chapters = currentBook && currentBook.chapters;
+      if (!chapters) return null;
+      for (let i = 0; i < chapters.length; i++) {
+        const ch = chapters[i];
+        const fullHref = ch.opfDir ? ch.opfDir + "/" + ch.href : ch.href;
+        if (fullHref === normalised || ch.href === normalised ||
+            ch.href === path || fullHref === path) {
+          return { chapterIndex: i, anchor: fragment };
+        }
+      }
+      const base = normalised.slice(normalised.lastIndexOf("/") + 1);
+      for (let i = 0; i < chapters.length; i++) {
+        const chBase = chapters[i].href.slice(chapters[i].href.lastIndexOf("/") + 1);
+        if (chBase === base) return { chapterIndex: i, anchor: fragment };
+      }
+      return null;
+    }
+
+    // ── Test data ─────────────────────────────────────────────────────────────
+    const epubBook = {
+      chapters: [
+        { id: "ch0", href: "Text/chapter1.xhtml", opfDir: "OEBPS", title: "Ch1" },
+        { id: "ch1", href: "Text/chapter2.xhtml", opfDir: "OEBPS", title: "Ch2" },
+        { id: "ch2", href: "Text/chapter3.xhtml", opfDir: "OEBPS", title: "Ch3" },
+      ]
+    };
+    const ch0 = epubBook.chapters[0]; // current chapter for most tests
+
+    const mobiBook = {
+      chapters: [
+        { id: "m0", href: "mobi-toc-0", opfDir: "", _filepos: 0,       title: "Prologue" },
+        { id: "m1", href: "mobi-toc-1", opfDir: "", _filepos: 8542,    title: "Ch1" },
+        { id: "m2", href: "mobi-toc-2", opfDir: "", _filepos: 24290,   title: "Ch2" },
+        { id: "m3", href: "mobi-toc-3", opfDir: "", _filepos: 111081,  title: "Ch3" },
+      ]
+    };
+
+    runTests([
+
+      // ── titleToSlug ────────────────────────────────────────────────────────
+      { name: "titleToSlug: ASCII title → kebab", run() {
+        assertEqual(titleToSlug("Time of Madness"), "time-of-madness");
+      }},
+      { name: "titleToSlug: trims leading/trailing hyphens", run() {
+        assertEqual(titleToSlug("  !Hello World!  "), "hello-world");
+      }},
+      { name: "titleToSlug: empty string → empty string", run() {
+        assertEqual(titleToSlug(""), "");
+      }},
+      { name: "titleToSlug: null → empty string", run() {
+        assertEqual(titleToSlug(null), "");
+      }},
+      { name: "titleToSlug: CJK preserved", run() {
+        const slug = titleToSlug("電子書 Reader");
+        assert(slug.includes("電子書"), "CJK chars should survive: " + slug);
+      }},
+      { name: "titleToSlug: truncates at 60 chars", run() {
+        const long = "a".repeat(80);
+        assertEqual(titleToSlug(long).length, 60);
+      }},
+
+      // ── parseUrlHash ──────────────────────────────────────────────────────
+      { name: "parseUrlHash: valid 2-part hash", run() {
+        const r = parseUrlHash("#7f3a2b1c/42");
+        assertEqual(r.hashPrefix, "7f3a2b1c");
+        assertEqual(r.chapterIndex, 42);
+      }},
+      { name: "parseUrlHash: valid 3-part hash (with slug)", run() {
+        const r = parseUrlHash("#7f3a2b1c/5/time-of-madness");
+        assertEqual(r.hashPrefix, "7f3a2b1c");
+        assertEqual(r.chapterIndex, 5);
+      }},
+      { name: "parseUrlHash: empty → null", run() {
+        assertEqual(parseUrlHash(""), null);
+        assertEqual(parseUrlHash("#"), null);
+      }},
+      { name: "parseUrlHash: only 1 part → null", run() {
+        assertEqual(parseUrlHash("#abc123"), null);
+      }},
+      { name: "parseUrlHash: non-numeric chapter → null", run() {
+        assertEqual(parseUrlHash("#abc/xyz"), null);
+      }},
+      { name: "parseUrlHash: chapter 0 is valid", run() {
+        const r = parseUrlHash("#aabbccdd/0");
+        assertEqual(r.chapterIndex, 0);
+      }},
+
+      // ── resolveInternalHref: same-chapter anchor ──────────────────────────
+      { name: "resolveInternalHref: bare anchor → same chapter", run() {
+        const r = resolveInternalHref("#section1", ch0, epubBook, 0);
+        assertEqual(r.chapterIndex, 0);
+        assertEqual(r.anchor, "section1");
+      }},
+      { name: "resolveInternalHref: null href → null", run() {
+        assertEqual(resolveInternalHref(null, ch0, epubBook, 0), null);
+      }},
+      { name: "resolveInternalHref: empty href → null", run() {
+        assertEqual(resolveInternalHref("", ch0, epubBook, 0), null);
+      }},
+
+      // ── resolveInternalHref: EPUB cross-chapter ───────────────────────────
+      { name: "resolveInternalHref: sibling chapter by bare filename", run() {
+        const r = resolveInternalHref("chapter2.xhtml", ch0, epubBook, 0);
+        assertEqual(r.chapterIndex, 1);
+        assertEqual(r.anchor, "");
+      }},
+      { name: "resolveInternalHref: sibling chapter + anchor", run() {
+        const r = resolveInternalHref("chapter3.xhtml#s2", ch0, epubBook, 0);
+        assertEqual(r.chapterIndex, 2);
+        assertEqual(r.anchor, "s2");
+      }},
+      { name: "resolveInternalHref: full relative path with opfDir", run() {
+        // From chapter1.xhtml in OEBPS/Text/, link to ../Text/chapter2.xhtml
+        const r = resolveInternalHref("../Text/chapter2.xhtml", ch0, epubBook, 0);
+        assertEqual(r.chapterIndex, 1);
+      }},
+      { name: "resolveInternalHref: external http link → null", run() {
+        const r = resolveInternalHref("https://example.com", ch0, epubBook, 0);
+        assertEqual(r, null);
+      }},
+      { name: "resolveInternalHref: unknown file → null", run() {
+        const r = resolveInternalHref("nonexistent.xhtml", ch0, epubBook, 0);
+        assertEqual(r, null);
+      }},
+
+      // ── resolveInternalHref: MOBI filepos ────────────────────────────────
+      { name: "filepos: exact match → correct chapter", run() {
+        const r = resolveInternalHref("filepos:0000008542", null, mobiBook, 0);
+        assertEqual(r.chapterIndex, 1); // mobi-toc-1 has _filepos 8542
+      }},
+      { name: "filepos: between entries → nearest preceding chapter", run() {
+        // 50000 is between 24290 (ch2) and 111081 (ch3) → should resolve to ch2 (index 2)
+        const r = resolveInternalHref("filepos:0000050000", null, mobiBook, 0);
+        assertEqual(r.chapterIndex, 2);
+      }},
+      { name: "filepos: before first entry → chapter 0", run() {
+        const r = resolveInternalHref("filepos:0000000001", null, mobiBook, 0);
+        assertEqual(r.chapterIndex, 0); // filepos 0 ≤ 1
+      }},
+      { name: "filepos: at last chapter boundary", run() {
+        const r = resolveInternalHref("filepos:0000111081", null, mobiBook, 0);
+        assertEqual(r.chapterIndex, 3);
+      }},
+      { name: "filepos: beyond all chapters → last chapter", run() {
+        const r = resolveInternalHref("filepos:9999999", null, mobiBook, 0);
+        assertEqual(r.chapterIndex, 3);
+      }},
+      { name: "filepos: no chapters → null", run() {
+        const r = resolveInternalHref("filepos:12345", null, { chapters: [] }, 0);
+        assertEqual(r, null);
+      }},
+      { name: "filepos: case-insensitive prefix", run() {
+        const r = resolveInternalHref("FILEPOS:0000008542", null, mobiBook, 0);
+        assertEqual(r.chapterIndex, 1);
+      }},
+
+    ]);
+  </script>
+</body>
+</html>
