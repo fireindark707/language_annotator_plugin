@@ -930,7 +930,9 @@ function getAddWordModalDeps() {
 }
 
 // 勾选后自动翻译
-document.addEventListener("mouseup", function () {
+document.addEventListener("mouseup", function (e) {
+	const box = document.getElementById("translationBox");
+	if (box && box.contains(e.target)) return;
 	const selectedText = window.getSelection().toString().trim();
 	if (!(selectedText.length > 0 && selectedText.length <= 800)) return;
 	WordStorage.getAutoTranslateOnSelect().then((enabled) => {
@@ -975,6 +977,9 @@ function showTranslation(translation, wordfreqOpts) {
 		sourceWord: wordfreqOpts && wordfreqOpts.sourceWord,
 		sourceLang: wordfreqOpts && wordfreqOpts.sourceLang,
 		isContextual: !!(wordfreqOpts && wordfreqOpts.isContextual),
+		openAddWordModal: showAddWordModal,
+		contentT: contentT,
+		WordStorage,
 		state: {
 			get contentSelectionTourAttempted() {
 				return contentSelectionTourAttempted;

@@ -519,11 +519,11 @@
 <!-- ══ Bookshelf view (default) ═══════════════════════════════ -->
 <div id="shelfView">
     <div class="toolbar">
-        <h2 class="toolbar-title" id="shelfHeading">📚 書架</h2>
+        <h2 class="toolbar-title" id="shelfHeading"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6.878V6a2.25 2.25 0 012.25-2.25h7.5A2.25 2.25 0 0118 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 004.5 9v.878m13.5-3A2.25 2.25 0 0119.5 9v.878m0 0a2.246 2.246 0 00-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0121 12v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6c0-.98.626-1.813 1.5-2.122"/></svg> <span id="shelfHeadingText">書架</span></h2>
 
         <!-- add book button -->
         <button id="shelfAddBtn" type="button">
-            <span>＋</span> <span id="shelfAddLabel">加入書籍</span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4.5v15m7.5-7.5h-15"/></svg> <span id="shelfAddLabel">加入書籍</span>
         </button>
 
         <!-- theme toggle (same as reader) -->
@@ -537,7 +537,7 @@
     <div id="shelfBody">
         <!-- grid populated by JS; empty state shown when no books -->
         <div id="shelfEmpty">
-            <span class="empty-icon">📚</span>
+            <span class="empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6.878V6a2.25 2.25 0 012.25-2.25h7.5A2.25 2.25 0 0118 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 004.5 9v.878m13.5-3A2.25 2.25 0 0119.5 9v.878m0 0a2.246 2.246 0 00-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0121 12v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6c0-.98.626-1.813 1.5-2.122"/></svg></span>
             <p id="shelfEmptyHint">書架是空的<br>點擊上方「加入書籍」開始閱讀</p>
         </div>
         <div id="shelfGrid" style="display:none"></div>
@@ -574,9 +574,9 @@
         <div id="bookTitle"></div>
 
         <nav id="chapterNav">
-            <button id="prevChapter" type="button" title="上一章">&#8592;</button>
+            <button id="prevChapter" type="button" title="上一章"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.75 19.5L8.25 12l7.5-7.5"/></svg></button>
             <select id="chapterSelect"></select>
-            <button id="nextChapter" type="button" title="下一章">&#8594;</button>
+            <button id="nextChapter" type="button" title="下一章"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.25 4.5l7.5 7.5-7.5 7.5"/></svg></button>
         </nav>
 
         <!-- Font family -->
@@ -647,6 +647,7 @@
 <script type="module" src="lib/pdf-adapter.js"></script>
 <script src="packages/jszip.min.js"></script>
 <script src="packages/wordfreq.iife.js"></script>
+<script src="ui-icons.js"></script>
 <script src="lib/wordfreq-utils.js"></script>
 <script src="lib/dictionary-utils.js"></script>
 <script src="lib/lemma-utils.js"></script>

@@ -24,7 +24,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["packages/wordfreq.iife.js", "lib/wordfreq-utils.js", "lib/dictionary-utils.js", "lib/lemma-utils.js", "lib/translation-utils.js", "lib/sentence-splitter.js", "lib/example-utils.js", "lib/storage-merge-utils.js", "lib/content-ui.js", "lib/content-addword.js", "lib/content-selection.js", "lib/content-lookup-ui.js", "lib/content-page-processing.js", "lib/content-difficulty.js", "storage.js", "ui-i18n.js", "ui-tour.js", "ui-toast.js", "content.js"]
+      "js": ["packages/wordfreq.iife.js", "lib/wordfreq-utils.js", "lib/dictionary-utils.js", "lib/lemma-utils.js", "lib/translation-utils.js", "lib/sentence-splitter.js", "lib/example-utils.js", "lib/storage-merge-utils.js", "ui-icons.js", "lib/content-ui.js", "lib/content-addword.js", "lib/content-selection.js", "lib/content-lookup-ui.js", "lib/content-page-processing.js", "lib/content-difficulty.js", "storage.js", "ui-i18n.js", "ui-tour.js", "ui-toast.js", "content.js"]
     }
   ],
   "web_accessible_resources": [

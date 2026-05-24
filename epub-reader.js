@@ -464,6 +464,9 @@ function showTranslation(translation, opts) {
 		sourceWord: opts && opts.sourceWord,
 		sourceLang: opts && opts.sourceLang,
 		isContextual: !!(opts && opts.isContextual),
+		openAddWordModal: showReaderAddWordModal,
+		contentT: t,
+		WordStorage,
 		state: _selectionTourState,
 	});
 }
@@ -576,7 +579,7 @@ function applyUiText() {
 	const emptyHint = document.getElementById("shelfEmptyHint");
 	if (emptyHint) emptyHint.textContent = t("epub_shelf_empty") || emptyHint.textContent;
 	const shelfHeading = document.getElementById("shelfHeading");
-	if (shelfHeading) shelfHeading.textContent = "📚 " + (t("epub_shelf") || "書架");
+	if (shelfHeading) { const txt = shelfHeading.querySelector("#shelfHeadingText"); if (txt) txt.textContent = t("epub_shelf") || "書架"; else shelfHeading.appendChild(document.createTextNode(" " + (t("epub_shelf") || "書架"))); }
 	const shelfAddLabel = document.getElementById("shelfAddLabel");
 	if (shelfAddLabel) shelfAddLabel.textContent = t("epub_add_book") || "加入書籍";
 	const shelfBtn = document.getElementById("shelfBtn");
@@ -680,7 +683,7 @@ function createShelfCard(book) {
 	} else {
 		const ph = document.createElement("span");
 		ph.className = "cover-placeholder";
-		ph.textContent = "📖";
+		if (globalThis.UiIcons) { ph.appendChild(globalThis.UiIcons.icon("book-open", { size: 40 })); } else { ph.textContent = "📖"; }
 		coverDiv.appendChild(ph);
 	}
 
@@ -700,7 +703,7 @@ function createShelfCard(book) {
 	delBtn.className = "shelf-book-delete";
 	delBtn.type = "button";
 	delBtn.title = "從書架移除";
-	delBtn.textContent = "✕";
+	if (globalThis.UiIcons) { delBtn.appendChild(globalThis.UiIcons.icon("x-mark", { size: 14 })); } else { delBtn.textContent = "✕"; }
 	delBtn.addEventListener("click", function (e) {
 		e.stopPropagation();
 		const EpubShelf = globalThis.EpubShelf;
@@ -1606,11 +1609,12 @@ async function renderPdfPage(index) {
 	const pageLabel = document.createElement("span");
 	pageLabel.textContent = "— " + pageNum + " / " + currentBook.chapters.length + " —";
 
-	function makeViewBtn(mode, icon, titleKey, defaultTitle) {
+	const VIEW_ICONS = { split: "view-columns", text: "list-bullet", canvas: "photo" };
+	function makeViewBtn(mode, titleKey, defaultTitle) {
 		const btn = document.createElement("button");
 		btn.className = "pdf-view-btn" + (pdfViewMode === mode ? " active" : "");
-		btn.textContent = icon;
 		btn.title = t(titleKey) || defaultTitle;
+		if (globalThis.UiIcons) { btn.appendChild(globalThis.UiIcons.icon(VIEW_ICONS[mode] || "photo", { size: 15 })); } else { btn.textContent = { split: "⊞", text: "≡", canvas: "🖼" }[mode] || mode; }
 		btn.addEventListener("click", function () {
 			applyPdfViewMode(mode, splitDiv);
 			header.querySelectorAll(".pdf-view-btn").forEach(function (b) {
@@ -1620,10 +1624,10 @@ async function renderPdfPage(index) {
 		return btn;
 	}
 
-	header.appendChild(makeViewBtn("split",  "⊞", "pdf_view_split",  "分欄"));
+	header.appendChild(makeViewBtn("split",  "pdf_view_split",  "分欄"));
 	header.appendChild(pageLabel);
-	header.appendChild(makeViewBtn("text",   "≡", "pdf_view_text",   "純文字"));
-	header.appendChild(makeViewBtn("canvas", "🖼", "pdf_view_canvas", "純圖像"));
+	header.appendChild(makeViewBtn("text",   "pdf_view_text",   "純文字"));
+	header.appendChild(makeViewBtn("canvas", "pdf_view_canvas", "純圖像"));
 	readingPane.appendChild(header);
 
 	// ── Split layout: canvas (left) + text (right) ───────────────────────────
@@ -2219,7 +2223,9 @@ async function attachPdfLinkAnnotations(page, canvasCol, canvas, vp, pdfDoc) {
 
 // — Selection / translation handler —
 function attachSelectionHandler() {
-	currentMouseupHandler = function () {
+	currentMouseupHandler = function (e) {
+		const box = document.getElementById("translationBox");
+		if (box && box.contains(e.target)) return;
 		const selectedText = window.getSelection().toString().trim();
 		if (!(selectedText.length > 0 && selectedText.length <= 800)) return;
 		WordStorage.getAutoTranslateOnSelect().then(function (enabled) {

@@ -700,7 +700,7 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 
 		const removeBtn = document.createElement("button");
 		removeBtn.className = "example-remove";
-		removeBtn.textContent = "🗑️";
+		if (globalThis.UiIcons) { removeBtn.appendChild(globalThis.UiIcons.icon("trash", { size: 14 })); } else { removeBtn.textContent = "🗑️"; }
 		removeBtn.title = t("remove_example");
 		removeBtn.addEventListener("click", function () {
 			updateExamplesForWord(word, (listItems) => {
@@ -725,7 +725,7 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 
 			const pinBtn = document.createElement("button");
 			pinBtn.className = "example-remove";
-			pinBtn.textContent = example.pinned ? "📌" : "📍";
+			if (globalThis.UiIcons) { pinBtn.innerHTML = ""; pinBtn.appendChild(globalThis.UiIcons.icon(example.pinned ? "bookmark-solid" : "bookmark", { size: 14 })); } else { pinBtn.textContent = example.pinned ? "📌" : "📍"; }
 			pinBtn.title = example.pinned ? t("unpin_example") : t("pin_example");
 		pinBtn.addEventListener("click", function () {
 			updateExamplesForWord(word, (listItems) => {
@@ -966,14 +966,26 @@ function updateWordsList() {
 
 			const audioButton = document.createElement("button");
 			audioButton.className = "action-audio";
-			audioButton.textContent = `🔊 ${t("pronounce")}`;
+			if (globalThis.UiIcons) { audioButton.appendChild(globalThis.UiIcons.icon("speaker-wave", { size: 15 })); audioButton.appendChild(document.createTextNode(" " + t("pronounce"))); } else { audioButton.textContent = `🔊 ${t("pronounce")}`; }
 			audioButton.addEventListener("click", function () {
 				retriggerEffect(audioButton, "fx-audio");
 				retriggerEffect(wordItem, "fx-row-audio");
-				const utterance = new SpeechSynthesisUtterance(word);
 				WordStorage.getSourceLang().then((sourceLang) => {
-					utterance.lang = sourceLang;
-					speechSynthesis.speak(utterance);
+					const utterance = new SpeechSynthesisUtterance(word);
+					if (sourceLang) utterance.lang = sourceLang;
+					const doSpeak = () => {
+						const voices = window.speechSynthesis.getVoices();
+						if (utterance.lang && voices.length) {
+							const prefix = utterance.lang.split("-")[0].toLowerCase();
+							for (let i = 0; i < voices.length; i += 1) {
+								const vl = voices[i] && voices[i].lang ? voices[i].lang.toLowerCase() : "";
+								if (vl === utterance.lang.toLowerCase() || vl.split("-")[0] === prefix) { utterance.voice = voices[i]; break; }
+							}
+						}
+						speechSynthesis.speak(utterance);
+					};
+					if (window.speechSynthesis.getVoices().length) { doSpeak(); }
+					else { window.speechSynthesis.addEventListener("voiceschanged", doSpeak, { once: true }); }
 				});
 			});
 

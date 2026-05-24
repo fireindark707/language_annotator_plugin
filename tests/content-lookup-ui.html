@@ -135,7 +135,9 @@
           const box = U.showTranslation("翻譯內容", { document });
           assert(box, "expected translation box");
           assertEqual(document.getElementById("translationBox").textContent.includes("翻譯內容"), true);
-          assertEqual(document.getElementById("translationBox").querySelector("button"), null);
+          // Close button is always present; no add-word/pronounce buttons without sourceWord
+          const btns = Array.from(document.getElementById("translationBox").querySelectorAll("button"));
+          assert(btns.length === 1 && btns[0].textContent === "✕", "only close button present when no sourceWord");
 
           U.appendDictionaryToTranslationBox({
             sections: [{

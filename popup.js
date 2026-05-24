@@ -381,7 +381,7 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 
 			const removeBtn = document.createElement("button");
 			removeBtn.className = "example-remove";
-		removeBtn.textContent = "🗑️";
+		if (globalThis.UiIcons) { removeBtn.appendChild(globalThis.UiIcons.icon("trash", { size: 14 })); } else { removeBtn.textContent = "🗑️"; }
 		removeBtn.title = t("remove_example");
 		removeBtn.addEventListener("click", function () {
 			updateExamplesForWord(word, (listItems) => {
@@ -406,7 +406,7 @@ function renderExamples(exampleWrap, examples, word, onCountChange) {
 
 			const pinBtn = document.createElement("button");
 			pinBtn.className = "example-remove";
-		pinBtn.textContent = example.pinned ? "📌" : "📍";
+		if (globalThis.UiIcons) { pinBtn.innerHTML = ""; pinBtn.appendChild(globalThis.UiIcons.icon(example.pinned ? "bookmark-solid" : "bookmark", { size: 14 })); } else { pinBtn.textContent = example.pinned ? "📌" : "📍"; }
 		pinBtn.title = example.pinned ? t("unpin_example") : t("pin_example");
 		pinBtn.addEventListener("click", function () {
 			updateExamplesForWord(word, (listItems) => {
@@ -480,7 +480,7 @@ function applyUiText() {
 	document.getElementById("settingsLink").textContent = t("settings");
 	fullscreenBtn.textContent = t("fullscreen");
 	practiceBtn.textContent = t("practice_mode");
-	if (openReaderBtn) openReaderBtn.textContent = "📖 " + (t("open_epub_reader") || "電子書閱讀器");
+	if (openReaderBtn) { openReaderBtn.innerHTML = ""; if (globalThis.UiIcons) { openReaderBtn.appendChild(globalThis.UiIcons.icon("book-open", { size: 15 })); openReaderBtn.appendChild(document.createTextNode(" " + (t("open_epub_reader") || "電子書閱讀器"))); } else { openReaderBtn.textContent = "📖 " + (t("open_epub_reader") || "電子書閱讀器"); } }
 	autoLangHint.textContent = t("auto_hint");
 	sortModeSelect.options[0].textContent = t("sort_recent");
 	sortModeSelect.options[1].textContent = t("sort_alpha");
@@ -579,7 +579,7 @@ function updateWordsList() {
 			meaningSpan.appendChild(document.createTextNode(meaningText));
 
 			const toggleLearnedButton = document.createElement("button");
-			toggleLearnedButton.textContent = "✓";
+			if (globalThis.UiIcons) { toggleLearnedButton.appendChild(globalThis.UiIcons.icon("check", { size: 14 })); } else { toggleLearnedButton.textContent = "✓"; }
 			toggleLearnedButton.className = "word-tool action-learned";
 			toggleLearnedButton.title = words[word].learned ? t("unmark") : t("mark");
 			toggleLearnedButton.setAttribute("aria-label", words[word].learned ? t("unmark") : t("mark"));
@@ -592,34 +592,42 @@ function updateWordsList() {
 
 			const exampleButton = document.createElement("button");
 			let exampleCount = Array.isArray(words[word].examples) ? words[word].examples.length : 0;
-			exampleButton.textContent = "≡";
+			if (globalThis.UiIcons) { exampleButton.appendChild(globalThis.UiIcons.icon("list-bullet", { size: 14 })); } else { exampleButton.textContent = "≡"; }
 			exampleButton.className = "word-tool action-example";
 			exampleButton.dataset.count = String(exampleCount);
 
 			const audioButton = document.createElement("button");
-			audioButton.textContent = "🔊";
+			if (globalThis.UiIcons) { audioButton.appendChild(globalThis.UiIcons.icon("speaker-wave", { size: 14 })); } else { audioButton.textContent = "🔊"; }
 			audioButton.className = "word-tool action-audio";
 			audioButton.title = t("pronounce");
 			audioButton.setAttribute("aria-label", t("pronounce"));
 			audioButton.addEventListener("click", function () {
 				retriggerEffect(audioButton, "fx-audio");
 				retriggerEffect(wordItem, "fx-row-audio");
-				const utterance = new SpeechSynthesisUtterance(word);
 				WordStorage.getSourceLang().then((sourceLang) => {
-					utterance.lang = sourceLang;
-					const voices = window.speechSynthesis.getVoices();
-					for (let i = 0; i < voices.length; i += 1) {
-						if (voices[i].lang === utterance.lang) {
-							utterance.voice = voices[i];
-							break;
+					const utterance = new SpeechSynthesisUtterance(word);
+					if (sourceLang) utterance.lang = sourceLang;
+					const doSpeak = () => {
+						const voices = window.speechSynthesis.getVoices();
+						if (utterance.lang && voices.length) {
+							const prefix = utterance.lang.split("-")[0].toLowerCase();
+							for (let i = 0; i < voices.length; i += 1) {
+								const vl = voices[i] && voices[i].lang ? voices[i].lang.toLowerCase() : "";
+								if (vl === utterance.lang.toLowerCase() || vl.split("-")[0] === prefix) {
+									utterance.voice = voices[i];
+									break;
+								}
+							}
 						}
-					}
-					speechSynthesis.speak(utterance);
+						speechSynthesis.speak(utterance);
+					};
+					if (window.speechSynthesis.getVoices().length) { doSpeak(); }
+					else { window.speechSynthesis.addEventListener("voiceschanged", doSpeak, { once: true }); }
 				});
 			});
 
 			const deleteButton = document.createElement("button");
-			deleteButton.textContent = "✕";
+			if (globalThis.UiIcons) { deleteButton.appendChild(globalThis.UiIcons.icon("x-mark", { size: 14 })); } else { deleteButton.textContent = "✕"; }
 			deleteButton.className = "word-tool action-delete";
 			deleteButton.title = t("delete");
 			deleteButton.setAttribute("aria-label", t("delete"));
@@ -635,7 +643,7 @@ function updateWordsList() {
 			let examplesRendered = false;
 
 			function syncExampleButtonState(expanded = exampleWrap.style.display !== "none") {
-				exampleButton.textContent = expanded ? "▾" : "≡";
+				if (globalThis.UiIcons) { exampleButton.innerHTML = ""; exampleButton.appendChild(globalThis.UiIcons.icon("list-bullet", { size: 14 })); } else { exampleButton.textContent = expanded ? "▾" : "≡"; }
 				exampleButton.dataset.count = String(exampleCount);
 				exampleButton.title = expanded
 					? `${t("collapse")} (${exampleCount})`

@@ -174,7 +174,7 @@ document.addEventListener("DOMContentLoaded", function () {
 		addExcludedDomainBtn.textContent = t(uiLang, "add");
 		saveBtn.textContent = t(uiLang, "save");
 		syncBtn.textContent = t(uiLang, "sync_now");
-		exportMenuBtn.textContent = t(uiLang, "export") + " ▾";
+		exportMenuBtn.innerHTML = ""; exportMenuBtn.appendChild(document.createTextNode(t(uiLang, "export") + " ")); if (globalThis.UiIcons) { exportMenuBtn.appendChild(globalThis.UiIcons.icon("chevron-down", { size: 13 })); } else { exportMenuBtn.appendChild(document.createTextNode("▾")); }
 		exportBtn.textContent = t(uiLang, "export_json");
 		exportCsvBtn.textContent = t(uiLang, "export_csv");
 		importBtn.textContent = t(uiLang, "import");
