@@ -69,6 +69,9 @@ for test_file in "${TEST_FILES[@]}"; do
   test_name="$(basename "$test_file")"
   if [[ "$test_name" == "sentence-splitter.html" || "$test_name" == "real-article-id.html" || "$test_name" == "real-article-id2.html" || "$test_name" == "epub-parser.html" || "$test_name" == "mobi-parser.html" ]]; then
     if [[ -z "$SERVER_PID" ]]; then
+      # Kill any stale process already occupying the port.
+      fuser -k "${SERVER_PORT}/tcp" >/dev/null 2>&1 || true
+      sleep 0.2
       cd "$ROOT_DIR"
       python3 -m http.server "$SERVER_PORT" --bind "$SERVER_HOST" >/tmp/la-test-http.log 2>&1 &
       SERVER_PID=$!
