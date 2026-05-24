@@ -925,6 +925,7 @@ function getAddWordModalDeps() {
 			});
 		},
 		getContextForWord,
+		onAfterSave: function () { highlightWords(); },
 	};
 }
 
